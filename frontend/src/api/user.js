@@ -1,0 +1,141 @@
+/**
+ * 用户相关API
+ * 
+ * @author AI Assistant
+ * @since 2025-01-17
+ */
+import request from '@/utils/request'
+
+/**
+ * 获取用户完整信息
+ */
+export function getUserInfo() {
+  return request({
+    url: '/user/info',
+    method: 'get'
+  })
+}
+
+/**
+ * 查询用户列表
+ */
+export function queryUsers(params) {
+  return request({
+    url: '/users',
+    method: 'get',
+    params
+  })
+}
+
+/**
+ * 创建用户（开户）
+ */
+export function createUser(data) {
+  return request({
+    url: '/users',
+    method: 'post',
+    data
+  })
+}
+
+/**
+ * 更新用户信息
+ */
+export function updateUser(data) {
+  return request({
+    url: '/users',
+    method: 'put',
+    data
+  })
+}
+
+/**
+ * 充值
+ */
+export function recharge(data) {
+  return request({
+    url: '/users/recharge',
+    method: 'post',
+    data
+  })
+}
+
+/**
+ * 修改密码
+ */
+export function changePassword(data) {
+  return request({
+    url: '/users/change-password',
+    method: 'post',
+    data: new URLSearchParams(data).toString(),
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  })
+}
+
+/**
+ * 重置密码
+ */
+export function resetPassword(id) {
+  return request({
+    url: `/users/${id}/reset-password`,
+    method: 'post'
+  })
+}
+
+/**
+ * 禁用/启用用户
+ */
+export function changeUserStatus(id, status) {
+  return request({
+    url: `/users/${id}/status`,
+    method: 'post',
+    params: { status }
+  })
+}
+
+/**
+ * 开通API密钥
+ */
+export function enableApiKey(type, targetUserId) {
+  return request({
+    url: '/api-keys/enable',
+    method: 'post',
+    params: { type, targetUserId }
+  })
+}
+
+/**
+ * 用户注册
+ */
+export function register(data) {
+  return request({
+    url: '/register',
+    method: 'post',
+    data
+  })
+}
+
+/**
+ * 验证邀请码
+ */
+export function validateInviteCode(inviteCode) {
+  return request({
+    url: '/register/validate-invite-code',
+    method: 'get',
+    params: { inviteCode }
+  })
+}
+
+/**
+ * 设置邀请码
+ */
+export function setupInviteCode(data) {
+  return request({
+    url: '/register/invite-code',
+    method: 'post',
+    data
+  })
+}
+

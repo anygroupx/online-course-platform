@@ -1,0 +1,159 @@
+# 在线课程平台 Docker Compose 配置
+# 模式：本地 Docker + VPN + VPS Nginx 反向代理
+
+services:
+  # MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: course-mysql
+    restart: unless-stopped
+    environment:
+      # 密码必须由未纳入版本控制的 .env 或密钥管理系统提供。
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-online_course}
+      - MYSQL_USER=${MYSQL_USER:-course_user}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      - TZ=Asia/Shanghai
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./mysql/conf.d:/etc/mysql/conf.d:ro
+    ports:
+      - "13306:3306"  # 映射到宿主机 13306，保持与原配置一致
+    networks:
+      - local_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+  # Redis 缓存（可选，如不需要可注释）
+  redis:
+    image: redis:7
+    container_name: course-redis
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - local_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+
+  # Elasticsearch 全文搜索
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    container_name: course-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - TZ=Asia/Shanghai
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - local_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Spring Boot 后端
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: course-platform-backend:latest
+    container_name: course-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - TZ=Asia/Shanghai
+      # 共享 external network 上使用唯一容器名，避免命中其他项目的同名别名
+      - SPRING_DATASOURCE_URL=jdbc:mysql://course-mysql:3306/${MYSQL_DATABASE:-online_course}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=${MYSQL_USER:-course_user}
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      # Redis 配置（如启用）
+      - SPRING_DATA_REDIS_HOST=course-redis
+      - SPRING_DATA_REDIS_PORT=6379
+      # JWT 密钥
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      # 跨域来源必须由部署环境显式指定
+      - COURSE_SECURITY_ALLOWED_ORIGINS=${COURSE_SECURITY_ALLOWED_ORIGINS:?COURSE_SECURITY_ALLOWED_ORIGINS is required}
+      - API_DOC_ENABLED=${API_DOC_ENABLED:-false}
+      # Elasticsearch 配置
+      - SPRING_ELASTICSEARCH_URIS=http://elasticsearch:9200
+    volumes:
+      - backend_logs:/app/logs
+      # 模板本身不含秘密，实际敏感值由上方环境变量注入。
+      - ./backend/config/application-prod.example.yml:/app/config/application-prod.yml:ro
+    ports:
+      - "8082:8082"  # 映射到宿主机 8082
+    networks:
+      - local_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Vue 前端
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: course-platform-frontend:latest
+    container_name: course-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      - TZ=Asia/Shanghai
+    ports:
+      - "8888:80"  # 映射到宿主机 8888（VPS Nginx 将代理到此端口）
+    networks:
+      - local_net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_logs:
+    driver: local
+  es_data:
+    driver: local
+
+networks:
+  local_net:
+    external: true

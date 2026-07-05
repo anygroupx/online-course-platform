@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.course</groupId>
+        <artifactId>online-course-platform</artifactId>
+        <version>2.0.1</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>course-common</artifactId>
+    <name>course-common</name>
+    <description>共享内核模块 - 纯技术基础设施，禁止业务逻辑</description>
+    <packaging>jar</packaging>
+
+    <dependencies>
+        <!-- 
+            ⚠️ 严格约束：
+            - 禁止引入 Spring、MyBatis 等框架依赖
+            - 只允许纯工具库和序列化库
+        -->
+        
+        <!-- Lombok（编译期工具，可接受） -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        
+        <!-- Hutool 工具类 -->
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-core</artifactId>
+        </dependency>
+        
+        <!-- Jackson 序列化（用于 Result 等通用响应） -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>

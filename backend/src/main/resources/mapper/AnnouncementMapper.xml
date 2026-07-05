@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.course.platform.mapper.AnnouncementMapper">
+
+    <!-- 分页查询公告列表 -->
+    <select id="selectAnnouncementPage" resultType="com.course.platform.domain.vo.AnnouncementVO">
+        SELECT 
+            a.id,
+            a.title,
+            a.content,
+            a.type,
+            CASE a.type
+                WHEN 1 THEN '系统公告'
+                WHEN 2 THEN '日常公告'
+                WHEN 3 THEN '维护通知'
+                WHEN 4 THEN '活动公告'
+                ELSE '未知'
+            END as typeName,
+            a.priority,
+            CASE a.priority
+                WHEN 1 THEN '普通'
+                WHEN 2 THEN '重要'
+                WHEN 3 THEN '紧急'
+                ELSE '未知'
+            END as priorityName,
+            a.is_top,
+            a.is_popup,
+            a.publish_time,
+            a.expire_time,
+            a.status,
+            CASE a.status
+                WHEN 0 THEN '草稿'
+                WHEN 1 THEN '已发布'
+                WHEN 2 THEN '已下线'
+                ELSE '未知'
+            END as statusName,
+            a.create_by,
+            u.nickname as createByName,
+            a.create_time,
+            a.update_time
+        FROM announcement a
+        LEFT JOIN sys_user u ON a.create_by = u.id
+        <where>
+            <if test="type != null">
+                AND a.type = #{type}
+            </if>
+            <if test="status != null">
+                AND a.status = #{status}
+            </if>
+            <if test="title != null and title != ''">
+                AND a.title LIKE CONCAT('%', #{title}, '%')
+            </if>
+        </where>
+        ORDER BY a.is_top DESC, a.publish_time DESC, a.create_time DESC
+    </select>
+
+    <!-- 查询最新公告列表（用于首页显示） -->
+    <select id="selectLatestAnnouncements" resultType="com.course.platform.domain.vo.AnnouncementVO">
+        SELECT 
+            a.id,
+            a.title,
+            a.content,
+            a.type,
+            CASE a.type
+                WHEN 1 THEN '系统公告'
+                WHEN 2 THEN '日常公告'
+                WHEN 3 THEN '维护通知'
+                WHEN 4 THEN '活动公告'
+                ELSE '未知'
+            END as typeName,
+            a.priority,
+            CASE a.priority
+                WHEN 1 THEN '普通'
+                WHEN 2 THEN '重要'
+                WHEN 3 THEN '紧急'
+                ELSE '未知'
+            END as priorityName,
+            a.is_top,
+            a.is_popup,
+            a.publish_time,
+            a.expire_time,
+            a.status,
+            a.create_time
+        FROM announcement a
+        WHERE a.status = 1 
+        AND (a.expire_time IS NULL OR a.expire_time > NOW())
+        AND a.type IN (2, 3, 4)  -- 包含日常公告、维护通知、活动公告
+        ORDER BY a.is_top DESC, a.publish_time DESC, a.create_time DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- 查询系统公告（用于首次登录弹窗） -->
+    <select id="selectSystemAnnouncement" resultType="com.course.platform.domain.vo.AnnouncementVO">
+        SELECT 
+            a.id,
+            a.title,
+            a.content,
+            a.type,
+            CASE a.type
+                WHEN 1 THEN '系统公告'
+                WHEN 2 THEN '日常公告'
+                WHEN 3 THEN '维护通知'
+                WHEN 4 THEN '活动公告'
+                ELSE '未知'
+            END as typeName,
+            a.priority,
+            CASE a.priority
+                WHEN 1 THEN '普通'
+                WHEN 2 THEN '重要'
+                WHEN 3 THEN '紧急'
+                ELSE '未知'
+            END as priorityName,
+            a.is_top,
+            a.is_popup,
+            a.publish_time,
+            a.expire_time,
+            a.status,
+            a.create_time
+        FROM announcement a
+        WHERE a.status = 1 
+        AND a.type = 1
+        AND a.is_popup = 1
+        AND (a.expire_time IS NULL OR a.expire_time > NOW())
+        ORDER BY a.publish_time DESC, a.create_time DESC
+        LIMIT 1
+    </select>
+
+    <!-- 查询置顶公告 -->
+    <select id="selectTopAnnouncements" resultType="com.course.platform.domain.vo.AnnouncementVO">
+        SELECT 
+            a.id,
+            a.title,
+            a.content,
+            a.type,
+            CASE a.type
+                WHEN 1 THEN '系统公告'
+                WHEN 2 THEN '日常公告'
+                WHEN 3 THEN '维护通知'
+                WHEN 4 THEN '活动公告'
+                ELSE '未知'
+            END as typeName,
+            a.priority,
+            CASE a.priority
+                WHEN 1 THEN '普通'
+                WHEN 2 THEN '重要'
+                WHEN 3 THEN '紧急'
+                ELSE '未知'
+            END as priorityName,
+            a.is_top,
+            a.is_popup,
+            a.publish_time,
+            a.expire_time,
+            a.status,
+            a.create_time
+        FROM announcement a
+        WHERE a.status = 1 
+        AND a.is_top = 1
+        AND (a.expire_time IS NULL OR a.expire_time > NOW())
+        ORDER BY a.publish_time DESC, a.create_time DESC
+    </select>
+
+</mapper>

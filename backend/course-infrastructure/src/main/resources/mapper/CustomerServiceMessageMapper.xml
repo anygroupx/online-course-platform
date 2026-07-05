@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.course.platform.infra.persistence.mapper.CustomerServiceMessageMapper">
+
+    <!-- 查询会话消息列表 -->
+    <select id="selectMessagesBySessionId" resultType="com.course.platform.domain.vo.CustomerServiceMessageVO">
+        SELECT 
+            m.id,
+            m.session_id,
+            m.sender_id,
+            CASE m.sender_type
+                WHEN 1 THEN u.nickname
+                WHEN 2 THEN cs.nickname
+                ELSE '未知'
+            END as senderName,
+            m.sender_type,
+            CASE m.sender_type
+                WHEN 1 THEN '用户'
+                WHEN 2 THEN '客服'
+                ELSE '未知'
+            END as senderTypeName,
+            m.message_type,
+            CASE m.message_type
+                WHEN 1 THEN '文本'
+                WHEN 2 THEN '图片'
+                WHEN 3 THEN '文件'
+                ELSE '未知'
+            END as messageTypeName,
+            m.content,
+            m.is_read,
+            m.create_time
+        FROM customer_service_message m
+        LEFT JOIN sys_user u ON m.sender_id = u.id AND m.sender_type = 1
+        LEFT JOIN sys_user cs ON m.sender_id = cs.id AND m.sender_type = 2
+        WHERE m.session_id = #{sessionId}
+        ORDER BY m.create_time ASC
+    </select>
+
+    <!-- 查询用户未读消息数量 -->
+    <select id="selectUnreadCountByUserId" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM customer_service_message m
+        INNER JOIN customer_service_session s ON m.session_id = s.session_id
+        WHERE s.user_id = #{userId}
+        AND m.sender_type = 2
+        AND m.is_read = 0
+    </select>
+
+    <!-- 标记消息为已读 -->
+    <update id="markMessagesAsRead">
+        UPDATE customer_service_message m
+        INNER JOIN customer_service_session s ON m.session_id = s.session_id
+        SET m.is_read = 1
+        WHERE s.session_id = #{sessionId}
+        AND s.user_id = #{userId}
+        AND m.sender_type = 2
+        AND m.is_read = 0
+    </update>
+
+</mapper>

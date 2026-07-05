@@ -1,0 +1,37 @@
+# Docker 构建忽略文件
+
+# Git
+.git
+.gitignore
+.gitmodules
+
+# IDE
+.idea
+.vscode
+*.iml
+
+# 临时文件
+*.log
+*.tmp
+temp_backup
+
+# Node
+node_modules
+npm-debug.log
+
+# Maven
+target
+*.jar
+!backend/target/*.jar
+
+# 文档
+docs
+README.md
+
+# 数据库
+database/*.sql
+
+# 环境文件
+.env
+.env.*
+!.env.example

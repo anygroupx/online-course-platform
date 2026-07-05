@@ -1,0 +1,146 @@
+/* 全局样式文件 - 现代化设计 */
+
+/* 渐变背景 */
+.gradient-bg {
+    background: var(--primary-gradient);
+}
+
+/* 卡片阴影 */
+.card-shadow {
+    box-shadow: var(--shadow-sm);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-shadow:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-4px);
+}
+
+/* 动画 */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+/* 响应式表格 */
+@media (max-width: 768px) {
+    .el-table {
+        font-size: 12px;
+    }
+
+    .el-table__header th {
+        padding: 8px 0;
+    }
+
+    .el-table__body td {
+        padding: 8px 0;
+    }
+}
+
+/* 美化滚动条 */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-body);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--text-placeholder);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+/* 表单优化 */
+.el-form-item__label {
+    font-weight: 500;
+    color: var(--text-regular);
+}
+
+/* 按钮组 */
+.el-button-group {
+    display: flex;
+    gap: 10px;
+}
+
+/* 标签美化 */
+.el-tag {
+    border-radius: 4px;
+    font-weight: 500;
+    padding: 4px 12px !important;
+}
+
+/* 卡片头部 */
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+    font-weight: bold;
+    color: var(--text-primary);
+}
+
+.card-header .el-icon {
+    font-size: 20px;
+}
+
+/* 标签页导航条全局样式优化 */
+.tags-view-container {
+    /* 确保在所有页面下都有一致的高度和样式 */
+    height: 44px !important;
+    min-height: 44px !important;
+    max-height: 44px !important;
+}
+
+/* 确保标签页项目在所有页面下都有一致的高度 */
+.tag-item {
+    height: 36px !important;
+    min-height: 36px !important;
+    max-height: 36px !important;
+}
+
+/* 移动端标签页高度优化 */
+@media (max-width: 768px) {
+    .tags-view-container {
+        height: 40px !important;
+        min-height: 40px !important;
+        max-height: 40px !important;
+    }
+
+    .tag-item {
+        height: 32px !important;
+        min-height: 32px !important;
+        max-height: 32px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .tags-view-container {
+        height: 36px !important;
+        min-height: 36px !important;
+        max-height: 36px !important;
+    }
+
+    .tag-item {
+        height: 28px !important;
+        min-height: 28px !important;
+        max-height: 28px !important;
+    }
+}

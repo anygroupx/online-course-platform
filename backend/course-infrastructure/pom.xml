@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.course</groupId>
+        <artifactId>online-course-platform</artifactId>
+        <version>2.0.1</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>course-infrastructure</artifactId>
+    <name>course-infrastructure</name>
+    <description>基础设施层模块 - 持久化实现、外部服务调用</description>
+    <packaging>jar</packaging>
+
+    <dependencies>
+        <!-- 领域层（实现领域接口） -->
+        <dependency>
+            <groupId>com.course</groupId>
+            <artifactId>course-domain</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!--        -->
+        <dependency>
+            <groupId>com.course</groupId>
+            <artifactId>course-application</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- 共享内核 -->
+        <dependency>
+            <groupId>com.course</groupId>
+            <artifactId>course-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        
+        <!-- MyBatis Plus -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+        </dependency>
+        
+        <!-- MySQL驱动 -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        
+        <!-- Spring Data Redis -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+
+        <!-- Hutool -->
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-all</artifactId>
+            <version>${hutool.version}</version>
+        </dependency>
+
+        <!-- Hutool HTTP（外部服务调用） -->
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-http</artifactId>
+        </dependency>
+        
+        <!-- Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+    </dependencies>
+
+</project>
