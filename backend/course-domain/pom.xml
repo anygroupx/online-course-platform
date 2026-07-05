@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.course</groupId>
+        <artifactId>online-course-platform</artifactId>
+        <version>2.0.1</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>course-domain</artifactId>
+    <name>course-domain</name>
+    <description>领域层模块 - 纯POJO，核心业务逻辑，禁止框架依赖</description>
+    <packaging>jar</packaging>
+
+    <dependencies>
+        <!-- 共享内核 -->
+        <dependency>
+            <groupId>com.course</groupId>
+            <artifactId>course-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        
+        <!-- 
+            ⚠️ 过渡期约束：
+            - 当前实体类使用了 MyBatis-Plus 注解，暂时保留依赖
+            - 目标：逐步将 Entity 拆分为 纯POJO Entity + DO(DataObject)
+            - 最终目标：移除此依赖
+        -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-annotation</artifactId>
+            <version>3.5.7</version>
+        </dependency>
+        
+        <!-- Jackson（用于DTO序列化） -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+        </dependency>
+
+        <!-- Knife4j（用于API文档） -->
+        <dependency>
+            <groupId>com.github.xiaoymin</groupId>
+            <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+            <version>${knife4j.version}</version>
+        </dependency>
+
+        <!-- Elasticsearch 全文搜索 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-elasticsearch</artifactId>
+        </dependency>
+
+        <!-- Lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+</project>

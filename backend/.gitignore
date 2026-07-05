@@ -1,0 +1,110 @@
+# ========================================
+# Spring Boot 后端 .gitignore
+# ========================================
+
+# ==================== Maven ====================
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# ==================== Gradle ====================
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# ==================== STS (Spring Tool Suite) ====================
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+# ==================== IntelliJ IDEA ====================
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# ==================== NetBeans ====================
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# ==================== VS Code ====================
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+# ==================== Eclipse ====================
+.metadata
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.loadpath
+.recommenders
+
+# ==================== 编译输出 ====================
+*.class
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# ==================== 日志文件 ====================
+*.log
+logs/
+*.log.*
+/logs/
+
+# ==================== 应用配置（敏感信息） ====================
+# 真实生产配置不得进入版本控制，仅提交无秘密的 example 模板。
+/config/application-prod.yml
+!/config/application-prod.example.yml
+config/application-prod.yml.bak
+config/*.key
+config/*.pem
+
+# 本地开发配置
+application-local.yml
+application-dev-local.yml
+
+# ==================== 测试覆盖率报告 ====================
+.jacoco/
+jacoco.exec
+
+# ==================== 操作系统 ====================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# ==================== 临时文件 ====================
+*.swp
+*.swo
+*~
+
+# ==================== 文档 ====================
+HELP.md
+
+# ==================== 数据库 ====================
+*.db
+*.sqlite
+*.h2.db
+
+# ==================== 其他 ====================
+.cunzhi-memory/

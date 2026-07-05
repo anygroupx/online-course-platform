@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.course.platform.infra.persistence.mapper.CustomerServiceSessionMapper">
+
+    <!-- 根据用户ID查询活跃会话 -->
+    <select id="selectActiveSessionByUserId" resultType="com.course.platform.domain.entity.CustomerServiceSession">
+        SELECT 
+            id,
+            session_id,
+            user_id,
+            customer_service_id,
+            status,
+            start_time,
+            end_time,
+            last_message_time,
+            create_time,
+            update_time
+        FROM customer_service_session
+        WHERE user_id = #{userId}
+        AND status IN (1, 2)
+        ORDER BY create_time DESC
+        LIMIT 1
+    </select>
+
+    <!-- 更新会话状态 -->
+    <!-- 注意：原生SQL不会触发MyBatis-Plus自动填充，需手动设置update_time -->
+    <update id="updateSessionStatus">
+        UPDATE customer_service_session
+        SET status = #{status}, update_time = NOW()
+        WHERE session_id = #{sessionId}
+    </update>
+
+    <!-- 查询所有会话（带用户信息和最后消息） -->
+    <select id="selectAllSessionsWithInfo" resultType="com.course.platform.domain.vo.CustomerServiceSessionVO">
+        SELECT 
+            s.id,
+            s.session_id,
+            s.user_id,
+            u.nickname as userName,
+            u.username as userAccount,
+            s.customer_service_id,
+            cs.nickname as customerServiceName,
+            s.status,
+            s.start_time,
+            s.end_time,
+            s.last_message_time,
+            (SELECT content FROM customer_service_message 
+             WHERE session_id = s.session_id 
+             ORDER BY create_time DESC LIMIT 1) as lastMessageContent,
+            s.create_time,
+            s.update_time
+        FROM customer_service_session s
+        LEFT JOIN sys_user u ON s.user_id = u.id
+        LEFT JOIN sys_user cs ON s.customer_service_id = cs.id
+        WHERE 1=1
+        <if test="status != null">
+            AND s.status = #{status}
+        </if>
+        ORDER BY s.last_message_time DESC
+    </select>
+
+</mapper>

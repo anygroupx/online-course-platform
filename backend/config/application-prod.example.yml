@@ -1,0 +1,92 @@
+# 生产环境配置模板
+# 安全说明：生产地址、账号和密钥必须由部署环境注入，禁止在仓库中设置默认值。
+
+server:
+  port: ${SERVER_PORT:8082}
+  servlet:
+    context-path: /api
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      minimum-idle: 10
+      maximum-pool-size: 30
+      auto-commit: true
+      idle-timeout: 30000
+      pool-name: CoursePlatformHikariCP
+      max-lifetime: 1800000
+      connection-timeout: 30000
+
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+mybatis-plus:
+  configuration:
+    # 生产环境关闭 SQL 日志，避免输出业务数据。
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+jwt:
+  # JWT 密钥必须使用高强度随机值，并由密钥管理系统注入。
+  secret: ${JWT_SECRET}
+  expiration: 604800
+
+knife4j:
+  enable: ${API_DOC_ENABLED:false}
+
+logging:
+  level:
+    root: WARN
+    com.course.platform: INFO
+    com.course.platform.mapper: INFO
+  pattern:
+    console: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n'
+    file: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n'
+  file:
+    name: ${LOG_FILE_NAME:/var/log/online-course-platform/application.log}
+    max-size: 50MB
+    max-history: 30
+  logback:
+    rollingpolicy:
+      max-file-size: 50MB
+      max-history: 30
+      total-size-cap: 1GB
+
+course:
+  security:
+    # 多个来源使用英文逗号分隔，例如：https://course.example.com,https://admin.example.com
+    allowed-origins: ${COURSE_SECURITY_ALLOWED_ORIGINS}
+    permit-all-paths:
+      - /auth/**
+      - /health
+      - /ping
+      - /register
+      - /register/validate-invite-code
+      - /payment/notify
+      - /payment/return
+      - /doc.html
+      - /swagger-ui/**
+      - /v3/api-docs/**
+      - /webjars/**
+      - /external/**
+      - /favicon.ico
+      - /error
+  business:
+    min-recharge-amount: 10
+    api-enable-free-threshold: 300
+    api-enable-fee: 10
+    user-register-fee: 5
+    price-change-fee: 3
+    order-sync:
+      enabled: true
+      interval-minutes: 30
+      interval-milliseconds: 1800000

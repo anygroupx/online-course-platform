@@ -1,0 +1,95 @@
+# ========================================
+# 在线课程平台 - 主仓库 .gitignore
+# ========================================
+
+# ==================== 环境配置 ====================
+# 环境变量文件（包含敏感信息）
+.env
+.env.local
+.env.*.local
+
+# 外置生产配置由部署环境生成，仓库只保留 example 模板。
+backend/config/application-prod.yml
+!backend/config/application-prod.example.yml
+
+# ==================== IDE & 编辑器 ====================
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# VS Code
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+# Eclipse
+.project
+.classpath
+.settings/
+
+# ==================== 操作系统 ====================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# ==================== 日志文件 ====================
+*.log
+logs/
+*.log.*
+
+# ==================== Docker ====================
+# Docker 构建缓存
+.docker/
+
+# ==================== 临时文件 ====================
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.cache/
+
+# ==================== 备份文件 ====================
+*.bak
+*.backup
+*_backup/
+temp_backup/
+backup/
+
+# ==================== AI 工具 ====================
+# 寸止记忆存储
+.cunzhi-memory/
+
+# ==================== 密钥和证书 ====================
+*.key
+*.pem
+*.cert
+*.crt
+*.p12
+*.jks
+!src/test/**/*.key
+
+# ==================== 数据库备份 ====================
+*.sql.gz
+*.sql.bak
+dumps/
+
+# ==================== 其他 ====================
+# 压缩文件
+*.zip
+*.tar.gz
+*.rar
+
+# Node modules（如果主仓库有）
+node_modules/

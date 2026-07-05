@@ -1,0 +1,76 @@
+package com.course.platform.application.service.platform;
+
+import com.course.platform.domain.entity.CourseOrder;
+
+import java.util.List;
+
+/**
+ * 考试倒计时服务接口
+ * 处理自营订单的考试倒计时和自动完成功能
+ * 
+ * @author AI Assistant
+ * @since 2025-01-17
+ * Source: 基于考试倒计时管理需求设计
+ */
+public interface ExamCountdownService {
+
+    /**
+     * 检查并处理过期的考试倒计时订单
+     * 定时任务调用此方法
+     */
+    void processExpiredExamCountdownOrders();
+
+    /**
+     * 获取所有正在考试倒计时的订单
+     * 
+     * @return 考试倒计时订单列表
+     */
+    List<CourseOrder> getActiveExamCountdownOrders();
+
+    /**
+     * 手动完成考试
+     * 
+     * @param orderId 订单ID
+     * @param operatorId 操作人ID
+     */
+    void completeExam(Long orderId, Long operatorId);
+
+    /**
+     * 获取订单剩余考试倒计时时间（分钟）
+     * 
+     * @param orderId 订单ID
+     * @return 剩余时间，如果已过期返回0
+     */
+    long getRemainingExamCountdownMinutes(Long orderId);
+
+    /**
+     * 开始考试倒计时
+     * 将订单切换到考试中状态并启动考试倒计时
+     * 
+     * @param orderId 订单ID
+     * @param duration 倒计时时长（分钟）
+     * @param operatorId 操作人ID
+     * @param reason 操作原因
+     */
+    void startExamCountdown(Long orderId, Integer duration, Long operatorId, String reason);
+
+    /**
+     * 调整考试倒计时
+     * 
+     * @param orderId 订单ID
+     * @param newDuration 新的倒计时时长（分钟）
+     * @param operatorId 操作人ID
+     * @param reason 操作原因
+     */
+    void adjustExamCountdown(Long orderId, Integer newDuration, Long operatorId, String reason);
+
+    /**
+     * 切换订单到考试状态
+     * 
+     * @param orderId 订单ID
+     * @param newStatus 新状态
+     * @param operatorId 操作人ID
+     * @param reason 操作原因
+     */
+    void switchToExamStatus(Long orderId, Integer newStatus, Long operatorId, String reason);
+}

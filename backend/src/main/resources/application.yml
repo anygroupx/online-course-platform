@@ -1,0 +1,132 @@
+# Spring Boot 配置文件
+# 安全说明：敏感配置只允许从环境变量注入，仓库不提供密码或密钥默认值。
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: online-course-platform
+
+  web:
+    resources:
+      # 禁用默认静态资源处理，避免拦截 API 请求。
+      add-mappings: false
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # 本地地址属于安全开发默认；生产环境必须显式覆盖连接地址。
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/online_course?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false}
+    username: ${SPRING_DATASOURCE_USERNAME:course_user}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      auto-commit: true
+      idle-timeout: 30000
+      pool-name: CoursePlatformHikariCP
+      max-lifetime: 1800000
+      connection-timeout: 30000
+
+  # Redis 为可选依赖；启用时通过环境变量提供连接信息。
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
+      database: ${SPRING_DATA_REDIS_DATABASE:0}
+      timeout: 5000
+      lettuce:
+        pool:
+          max-active: 8
+          max-wait: -1
+          max-idle: 8
+          min-idle: 0
+
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+  elasticsearch:
+    uris: ${SPRING_ELASTICSEARCH_URIS:http://localhost:9200}
+
+mybatis-plus:
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.course.platform.domain.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+jwt:
+  # JWT 密钥是必填项，禁止为开发环境设置可提交的默认值。
+  secret: ${JWT_SECRET}
+  token-prefix: Bearer
+  header-name: Authorization
+
+knife4j:
+  enable: ${API_DOC_ENABLED:true}
+  setting:
+    language: zh_cn
+  openapi:
+    title: 在线网课平台 API 文档
+    description: 基于 Spring Boot + Vue 3 的前后端分离在线网课平台
+    version: 1.0.0
+    contact:
+      name: Maintainer
+      email: support@example.com
+    group:
+      default:
+        group-name: 默认接口
+        api-rule: package
+        api-rule-resources:
+          - com.course.platform.controller
+
+logging:
+  level:
+    root: INFO
+    com.course.platform: DEBUG
+    com.course.platform.mapper: DEBUG
+  pattern:
+    console: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n'
+    file: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n'
+  file:
+    name: ${LOG_FILE_NAME:logs/online-course-platform.log}
+    max-size: 10MB
+    max-history: 30
+
+course:
+  security:
+    # Spring Boot 会将英文逗号分隔的字符串绑定为 List<String>。
+    allowed-origins: ${COURSE_SECURITY_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+    permit-all-paths:
+      - /auth/**
+      - /health
+      - /ping
+      - /doc.html
+      - /swagger-ui/**
+      - /v3/api-docs/**
+      - /webjars/**
+      - /api/external/**
+  business:
+    min-recharge-amount: 10
+    api-enable-free-threshold: 300
+    api-enable-fee: 10
+    user-register-fee: 5
+    price-change-fee: 3
+    order-sync:
+      enabled: true
+      interval-minutes: 30
+      interval-milliseconds: 1800000
