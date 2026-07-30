@@ -37,6 +37,8 @@ services:
     restart: unless-stopped
     environment:
       - TZ=Asia/Shanghai
+      # Redis 密码必须由未纳入版本控制的 .env 或密钥管理系统提供。
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     volumes:
       - redis_data:/data
     ports:
@@ -44,11 +46,20 @@ services:
     networks:
       - local_net
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        [
+          "CMD-SHELL",
+          'redis-cli --no-auth-warning -a "$${REDIS_PASSWORD}" ping | grep -q PONG',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
-    command: redis-server --appendonly yes
+    command:
+      [
+        "sh",
+        "-c",
+        'exec redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}"',
+      ]
 
   # Elasticsearch 全文搜索
   elasticsearch:
