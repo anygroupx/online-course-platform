@@ -1,5 +1,5 @@
 <template>
-  <div class="tags-view-container">
+  <div class="tags-view-container fluent-acrylic" data-depth="command-tabs">
     <!-- 标签页滚动容器 -->
     <div 
       ref="scrollContainer" 
@@ -508,6 +508,94 @@ html.dark .more-btn:hover {
   .tags-view-container {
     height: 36px;
     padding: 0 6px;
+  }
+}
+</style>
+
+<style scoped>
+/* 标签栏是工作区命令层，采用低 elevation 亚克力而不是传统浏览器标签。 */
+.tags-view-container {
+  position: relative;
+  z-index: 8;
+  height: 44px !important;
+  min-height: 44px !important;
+  margin: 8px 10px 0;
+  padding: 4px 6px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-acrylic) 86%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-sm);
+  backdrop-filter: blur(22px) saturate(1.16);
+}
+
+.tags-view-wrapper {
+  height: 34px;
+}
+
+.tags-container {
+  gap: 4px;
+  height: 34px;
+}
+
+.tags-container :deep(.tag-item) {
+  height: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--text-secondary);
+  background: transparent;
+  box-shadow: none;
+  transition:
+    color var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    transform var(--motion-fast) ease;
+}
+
+.tags-container :deep(.tag-item:hover) {
+  color: var(--text-primary);
+  border-color: var(--border-color-light);
+  background: color-mix(in srgb, var(--surface-solid) 52%, transparent);
+  transform: translateY(-1px);
+}
+
+.tags-container :deep(.tag-item.active),
+.tags-container :deep(.tag-item.is-active) {
+  color: var(--brand-primary);
+  border-color: color-mix(in srgb, var(--brand-primary) 24%, var(--border-color-light));
+  background: color-mix(in srgb, var(--brand-primary) 10%, var(--surface-solid));
+  box-shadow: inset 0 -2px 0 var(--brand-primary);
+}
+
+.tags-view-actions {
+  gap: 2px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border-color-light);
+}
+
+.scroll-btn,
+.more-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+}
+
+.scroll-btn:hover,
+.more-btn:hover {
+  color: var(--brand-primary);
+  background: color-mix(in srgb, var(--brand-primary) 9%, transparent);
+}
+
+@media (max-width: 768px) {
+  .tags-view-container {
+    height: 42px !important;
+    min-height: 42px !important;
+    margin: 6px 8px 0;
+    border-radius: 12px;
   }
 }
 </style>

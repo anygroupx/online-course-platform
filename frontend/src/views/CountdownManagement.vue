@@ -3349,7 +3349,7 @@ onUnmounted(() => {
 }
 
 .expired-actions .el-button--primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   border: none;
 }
 
@@ -3377,7 +3377,7 @@ onUnmounted(() => {
 }
 
 .stat-value {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

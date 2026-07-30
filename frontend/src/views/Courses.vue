@@ -1012,7 +1012,7 @@ onMounted(() => {
 }
 
 :deep(.el-textarea__inner):focus {
-  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-primary) 20%, transparent);
 }
 
 :deep(.el-card) {

@@ -1,5 +1,5 @@
 <template>
-  <div class="enterprise-table">
+  <div class="enterprise-table fluent-data-surface" data-density="enterprise">
     <!-- 桌面端：标准表格 -->
     <template v-if="!isMobile">
       <el-table
@@ -106,7 +106,8 @@
         <div
           v-for="(row, index) in data"
           :key="getRowKey(row, index)"
-          class="mobile-card"
+          class="mobile-card fluent-depth-card"
+          data-depth="1"
           @click="handleCardClick(row, index)"
         >
           <!-- 自定义卡片插槽 -->
@@ -812,6 +813,113 @@ defineExpose({
   .table-pagination :deep(.el-pagination__total),
   .table-pagination :deep(.el-pagination__jump) {
     display: none;
+  }
+}
+</style>
+
+<style scoped>
+/* 数据表保持 solid 材质与低 elevation，保证高密度场景的扫描效率。 */
+.enterprise-table {
+  position: relative;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface-solid) 92%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-sm);
+}
+
+.desktop-table {
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+
+.desktop-table :deep(.el-table__header-wrapper) {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.desktop-table :deep(.el-table__row) {
+  transition:
+    background-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease;
+}
+
+.desktop-table :deep(.el-table__row:hover > td.el-table__cell) {
+  background: color-mix(in srgb, var(--brand-primary) 7%, var(--surface-solid));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--brand-primary) 8%, transparent);
+}
+
+.table-actions {
+  gap: 6px;
+}
+
+.table-actions :deep(.el-button.is-link) {
+  min-height: 28px;
+  padding: 4px 7px;
+  border-radius: 7px;
+}
+
+.table-actions :deep(.el-button.is-link:hover) {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.mobile-card-list {
+  gap: 12px;
+}
+
+.mobile-card {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--border-color-light);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), transparent),
+    var(--bg-card);
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-sm);
+}
+
+.mobile-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--primary-gradient);
+}
+
+.card-header,
+.card-actions {
+  border-color: var(--border-color-light);
+}
+
+.card-title {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.field-label {
+  color: var(--text-secondary);
+}
+
+.field-value {
+  color: var(--text-regular);
+}
+
+.table-pagination {
+  margin: 14px 0 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color-light);
+}
+
+@media (max-width: 768px) {
+  .enterprise-table {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
   }
 }
 </style>

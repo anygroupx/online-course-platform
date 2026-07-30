@@ -118,7 +118,7 @@ onMounted(() => {
 }
 
 .purple-card::before {
-  background: #667eea;
+  background: var(--brand-primary);
 }
 
 .blue-card::before {
@@ -144,7 +144,7 @@ onMounted(() => {
 }
 
 .purple-card .stat-icon {
-  color: #667eea;
+  color: var(--brand-primary);
 }
 
 .blue-card .stat-icon {
@@ -177,4 +177,3 @@ onMounted(() => {
   color: #67C23A;
 }
 </style>
-

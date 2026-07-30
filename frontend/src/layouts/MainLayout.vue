@@ -1,16 +1,30 @@
 <template>
-  <el-container class="main-container">
+  <el-container
+    class="main-container fluent-spatial-stage"
+    data-spatial-shell
+  >
+    <!-- 空间背景只提供环境光与透视参照，不参与交互。 -->
+    <div class="spatial-backdrop" aria-hidden="true">
+      <span class="spatial-glow spatial-glow--blue"></span>
+      <span class="spatial-glow spatial-glow--cyan"></span>
+      <span class="spatial-grid"></span>
+    </div>
     <el-aside
-      :width="isCollapse ? '64px' : '200px'"
-      class="sidebar"
+      :width="isCollapse ? '64px' : '252px'"
+      class="sidebar fluent-acrylic"
       :class="{
         collapsed: isCollapse,
         'mobile-visible': isMobileMenuVisible && isMobile,
       }"
     >
-      <div class="logo">
-        <h2 v-if="!isCollapse">{{ settings.site_name }}</h2>
-        <h2 v-else>{{ settings.site_name }}</h2>
+      <div class="logo" data-depth="brand">
+        <span class="logo-device" aria-hidden="true">
+          <i></i><i></i><i></i><i></i>
+        </span>
+        <div v-if="!isCollapse" class="logo-copy">
+          <span class="logo-kicker">LEARNING OS</span>
+          <h2>{{ settings.site_name || "二开台" }}</h2>
+        </div>
       </div>
       <el-menu
         :default-active="activeMenu"
@@ -124,6 +138,10 @@
           </el-breadcrumb>
         </div>
         <div class="header-right">
+          <div v-if="!isMobile" class="system-status" aria-label="系统运行正常">
+            <span class="system-status-dot"></span>
+            <span>服务在线</span>
+          </div>
           <ThemeToggle />
           <el-dropdown @command="handleCommand">
             <span class="user-info">
@@ -157,7 +175,7 @@
       <!-- 标签页导航 -->
       <TagsView />
 
-      <el-main class="main-content">
+      <el-main class="main-content" data-depth="workspace">
         <router-view v-slot="{ Component, route }">
           <transition name="fade-transform" mode="out-in">
             <keep-alive :include="cachedViews">
@@ -744,11 +762,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   /* 现代化渐变背景 */
-  background: linear-gradient(
-    135deg,
-    rgba(102, 126, 234, 0.8) 0%,
-    rgba(118, 75, 162, 0.8) 100%
-  );
+  background: var(--primary-gradient);
   position: relative;
   overflow: hidden;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -828,9 +842,9 @@ onUnmounted(() => {
   right: 8px;
   top: var(--active-top, 0px);
   height: var(--active-height, 0px);
-  background: rgba(102, 126, 234, 0.15);
+  background: color-mix(in srgb, var(--brand-primary) 15%, transparent);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2),
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--brand-primary) 20%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   opacity: var(--active-opacity, 0);
@@ -846,7 +860,7 @@ onUnmounted(() => {
   top: var(--active-top, 0px);
   height: var(--active-height, 0px);
   width: 3px;
-  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   border-radius: 0 2px 2px 0;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   opacity: var(--active-opacity, 0);
@@ -1193,12 +1207,12 @@ html.dark .menu .el-menu-item.is-active {
   bottom: 0;
   background-image: radial-gradient(
       circle at 20% 80%,
-      rgba(102, 126, 234, 0.03) 0%,
+      color-mix(in srgb, var(--brand-primary) 3%, transparent) 0%,
       transparent 50%
     ),
     radial-gradient(
       circle at 80% 20%,
-      rgba(118, 75, 162, 0.03) 0%,
+      color-mix(in srgb, var(--brand-violet) 3%, transparent) 0%,
       transparent 50%
     );
   pointer-events: none;
@@ -1410,8 +1424,8 @@ html.dark .sidebar::before {
 html.dark .logo {
   background: linear-gradient(
     135deg,
-    rgba(102, 126, 234, 0.2) 0%,
-    rgba(118, 75, 162, 0.2) 100%
+    color-mix(in srgb, var(--brand-primary) 20%, transparent),
+    color-mix(in srgb, var(--brand-violet) 20%, transparent)
   );
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -1445,5 +1459,302 @@ html.dark .user-info {
 
 html.dark .user-info:hover {
   background-color: rgba(255, 255, 255, 0.05);
+}
+</style>
+
+<style scoped>
+/* Fluent 空间壳层：侧栏与命令栏保持低 elevation，内容区拥有独立透视舞台。 */
+.main-container {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  overflow: hidden;
+  color: var(--text-regular);
+  background:
+    radial-gradient(circle at 82% -10%, rgba(0, 183, 195, 0.16), transparent 31%),
+    radial-gradient(circle at 18% 16%, rgba(15, 108, 189, 0.16), transparent 28%),
+    linear-gradient(145deg, var(--bg-body), color-mix(in srgb, var(--bg-body) 90%, #d8edff));
+}
+
+.spatial-backdrop {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.spatial-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.42;
+  background-image:
+    linear-gradient(rgba(15, 108, 189, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 108, 189, 0.055) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, black, transparent 88%);
+  transform: perspective(900px) rotateX(58deg) scale(1.5) translateY(22%);
+  transform-origin: center bottom;
+}
+
+.spatial-glow {
+  position: absolute;
+  width: 38vw;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  opacity: 0.22;
+  filter: blur(80px);
+}
+
+.spatial-glow--blue {
+  top: -18vw;
+  right: 10vw;
+  background: #1b7fd1;
+}
+
+.spatial-glow--cyan {
+  right: -14vw;
+  bottom: -18vw;
+  background: #00b7c3;
+}
+
+.sidebar {
+  position: relative;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  height: calc(100vh - 20px);
+  margin: 10px 0 10px 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--surface-mica) 88%, transparent) !important;
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-lg);
+  backdrop-filter: blur(28px) saturate(1.2);
+  transition:
+    width var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1),
+    transform var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 76px;
+  padding: 0 17px;
+  border-bottom: 1px solid var(--border-color-light);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent);
+}
+
+.logo-device {
+  position: relative;
+  display: grid;
+  flex: 0 0 34px;
+  grid-template-columns: repeat(2, 7px);
+  place-content: center;
+  gap: 4px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 38%, var(--border-color));
+  border-radius: 10px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.32), transparent),
+    var(--primary-gradient);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.42),
+    0 8px 18px color-mix(in srgb, var(--brand-primary) 26%, transparent);
+  transform: translateZ(18px) rotateY(-8deg);
+}
+
+.logo-device i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.logo-copy {
+  min-width: 0;
+}
+
+.logo-kicker {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--brand-primary);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+}
+
+.logo h2 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu {
+  flex: 1;
+  padding: 12px 8px;
+  overflow: hidden auto;
+  border-right: 0;
+  background: transparent;
+}
+
+.menu :deep(.el-menu-item),
+.menu :deep(.el-sub-menu__title) {
+  height: 42px;
+  margin: 3px 0;
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-weight: 560;
+  transition:
+    color var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    transform var(--motion-fast) ease;
+}
+
+.menu :deep(.el-menu-item:hover),
+.menu :deep(.el-sub-menu__title:hover) {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--brand-primary) 8%, transparent);
+  transform: translateX(2px);
+}
+
+.menu :deep(.el-menu-item.is-active) {
+  color: var(--brand-primary);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--brand-primary) 15%, transparent), transparent 92%);
+  box-shadow: inset 3px 0 0 var(--brand-primary);
+}
+
+.menu :deep(.el-menu-item.is-active .el-icon) {
+  filter: drop-shadow(0 2px 5px color-mix(in srgb, var(--brand-primary) 34%, transparent));
+}
+
+.sidebar-footer {
+  padding: 14px 16px 18px;
+  border-top: 1px solid var(--border-color-light);
+  color: var(--text-placeholder);
+}
+
+.header {
+  position: relative;
+  z-index: 10;
+  height: var(--header-height);
+  margin: 10px 10px 0;
+  padding: 0 16px;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface-acrylic) 88%, transparent) !important;
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-sm);
+  backdrop-filter: blur(24px) saturate(1.18);
+}
+
+.collapse-btn,
+.mobile-menu-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-color-light) !important;
+  border-radius: 10px;
+  color: var(--text-regular);
+  background: color-mix(in srgb, var(--surface-solid) 62%, transparent) !important;
+}
+
+.breadcrumb :deep(.el-breadcrumb__inner) {
+  color: var(--text-secondary);
+  font-weight: 520;
+}
+
+.breadcrumb :deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.system-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--color-success) 24%, var(--border-color-light));
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--color-success) 7%, transparent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.system-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-success) 14%, transparent);
+}
+
+.user-info {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 12px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--surface-solid) 58%, transparent);
+}
+
+.main-content {
+  position: relative;
+  z-index: 2;
+  padding: 18px 20px 26px;
+  overflow-x: hidden;
+  perspective: 1300px;
+  transform-style: preserve-3d;
+}
+
+:global(html.dark) .main-container {
+  background:
+    radial-gradient(circle at 82% -10%, rgba(56, 213, 222, 0.12), transparent 30%),
+    radial-gradient(circle at 18% 14%, rgba(71, 158, 245, 0.12), transparent 28%),
+    linear-gradient(145deg, #07111f, #091729 60%, #06101c);
+}
+
+:global(html.dark) .spatial-grid {
+  opacity: 0.52;
+  background-image:
+    linear-gradient(rgba(71, 158, 245, 0.075) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(71, 158, 245, 0.075) 1px, transparent 1px);
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    height: 100vh;
+    margin: 0;
+    border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
+  }
+
+  .header {
+    margin: 8px 8px 0;
+  }
+
+  .main-content {
+    padding: 14px 12px 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-device,
+  .spatial-grid {
+    transform: none;
+  }
 }
 </style>
