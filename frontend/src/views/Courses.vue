@@ -314,7 +314,7 @@
           style="
             margin-top: 15px;
             padding: 10px;
-            background-color: var(--brand-blue-soft);
+            background-color: #f0f9ff;
             border-radius: 4px;
           "
         >
@@ -1012,7 +1012,7 @@ onMounted(() => {
 }
 
 :deep(.el-textarea__inner):focus {
-  box-shadow: 0 0 0 2px rgba(78, 140, 255, 0.2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-primary) 20%, transparent);
 }
 
 :deep(.el-card) {
@@ -1161,14 +1161,14 @@ onMounted(() => {
   gap: 6px;
   margin-top: 8px;
   padding: 6px 12px;
-  background-color: rgba(78, 140, 255, 0.05);
+  background-color: rgba(64, 158, 255, 0.05);
   border-radius: 4px;
   font-size: 13px;
   color: var(--el-color-primary);
 }
 
 html.dark .platform-price-hint {
-  background-color: rgba(78, 140, 255, 0.1);
+  background-color: rgba(64, 158, 255, 0.1);
 }
 
 /* 平台描述样式优化 */
@@ -1262,7 +1262,7 @@ html.dark .platform-desc {
 }
 
 html.dark .selection-info {
-  background-color: rgba(78, 140, 255, 0.1) !important;
+  background-color: rgba(64, 158, 255, 0.1) !important;
 }
 
 html.dark .selection-info-text {
@@ -1275,11 +1275,11 @@ html.dark .selection-info-text {
 }
 
 .error-card :deep(.el-card__header) {
-  background-color: rgba(240, 101, 101, 0.05);
+  background-color: rgba(245, 108, 108, 0.05);
 }
 
 html.dark .error-card :deep(.el-card__header) {
-  background-color: rgba(240, 101, 101, 0.1);
+  background-color: rgba(245, 108, 108, 0.1);
 }
 
 /* 批量操作栏样式 */

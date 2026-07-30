@@ -642,7 +642,7 @@ onUnmounted(() => {
 }
 
 .message-right .message-content {
-  background: var(--color-primary);
+  background: var(--brand-primary);
   color: white;
 }
 
@@ -704,7 +704,7 @@ html.dark .message-content {
 }
 
 html.dark .message-right .message-content {
-  background: var(--color-primary);
+  background: var(--brand-primary);
   color: white;
 }
 
