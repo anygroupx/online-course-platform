@@ -26,8 +26,7 @@ CREATE TABLE IF NOT EXISTS `aqks_study_log` (
     KEY `idx_order_no` (`order_no`),
     KEY `idx_aqks_user_id` (`aqks_user_id`),
     KEY `idx_operation_type` (`operation_type`),
-    KEY `idx_create_time` (`create_time`)
+    KEY `idx_create_time` (`create_time`),
+    -- 将复合索引随表创建，兼容 MySQL 8.0 并保持首次迁移的原子性。
+    KEY `idx_order_status` (`order_id`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AQKS刷课日志表';
-
--- 添加索引以优化查询
-CREATE INDEX IF NOT EXISTS `idx_order_status` ON `aqks_study_log` (`order_id`, `status`);
