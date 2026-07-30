@@ -1,7 +1,10 @@
 package com.course.platform.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.course.platform.common.constant.Constants;
+import com.course.platform.security.SecurityUtils;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.Result;
 import com.course.platform.common.result.ResultCode;
@@ -17,14 +20,15 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * 课程平台管理控制器
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
 @Tag(name = "课程平台管理", description = "课程平台增删改查接口（管理员）")
-@RestController
+@PreAuthorize("hasRole('ADMIN')")
 @RequestMapping("/admin/platforms")
 @RequiredArgsConstructor
+@RestController
 public class CoursePlatformManageController {
 
     private final CoursePlatformService coursePlatformService;
@@ -34,9 +38,7 @@ public class CoursePlatformManageController {
      * 验证管理员权限
      */
     private void checkAdmin(Long userId) {
-        if (!Constants.DEFAULT_ADMIN_ID.equals(userId)) {
-            throw new BusinessException(ResultCode.FORBIDDEN);
-        }
+        SecurityUtils.requireAdmin();
     }
 
     /**
@@ -50,11 +52,11 @@ public class CoursePlatformManageController {
         checkAdmin(userId);
 
         Long id = coursePlatformService.createPlatform(platform);
-        
+
         // 记录操作日志
-        operationLogService.log(userId, "创建课程平台", 
+        operationLogService.log(userId, "创建课程平台",
                 "创建课程平台：" + platform.getName(), null, null);
-        
+
         return Result.success("课程平台创建成功", id);
     }
 
@@ -69,11 +71,11 @@ public class CoursePlatformManageController {
         checkAdmin(userId);
 
         coursePlatformService.updatePlatform(platform);
-        
+
         // 记录操作日志
-        operationLogService.log(userId, "更新课程平台", 
+        operationLogService.log(userId, "更新课程平台",
                 "更新课程平台：" + platform.getName(), null, null);
-        
+
         return Result.success("课程平台更新成功");
     }
 
@@ -88,11 +90,11 @@ public class CoursePlatformManageController {
         checkAdmin(userId);
 
         coursePlatformService.deletePlatform(id);
-        
+
         // 记录操作日志
-        operationLogService.log(userId, "删除课程平台", 
+        operationLogService.log(userId, "删除课程平台",
                 "删除课程平台ID：" + id, null, null);
-        
+
         return Result.success("课程平台删除成功");
     }
 
@@ -114,4 +116,3 @@ public class CoursePlatformManageController {
         return Result.success(result);
     }
 }
-

@@ -103,20 +103,20 @@ const formatValue = (value) => {
 .stat-value {
   font-size: 28px;
   font-weight: bold;
-  color: #303133;
+  color: var(--text-primary);
   margin-bottom: 8px;
   line-height: 1.2;
 }
 
 .stat-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--text-secondary);
   margin-bottom: 4px;
 }
 
 .stat-extra {
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--text-placeholder);
   margin-top: 4px;
 }
 
@@ -136,23 +136,23 @@ const formatValue = (value) => {
 }
 
 .stat-icon.primary {
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .stat-icon.success {
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .stat-icon.warning {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 
 .stat-icon.danger {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .stat-icon.info {
-  color: #909399;
+  color: var(--color-info);
 }
 
 /* 移动端优化 */

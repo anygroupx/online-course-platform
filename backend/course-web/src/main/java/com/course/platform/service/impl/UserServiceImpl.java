@@ -16,6 +16,9 @@ import com.course.platform.domain.entity.User;
 import com.course.platform.infra.persistence.mapper.UserMapper;
 import com.course.platform.application.service.support.OperationLogService;
 import com.course.platform.application.service.user.UserService;
+import com.course.platform.service.impl.AccountLedgerServiceImpl;
+import com.course.platform.security.SecurityUtils;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,7 +30,7 @@ import java.math.BigDecimal;
 
 /**
  * 用户服务实现类
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
@@ -39,6 +42,7 @@ public class UserServiceImpl implements UserService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final OperationLogService operationLogService;
+    private final AccountLedgerServiceImpl accountLedgerService;
 
     @Value("${course.business.user-register-fee:5}")
     private BigDecimal userRegisterFee;
@@ -78,12 +82,21 @@ public class UserServiceImpl implements UserService {
         user.setBalance(BigDecimal.ZERO);
         user.setTotalRecharge(BigDecimal.ZERO);
         user.setStatus(SystemVariableCache.getStatusValue("user_status", "normal"));
+        user.setRole(com.course.platform.common.security.SecurityRoles.USER);
+        user.setMustChangePassword(0);
 
         userMapper.insert(user);
 
         // 5. 扣除开户费
-        operator.setBalance(operator.getBalance().subtract(userRegisterFee));
-        userMapper.updateById(operator);
+        String openBizNo = "OPEN-" + request.getUsername() + "-" + System.currentTimeMillis();
+        accountLedgerService.debit(
+                operatorId,
+                userRegisterFee,
+                AccountLedgerServiceImpl.BIZ_ADJUST,
+                openBizNo,
+                String.format("开户扣费：%s", request.getUsername())
+        );
+        operator = userMapper.selectById(operatorId);
 
         // 6. 记录日志
         operationLogService.log(operatorId, "开户",
@@ -104,7 +117,7 @@ public class UserServiceImpl implements UserService {
         }
 
         // 检查权限：只能修改自己的下级
-        if (!Constants.DEFAULT_ADMIN_ID.equals(operatorId) && !user.getParentId().equals(operatorId)) {
+        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(operatorId)) && !user.getParentId().equals(operatorId)) {
             throw new BusinessException(ResultCode.FORBIDDEN);
         }
 
@@ -142,7 +155,7 @@ public class UserServiceImpl implements UserService {
         LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
 
         // 非管理员只能查看自己的下级
-        if (!Constants.DEFAULT_ADMIN_ID.equals(operatorId)) {
+        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(operatorId))) {
             queryWrapper.eq(User::getParentId, operatorId);
         }
 
@@ -170,8 +183,8 @@ public class UserServiceImpl implements UserService {
         }
 
         // 检查权限
-        if (!Constants.DEFAULT_ADMIN_ID.equals(operatorId) && 
-            !user.getId().equals(operatorId) && 
+        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(operatorId)) &&
+            !user.getId().equals(operatorId) &&
             !user.getParentId().equals(operatorId)) {
             throw new BusinessException(ResultCode.FORBIDDEN);
         }
@@ -185,52 +198,60 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void recharge(RechargeRequest request, Long operatorId) {
-        // 1. 查询操作人信息
         User operator = userMapper.selectById(operatorId);
         if (operator == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
 
-        // 2. 查询目标用户信息
         User targetUser = userMapper.selectById(request.getTargetUserId());
         if (targetUser == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
 
-        // 3. 检查权限：只能给下级充值
-        if (!Constants.DEFAULT_ADMIN_ID.equals(operatorId) && !targetUser.getParentId().equals(operatorId)) {
+        boolean isAdmin = SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(operatorId);
+        if (!isAdmin && (targetUser.getParentId() == null || !targetUser.getParentId().equals(operatorId))) {
             throw new BusinessException("只能给自己的下级充值");
         }
 
-        // 4. 计算实际扣费（根据费率差异）
         BigDecimal actualCost = request.getAmount()
                 .multiply(operator.getRate())
-                .divide(targetUser.getRate(), 2, BigDecimal.ROUND_HALF_UP);
+                .divide(targetUser.getRate(), 2, java.math.RoundingMode.HALF_UP);
 
-        // 5. 检查余额
-        if (operator.getBalance().compareTo(actualCost) < 0) {
-            throw new BusinessException(ResultCode.BALANCE_INSUFFICIENT);
+        String bizNo = "RCH-" + request.getTargetUserId() + "-" + System.currentTimeMillis();
+
+        // 超级管理员可直接给下级加款；其他角色必须先原子扣减自身余额
+        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(operatorId))) {
+            accountLedgerService.debit(
+                    operatorId,
+                    actualCost,
+                    AccountLedgerServiceImpl.BIZ_RECHARGE,
+                    bizNo + "-OUT",
+                    String.format("给用户[%s]充值扣费", targetUser.getUsername())
+            );
         }
 
-        // 6. 扣除操作人余额
-        operator.setBalance(operator.getBalance().subtract(actualCost));
-        userMapper.updateById(operator);
+        accountLedgerService.credit(
+                request.getTargetUserId(),
+                request.getAmount(),
+                AccountLedgerServiceImpl.BIZ_RECHARGE,
+                bizNo + "-IN",
+                String.format("上级[%s]充值", operator.getUsername()),
+                true
+        );
 
-        // 7. 增加目标用户余额
-        targetUser.setBalance(targetUser.getBalance().add(request.getAmount()));
-        targetUser.setTotalRecharge(targetUser.getTotalRecharge().add(request.getAmount()));
-        userMapper.updateById(targetUser);
+        operator = userMapper.selectById(operatorId);
+        targetUser = userMapper.selectById(request.getTargetUserId());
 
-        // 8. 记录日志
         operationLogService.log(operatorId, "充值",
                 String.format("给用户[%s]充值%s元，实际扣费%s元", targetUser.getUsername(), request.getAmount(), actualCost),
-                actualCost.negate(), operator.getBalance());
+                Constants.DEFAULT_ADMIN_ID.equals(operatorId) ? BigDecimal.ZERO : actualCost.negate(),
+                operator.getBalance());
 
         operationLogService.log(request.getTargetUserId(), "充值",
                 String.format("上级[%s]充值%s元", operator.getUsername(), request.getAmount()),
                 request.getAmount(), targetUser.getBalance());
 
-        log.info("充值成功：operatorId={}, targetUserId={}, amount={}, actualCost={}", 
+        log.info("充值成功：operatorId={}, targetUserId={}, amount={}, actualCost={}",
                 operatorId, request.getTargetUserId(), request.getAmount(), actualCost);
     }
 
@@ -242,19 +263,27 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
 
-        // 验证旧密码
         if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
             throw new BusinessException("原密码错误");
         }
 
-        // 更新密码
+        validatePasswordStrength(newPassword);
+        if (passwordEncoder.matches(newPassword, user.getPassword())) {
+            throw new BusinessException("新密码不能与旧密码相同");
+        }
+        if ("123456".equals(newPassword) || "admin".equalsIgnoreCase(newPassword)) {
+            throw new BusinessException("不能使用默认弱密码");
+        }
+
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setMustChangePassword(0);
+        user.setPasswordChangedAt(LocalDateTime.now());
         userMapper.updateById(user);
 
         operationLogService.log(userId, "修改密码", "修改密码成功", BigDecimal.ZERO, null);
-
         log.info("修改密码成功：userId={}", userId);
     }
+
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -264,32 +293,30 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
 
-        // 检查权限
-        if (!Constants.DEFAULT_ADMIN_ID.equals(operatorId) && !targetUser.getParentId().equals(operatorId)) {
+        boolean isAdmin = SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(operatorId);
+        if (!isAdmin && (targetUser.getParentId() == null || !targetUser.getParentId().equals(operatorId))) {
             throw new BusinessException(ResultCode.FORBIDDEN);
         }
 
-        // 生成新密码
-        String newPassword = RandomUtil.randomString(8);
-
-        // 更新密码
+        String newPassword = RandomUtil.randomString(12);
         targetUser.setPassword(passwordEncoder.encode(newPassword));
+        targetUser.setMustChangePassword(1);
+        targetUser.setPasswordChangedAt(LocalDateTime.now());
         userMapper.updateById(targetUser);
 
         operationLogService.log(operatorId, "重置密码",
                 String.format("重置用户[%s]密码", targetUser.getUsername()),
                 BigDecimal.ZERO, null);
-
         log.info("重置密码成功：targetUserId={}, operatorId={}", targetUserId, operatorId);
-
         return newPassword;
     }
+
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void changeUserStatus(Long userId, Integer status, Long operatorId) {
         // 只有管理员可以禁用用户
-        if (!Constants.DEFAULT_ADMIN_ID.equals(operatorId)) {
+        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(operatorId))) {
             throw new BusinessException(ResultCode.FORBIDDEN);
         }
 
@@ -308,5 +335,18 @@ public class UserServiceImpl implements UserService {
 
         log.info("{}用户成功：userId={}, operatorId={}", action, userId, operatorId);
     }
-}
 
+    private void validatePasswordStrength(String password) {
+        if (password == null || password.length() < 8) {
+            throw new BusinessException("密码长度至少8位");
+        }
+        if (password.length() > 64) {
+            throw new BusinessException("密码长度不能超过64位");
+        }
+        boolean hasLetter = password.matches(".*[A-Za-z].*");
+        boolean hasDigit = password.matches(".*\\d.*");
+        if (!hasLetter || !hasDigit) {
+            throw new BusinessException("密码需同时包含字母和数字");
+        }
+    }
+}

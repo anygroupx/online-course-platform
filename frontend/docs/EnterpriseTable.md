@@ -1,5 +1,9 @@
 # EnterpriseTable 企业级表格组件
 
+> 更新时间：2026-07-12
+> 组件代码位于 `frontend/src/components` 与 `frontend/src/composables`。
+
+
 ## 功能特性
 
 - ✅ **响应式设计**：桌面端表格 + 移动端卡片

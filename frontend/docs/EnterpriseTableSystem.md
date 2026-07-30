@@ -1,5 +1,9 @@
 # 企业级通用表格组件使用指南
 
+> 更新时间：2026-07-12
+> 组件代码位于 `frontend/src/components` 与 `frontend/src/composables`。
+
+
 ## 🎯 概述
 
 基于 **AURA-X-KYS** 协议，采用**渐进式增强**方案重构的企业级通用表格系统。

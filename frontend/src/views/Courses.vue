@@ -34,13 +34,13 @@
               </div>
             </el-option>
           </el-select>
-          
+
           <!-- 当前选中平台的价格提示 -->
           <div v-if="currentPlatform" class="platform-price-hint">
             <el-icon><PriceTag /></el-icon>
             <span>{{ (currentPlatform.basePrice * personalPriceMultiplier).toFixed(2) }}元/门</span>
           </div>
-          
+
           <!-- 平台描述（支持折叠/展开） -->
           <div
             v-if="currentPlatform && currentPlatform.description"
@@ -50,10 +50,10 @@
             <div class="desc-content">
               {{ currentPlatform.description }}
             </div>
-            <el-button 
+            <el-button
               v-if="isMobile && currentPlatform.description.length > 50"
-              link 
-              type="primary" 
+              link
+              type="primary"
               size="small"
               @click="descCollapsed = !descCollapsed"
               class="desc-toggle"
@@ -214,7 +214,7 @@
               >
                 ✗ 查询失败
               </el-tag>
-              <span 
+              <span
                 v-if="accountData.querySuccess"
                 style="margin-left: 10px; color: var(--text-secondary); font-size: 14px"
               >
@@ -314,7 +314,7 @@
           style="
             margin-top: 15px;
             padding: 10px;
-            background-color: #f0f9ff;
+            background-color: var(--brand-blue-soft);
             border-radius: 4px;
           "
         >
@@ -653,7 +653,7 @@ const handleSelectAllCourses = () => {
   accountCourseList.value.forEach((accountData, index) => {
     if (accountData.querySuccess && accountData.courses.length > 0) {
       accountData.selectedCourses = [...accountData.courses];
-      
+
       // 同步表格的选中状态
       const tableRef = tableRefs.value[index];
       if (tableRef) {
@@ -672,7 +672,7 @@ const handleSelectAllCourses = () => {
 // 批量提交所有选中的课程
 const handleBatchSubmit = async () => {
   const totalSelected = totalSelectedCount.value;
-  
+
   if (totalSelected === 0) {
     ElMessage.warning("请先选择要提交的课程");
     return;
@@ -702,7 +702,7 @@ const handleBatchSubmit = async () => {
     for (let i = 0; i < accountsWithSelection.length; i++) {
       const accountData = accountsWithSelection[i];
       const accountIndex = accountCourseList.value.indexOf(accountData);
-      
+
       for (const course of accountData.selectedCourses) {
         try {
           await createOrder({
@@ -719,10 +719,10 @@ const handleBatchSubmit = async () => {
           failCount++;
         }
       }
-      
+
       // 提交后清空该账号的选中状态
       accountData.selectedCourses = [];
-      
+
       // 同时清空表格的选中状态
       const tableRef = tableRefs.value[accountIndex];
       if (tableRef) {
@@ -786,10 +786,10 @@ const handleSubmitAccountSelected = async (accountData) => {
     ElMessage.success(
       `成功提交 ${successCount}/${accountData.selectedCourses.length} 个订单`
     );
-    
+
     // 清空该账号的选中状态
     accountData.selectedCourses = [];
-    
+
     // 同时清空表格的选中状态
     const accountIndex = accountCourseList.value.indexOf(accountData);
     const tableRef = tableRefs.value[accountIndex];
@@ -1012,7 +1012,7 @@ onMounted(() => {
 }
 
 :deep(.el-textarea__inner):focus {
-  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+  box-shadow: 0 0 0 2px rgba(78, 140, 255, 0.2);
 }
 
 :deep(.el-card) {
@@ -1161,14 +1161,14 @@ onMounted(() => {
   gap: 6px;
   margin-top: 8px;
   padding: 6px 12px;
-  background-color: rgba(64, 158, 255, 0.05);
+  background-color: rgba(78, 140, 255, 0.05);
   border-radius: 4px;
   font-size: 13px;
   color: var(--el-color-primary);
 }
 
 html.dark .platform-price-hint {
-  background-color: rgba(64, 158, 255, 0.1);
+  background-color: rgba(78, 140, 255, 0.1);
 }
 
 /* 平台描述样式优化 */
@@ -1226,24 +1226,24 @@ html.dark .platform-desc {
   .platform-select.is-mobile :deep(.el-input__inner) {
     font-size: 14px;
   }
-  
+
   .platform-option-content {
     font-size: 13px;
   }
-  
+
   .platform-name {
     max-width: 60%;
   }
-  
+
   .platform-price {
     font-size: 13px;
   }
-  
+
   .platform-price-hint {
     font-size: 12px;
     padding: 5px 10px;
   }
-  
+
   .platform-desc {
     font-size: 12px;
     padding: 8px 10px;
@@ -1255,14 +1255,14 @@ html.dark .platform-desc {
   .platform-option-content {
     font-size: 12px;
   }
-  
+
   .platform-price {
     font-size: 12px;
   }
 }
 
 html.dark .selection-info {
-  background-color: rgba(64, 158, 255, 0.1) !important;
+  background-color: rgba(78, 140, 255, 0.1) !important;
 }
 
 html.dark .selection-info-text {
@@ -1275,11 +1275,11 @@ html.dark .selection-info-text {
 }
 
 .error-card :deep(.el-card__header) {
-  background-color: rgba(245, 108, 108, 0.05);
+  background-color: rgba(240, 101, 101, 0.05);
 }
 
 html.dark .error-card :deep(.el-card__header) {
-  background-color: rgba(245, 108, 108, 0.1);
+  background-color: rgba(240, 101, 101, 0.1);
 }
 
 /* 批量操作栏样式 */

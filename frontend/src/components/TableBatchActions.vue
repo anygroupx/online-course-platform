@@ -187,7 +187,7 @@ const handleClearSelection = () => {
 }
 
 .batch-card {
-  border: 1px solid #409eff;
+  border: 1px solid var(--color-primary);
   /* 企业方案：使用更高对比度的背景，确保文字清晰可读 */
   background: linear-gradient(135deg, #ffffff 0%, #f5f9ff 100%);
 }

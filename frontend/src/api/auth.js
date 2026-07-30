@@ -50,3 +50,59 @@ export function refreshToken() {
     },
   });
 }
+
+/**
+ * MFA 登录二次验证
+ * @param {Object} data { challengeId, code }
+ */
+export function verifyMfa(data) {
+  return request({
+    url: "/auth/mfa/verify",
+    method: "post",
+    data,
+  });
+}
+
+/**
+ * 查询 MFA 状态（管理员）
+ */
+export function getMfaStatus() {
+  return request({
+    url: "/auth/mfa/status",
+    method: "get",
+  });
+}
+
+/**
+ * 开始绑定 MFA
+ */
+export function beginMfaSetup() {
+  return request({
+    url: "/auth/mfa/setup",
+    method: "post",
+  });
+}
+
+/**
+ * 确认绑定 MFA
+ * @param {Object} data { setupToken, code }
+ */
+export function confirmMfaSetup(data) {
+  return request({
+    url: "/auth/mfa/setup/confirm",
+    method: "post",
+    data,
+  });
+}
+
+/**
+ * 关闭 MFA
+ * @param {Object} data { code }
+ */
+export function disableMfa(data) {
+  return request({
+    url: "/auth/mfa/disable",
+    method: "post",
+    data,
+  });
+}

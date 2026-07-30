@@ -252,7 +252,7 @@
             </li>
           </ol>
           <p>
-            如需了解具体隐私与数据保护，请查看<router-link to="/privacy-policy" style="color: #409eff; text-decoration: none;">《隐私与数据保护协议》</router-link>。
+            如需了解具体隐私与数据保护，请查看<router-link to="/privacy-policy" style="color: var(--color-primary); text-decoration: none;">《隐私与数据保护协议》</router-link>。
           </p>
         </section>
 
@@ -426,11 +426,11 @@
   padding: 20px;
   border-radius: 4px;
   margin-bottom: 30px;
-  border-left: 5px solid #e6a23c;
+  border-left: 5px solid var(--color-warning);
 }
 
 .important-notice h3 {
-  color: #e6a23c;
+  color: var(--color-warning);
   margin-top: 0;
   margin-bottom: 10px;
 }
@@ -444,7 +444,7 @@ section h2 {
   color: #303133;
   margin-bottom: 15px;
   font-weight: 600;
-  border-left: 4px solid #409eff;
+  border-left: 4px solid var(--color-primary);
   padding-left: 10px;
 }
 

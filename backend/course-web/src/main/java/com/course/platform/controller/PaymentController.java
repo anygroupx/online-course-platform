@@ -22,7 +22,7 @@ import java.util.Map;
 
 /**
  * 支付控制器
- * 
+ *
  * @author AI Assistant
  * @date 2025-11-26
  */
@@ -59,7 +59,7 @@ public class PaymentController {
         String userAgent = httpRequest.getHeader("User-Agent");
 
         PaymentOrderResponse response = alipayService.createPayment(request, userId, clientIp, userAgent);
-        
+
         return Result.success(response);
     }
 
@@ -69,7 +69,7 @@ public class PaymentController {
         // 获取所有参数
         Map<String, String> params = new HashMap<>();
         Map<String, String[]> requestParams = request.getParameterMap();
-        
+
         for (String key : requestParams.keySet()) {
             String[] values = requestParams.get(key);
             String valueStr = "";
@@ -80,9 +80,9 @@ public class PaymentController {
         }
 
         String clientIp = getClientIp(request);
-        
+
         log.info("收到支付宝异步通知，订单号：{}，IP：{}", params.get("out_trade_no"), clientIp);
-        
+
         return alipayService.handleNotify(params, clientIp);
     }
 
@@ -92,7 +92,7 @@ public class PaymentController {
         // 获取所有参数
         Map<String, String> params = new HashMap<>();
         Map<String, String[]> requestParams = request.getParameterMap();
-        
+
         for (String key : requestParams.keySet()) {
             String[] values = requestParams.get(key);
             String valueStr = "";
@@ -103,15 +103,15 @@ public class PaymentController {
         }
 
         log.info("收到支付宝同步回调，订单号：{}", params.get("out_trade_no"));
-        
+
         PaymentOrder order = alipayService.handleReturn(params);
-        
+
         Map<String, Object> result = new HashMap<>();
         result.put("orderNo", order.getOrderNo());
         result.put("amount", order.getAmount());
         result.put("status", order.getStatus());
         result.put("success", "PAID".equals(order.getStatus()));
-        
+
         return Result.success(result);
     }
 
@@ -120,9 +120,9 @@ public class PaymentController {
     public Result<PaymentOrder> queryOrder(@PathVariable String orderNo,
                                            Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        
+
         PaymentOrder order = paymentOrderService.getByOrderNoAndUserId(orderNo, userId);
-        
+
         if (order == null) {
             return Result.error("订单不存在");
         }
@@ -130,69 +130,18 @@ public class PaymentController {
         return Result.success(order);
     }
 
-    @Operation(summary = "同步订单状态", description = "主动查询支付宝订单状态并更新本地订单")
+    @Operation(summary = "同步订单状态", description = "主动查询支付宝并同步订单状态（幂等入账）")
     @PostMapping("/sync/{orderNo}")
     public Result<PaymentOrder> syncOrder(@PathVariable String orderNo,
                                           Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        
         PaymentOrder order = paymentOrderService.getByOrderNoAndUserId(orderNo, userId);
-        
         if (order == null) {
             return Result.error("订单不存在");
         }
-
-        // 如果订单已支付，直接返回
-        if ("PAID".equals(order.getStatus())) {
-            return Result.success(order);
-        }
-
-        // 查询支付宝真实状态
-        boolean isPaid = alipayService.queryAlipayTradeStatus(orderNo);
-        
-        if (isPaid && !"PAID".equals(order.getStatus())) {
-            // 查询支付宝订单详情获取交易号等信息
-            log.info("订单{}支付成功，开始更新状态", orderNo);
-            
-            // 更新订单到数据库
-            order.setStatus("PAID");
-            order.setPaidTime(java.time.LocalDateTime.now());
-            paymentOrderMapper.updateById(order);
-            
-            // 更新用户余额（重要！）
-            try {
-                com.course.platform.domain.entity.User user = userMapper.selectById(userId);
-                if (user != null) {
-                    java.math.BigDecimal oldBalance = user.getBalance();
-                    user.setBalance(user.getBalance().add(order.getAmount()));
-                    user.setTotalRecharge(user.getTotalRecharge().add(order.getAmount()));
-                    userMapper.updateById(user);
-                    
-                    log.info("订单{}更新成功，用户{}余额从{}增加到{}", 
-                            orderNo, userId, oldBalance, user.getBalance());
-                    
-                    // 记录操作日志
-                    com.course.platform.domain.entity.OperationLog opLog = new com.course.platform.domain.entity.OperationLog();
-                    opLog.setUserId(userId);
-                    opLog.setOperationType("RECHARGE");
-                    opLog.setOperationDesc("支付宝充值");
-                    opLog.setOperationDesc(String.format("充值金额：%.2f元，订单号：%s，余额从%.2f增加到%.2f",
-                                    order.getAmount(), orderNo, oldBalance, user.getBalance()));
-                    opLog.setIpAddress(order.getClientIp());
-                    operationLogMapper.insert(opLog);
-                    
-                } else {
-                    log.error("用户{}不存在，无法更新余额", userId);
-                }
-            } catch (Exception e) {
-                log.error("更新用户余额失败", e);
-                throw new RuntimeException("更新余额失败：" + e.getMessage());
-            }
-            
-            // 重新查询订单获取最新状态
-            order = paymentOrderService.getByOrderNoAndUserId(orderNo, userId);
-        }
-
+        // 统一走幂等入账逻辑，避免与异步回调竞态重复加余额
+        alipayService.syncPaidOrder(orderNo);
+        order = paymentOrderService.getByOrderNoAndUserId(orderNo, userId);
         return Result.success(order);
     }
 
@@ -205,9 +154,9 @@ public class PaymentController {
             Authentication authentication) {
 
         Long userId = (Long) authentication.getPrincipal();
-        
+
         Page<PaymentOrder> page = paymentOrderService.getUserOrders(userId, status, pageNum, pageSize);
-        
+
         return Result.success(page);
     }
 
@@ -219,7 +168,7 @@ public class PaymentController {
             Authentication authentication) {
 
         Long userId = (Long) authentication.getPrincipal();
-        
+
         // 验证订单归属
         PaymentOrder order = paymentOrderService.getByOrderNoAndUserId(orderNo, userId);
         if (order == null) {
@@ -227,7 +176,7 @@ public class PaymentController {
         }
 
         boolean success = alipayService.refund(orderNo, refundReason);
-        
+
         if (success) {
             return Result.success("退款申请提交成功");
         } else {

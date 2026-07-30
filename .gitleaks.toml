@@ -1,0 +1,4 @@
+title = "online-course-platform gitleaks"
+
+[extend]
+useDefault = true

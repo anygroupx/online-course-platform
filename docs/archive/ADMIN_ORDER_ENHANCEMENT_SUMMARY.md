@@ -33,8 +33,8 @@
 ### 前端增强
 ```vue
 <!-- 订单状态下拉框 -->
-<el-select 
-  v-model="scope.row.orderStatus" 
+<el-select
+  v-model="scope.row.orderStatus"
   @change="handleStatusChange(scope.row)"
   size="small"
   style="width: 120px"

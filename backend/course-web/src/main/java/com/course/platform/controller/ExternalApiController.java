@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.course.platform.infra.cache.SystemVariableCache;
 import com.course.platform.common.constant.Constants;
 import com.course.platform.common.exception.BusinessException;
+import com.course.platform.common.security.TokenHashUtil;
+import java.time.LocalDateTime;
 import com.course.platform.common.result.Result;
 import com.course.platform.common.result.ResultCode;
 import com.course.platform.domain.dto.OrderCreateRequest;
@@ -31,7 +33,7 @@ import java.util.Map;
 /**
  * 外部API控制器
  * 供第三方系统调用的API接口
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
@@ -56,19 +58,43 @@ public class ExternalApiController {
             throw new BusinessException("UID和API密钥不能为空");
         }
 
-        User user = userMapper.selectById(uid);
+        User user;
+        try {
+            user = userMapper.selectById(Long.parseLong(uid));
+        } catch (NumberFormatException e) {
+            throw new BusinessException("UID格式错误");
+        }
         if (user == null) {
-            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+            throw new BusinessException("用户不存在");
+        }
+        if (user.getStatus() != null && user.getStatus() == 0) {
+            throw new BusinessException("账号已禁用");
+        }
+        if (user.getApiKeyExpireTime() != null && user.getApiKeyExpireTime().isBefore(LocalDateTime.now())) {
+            throw new BusinessException("API密钥已过期");
         }
 
-        if ("0".equals(user.getApiKey())) {
-            throw new BusinessException(ResultCode.API_KEY_NOT_ENABLED);
+        String providedHash = TokenHashUtil.sha256(apiKey);
+        boolean matched = false;
+        if (user.getApiKeyHash() != null && user.getApiKeyHash().equals(providedHash)) {
+            matched = true;
+        } else if (user.getApiKey() != null && !"0".equals(user.getApiKey()) && apiKey.equals(user.getApiKey())) {
+            // 兼容迁移前明文密钥，命中后自动升级为哈希
+            matched = true;
+            user.setApiKeyHash(providedHash);
+            user.setApiKeyPrefix(apiKey.length() >= 8 ? apiKey.substring(0, 8) : apiKey);
+            user.setApiKey(null);
+            if (user.getApiKeyScopes() == null) {
+                user.setApiKeyScopes("orders:read,orders:write,platforms:read");
+            }
+            if (user.getApiKeyExpireTime() == null) {
+                user.setApiKeyExpireTime(LocalDateTime.now().plusYears(1));
+            }
+            userMapper.updateById(user);
         }
-
-        if (!apiKey.equals(user.getApiKey())) {
-            throw new BusinessException(ResultCode.API_KEY_INVALID);
+        if (!matched) {
+            throw new BusinessException("API密钥错误");
         }
-
         return user;
     }
 
@@ -98,7 +124,7 @@ public class ExternalApiController {
             @RequestParam String username) {
         // 验证API密钥并获取用户
         User user = validateApiKey(uid, key);
-        
+
         if (username == null || username.isEmpty()) {
             throw new BusinessException("账号不能为空");
         }
@@ -148,7 +174,7 @@ public class ExternalApiController {
             @RequestParam String orderNo) {
         // 验证API密钥并获取用户
         User user = validateApiKey(uid, key);
-        
+
         if (orderNo == null || orderNo.isEmpty()) {
             throw new BusinessException("订单编号不能为空");
         }
@@ -157,7 +183,7 @@ public class ExternalApiController {
         CourseOrder order = courseOrderMapper.selectOne(new LambdaQueryWrapper<CourseOrder>()
                 .eq(CourseOrder::getOrderNo, orderNo)
                 .eq(CourseOrder::getUserId, user.getId()));
-        
+
         if (order == null) {
             throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
         }
@@ -201,10 +227,10 @@ public class ExternalApiController {
 
         // 创建订单
         Long orderId = courseOrderService.createOrder(request, userObj.getId());
-        
+
         // 查询订单获取orderNo
         CourseOrder order = courseOrderMapper.selectById(orderId);
-        
+
         Map<String, Object> data = new HashMap<>();
         data.put("orderNo", order.getOrderNo());
         return Result.success("提交成功", data);
@@ -252,7 +278,7 @@ public class ExternalApiController {
         CourseOrder order = courseOrderMapper.selectOne(new LambdaQueryWrapper<CourseOrder>()
                 .eq(CourseOrder::getOrderNo, orderNo)
                 .eq(CourseOrder::getUserId, user.getId()));
-        
+
         if (order == null) {
             throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
         }
@@ -313,4 +339,3 @@ public class ExternalApiController {
         return SystemVariableCache.getStatusName("order_status", String.valueOf(status));
     }
 }
-

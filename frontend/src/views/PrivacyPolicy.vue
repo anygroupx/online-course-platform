@@ -340,7 +340,7 @@ section h2 {
   color: #303133;
   margin-bottom: 15px;
   font-weight: 600;
-  border-left: 4px solid #409eff;
+  border-left: 4px solid var(--color-primary);
   padding-left: 10px;
 }
 
@@ -379,7 +379,7 @@ strong {
 }
 
 a {
-  color: #409eff;
+  color: var(--color-primary);
   text-decoration: none;
 }
 
@@ -391,11 +391,11 @@ a:hover {
   .privacy-policy-page {
     padding: 10px;
   }
-  
+
   .policy-container {
     padding: 20px;
   }
-  
+
   .header h1 {
     font-size: 22px;
   }

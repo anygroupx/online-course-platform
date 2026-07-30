@@ -1,7 +1,10 @@
 package com.course.platform.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.course.platform.common.constant.Constants;
+import com.course.platform.security.SecurityUtils;
 import com.course.platform.common.result.Result;
 import com.course.platform.domain.document.OperationLogDocument;
 import com.course.platform.domain.entity.OperationLog;
@@ -20,14 +23,15 @@ import java.time.LocalDateTime;
 
 /**
  * 操作日志控制器
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
 @Tag(name = "日志管理", description = "操作日志查询接口")
-@RestController
+@PreAuthorize("hasRole('ADMIN')")
 @RequestMapping("/logs")
 @RequiredArgsConstructor
+@RestController
 public class OperationLogController {
 
     private final OperationLogService operationLogService;
@@ -74,11 +78,8 @@ public class OperationLogController {
     @PostMapping("/sync-to-es")
     public Result<Integer> syncToElasticsearch(Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        if (!Constants.DEFAULT_ADMIN_ID.equals(userId)) {
-            return Result.error("仅管理员可执行此操作");
-        }
+        SecurityUtils.requireAdmin();
         int count = operationLogSearchService.syncAllFromDatabase();
         return Result.success("同步完成，共同步 " + count + " 条记录", count);
     }
 }
-

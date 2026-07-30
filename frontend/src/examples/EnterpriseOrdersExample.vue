@@ -365,7 +365,7 @@ const handleAccountUpdate = async (row) => {
 }
 
 .info-item .price {
-  color: #e6a23c;
+  color: var(--color-warning);
   font-weight: 600;
 }
 

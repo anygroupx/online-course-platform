@@ -1,5 +1,9 @@
 # Uptime Kuma 监控配置指南
 
+> 更新时间：2026-07-12
+> 后端健康检查路径：`/api/health`（容器端口 8082）。
+
+
 ## 添加课程平台监控
 
 在 Uptime Kuma (http://10.0.0.2:3001 或 https://status.csuft.codes) 中添加以下监控项：

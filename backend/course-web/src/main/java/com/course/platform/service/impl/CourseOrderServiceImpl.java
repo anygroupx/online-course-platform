@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.course.platform.infra.cache.SystemVariableCache;
 import com.course.platform.common.constant.Constants;
+import com.course.platform.security.SecurityUtils;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
 import com.course.platform.domain.dto.OrderCreateRequest;
@@ -24,6 +25,7 @@ import com.course.platform.domain.dto.DockResult;
 import com.course.platform.domain.dto.OrderProgressResult;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
+import com.course.platform.service.impl.AccountLedgerServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,7 +35,7 @@ import java.math.BigDecimal;
 
 /**
  * 课程订单服务实现类
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
@@ -49,6 +51,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
     private final PlatformDockingService platformDockingService;
     private final ApiProviderMapper apiProviderMapper;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private final AccountLedgerServiceImpl accountLedgerService;
 
     /**
      * 获取订单状态值
@@ -117,10 +120,10 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         order.setRetryCount(0);
         order.setOrderStatus(getOrderStatus("pending"));
         order.setDockStatus(getDockStatus("pending"));
-        
+
         // 设置自营订单标识 - 根据平台配置自动设置
         order.setIsSelfOperated(platform.getIsSelfOperated());
-        
+
         // 设置API提供商ID - 用于批量同步时精确匹配订单
         if (platform.getDockApiId() != null) {
             order.setApiProviderId(platform.getDockApiId());
@@ -128,7 +131,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
 
         int insertResult = courseOrderMapper.insert(order);
         log.info("订单插入结果: {}, 插入后订单ID: {}", insertResult, order.getId());
-        
+
         // 如果ID为空，重新查询获取
         if (order.getId() == null) {
             CourseOrder savedOrder = courseOrderMapper.selectOne(new LambdaQueryWrapper<CourseOrder>()
@@ -142,12 +145,18 @@ public class CourseOrderServiceImpl implements CourseOrderService {
             }
         }
 
-        // 7. 扣除余额
-        user.setBalance(user.getBalance().subtract(amount));
-        userMapper.updateById(user);
+        // 7. 扣除余额（原子账本）
+        accountLedgerService.debit(
+                userId,
+                amount,
+                AccountLedgerServiceImpl.BIZ_ORDER,
+                order.getOrderNo(),
+                String.format("创建订单：%s - %s", platform.getName(), request.getCourseName())
+        );
+        user = userMapper.selectById(userId);
 
         // 8. 记录日志
-        operationLogService.log(userId, "创建订单", 
+        operationLogService.log(userId, "创建订单",
                 String.format("创建订单：%s - %s，扣费：%s元", platform.getName(), request.getCourseName(), amount),
                 amount.negate(), user.getBalance());
 
@@ -167,7 +176,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         LambdaQueryWrapper<CourseOrder> queryWrapper = new LambdaQueryWrapper<>();
 
         // 非管理员只能查看自己的订单
-        if (!Constants.DEFAULT_ADMIN_ID.equals(userId)) {
+        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(userId))) {
             queryWrapper.eq(CourseOrder::getUserId, userId);
         }
 
@@ -195,14 +204,14 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         queryWrapper.orderByDesc(CourseOrder::getCreateTime);
 
         IPage<CourseOrder> result = courseOrderMapper.selectPage(page, queryWrapper);
-        
+
         // 计算基于倒计时的进度
         if (result.getRecords() != null && !result.getRecords().isEmpty()) {
             for (CourseOrder order : result.getRecords()) {
                 calculateProgressBasedOnCountdown(order);
             }
         }
-        
+
         return result;
     }
 
@@ -215,7 +224,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         }
 
         // 非管理员只能查看自己的订单
-        if (!Constants.DEFAULT_ADMIN_ID.equals(userId) && !order.getUserId().equals(userId)) {
+        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(userId)) && !order.getUserId().equals(userId)) {
             throw new BusinessException(ResultCode.FORBIDDEN);
         }
 
@@ -237,10 +246,16 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         order.setDockStatus(getDockStatus("cancelled"));
         courseOrderMapper.updateById(order);
 
-        // 退回余额
+        // 退回余额（原子账本）
+        accountLedgerService.credit(
+                userId,
+                order.getAmount(),
+                AccountLedgerServiceImpl.BIZ_REFUND,
+                order.getOrderNo(),
+                String.format("取消订单退款：%s", order.getOrderNo()),
+                false
+        );
         User user = userMapper.selectById(userId);
-        user.setBalance(user.getBalance().add(order.getAmount()));
-        userMapper.updateById(user);
 
         // 记录日志
         operationLogService.log(userId, "取消订单",
@@ -259,25 +274,25 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         if (order.getRetryCount() >= 5) {
             throw new BusinessException("补单次数已达上限");
         }
-        
+
         // 查询平台和API配置
         CoursePlatform platform = coursePlatformMapper.selectById(order.getPlatformId());
         if (platform.getDockApiId() == null) {
             throw new BusinessException("未配置对接接口");
         }
-        
+
         ApiProvider apiProvider = apiProviderMapper.selectById(platform.getDockApiId());
         if (apiProvider == null || apiProvider.getStatus() != 1) {
             throw new BusinessException("API配置不存在或已禁用");
         }
-        
+
         try {
             // 调用第三方补单接口
             DockResult dockResult = platformDockingService.retryOrder(order, platform, apiProvider);
-            
+
             // 更新订单状态和补单次数
             order.setRetryCount(order.getRetryCount() + 1);
-            
+
             if (dockResult.isSuccess()) {
                 order.setOrderStatus(getOrderStatus("processing"));
                 order.setDockStatus(getDockStatus("success"));
@@ -289,14 +304,14 @@ public class CourseOrderServiceImpl implements CourseOrderService {
                 order.setDockStatus(getDockStatus("failed"));
                 order.setRemarks("补单失败：" + dockResult.getMessage());
             }
-            
+
             courseOrderMapper.updateById(order);
-            
+
             // 记录日志
             operationLogService.log(userId, "补单",
                     String.format("补单：%s，第%d次", order.getOrderNo(), order.getRetryCount()),
                     BigDecimal.ZERO, null);
-            
+
         } catch (Exception e) {
             log.error("补单失败：orderId={}, error={}", orderId, e.getMessage(), e);
             throw new BusinessException("补单失败：" + e.getMessage());
@@ -306,33 +321,33 @@ public class CourseOrderServiceImpl implements CourseOrderService {
     @Override
     public void updateOrderProgress(Long orderId, Long userId) {
         CourseOrder order = getOrderById(orderId, userId);
-        
+
         // 如果是自营平台，使用模拟进度
         CoursePlatform platform = coursePlatformMapper.selectById(order.getPlatformId());
         if (platform.getIsSelfOperated() == 1) {
             calculateProgressBasedOnCountdown(order);
             return;
         }
-        
+
         // 第三方平台，调用API查询进度
         if (platform.getDockApiId() != null) {
             ApiProvider apiProvider = apiProviderMapper.selectById(platform.getDockApiId());
             if (apiProvider != null && apiProvider.getStatus() == 1) {
                 try {
                     OrderProgressResult result = platformDockingService.queryOrderProgress(order, platform, apiProvider);
-                    
+
                     // 更新订单状态和进度
                     order.setProgress(result.getProgress());
                     order.setOrderStatus(result.getOrderStatus());
                     if (StrUtil.isNotBlank(result.getRemarks())) {
                         order.setRemarks(result.getRemarks());
                     }
-                    
+
                     if (result.getCourseStartTime() != null) order.setCourseStartTime(result.getCourseStartTime());
                     if (result.getCourseEndTime() != null) order.setCourseEndTime(result.getCourseEndTime());
                     if (result.getExamStartTime() != null) order.setExamStartTime(result.getExamStartTime());
                     if (result.getExamEndTime() != null) order.setExamEndTime(result.getExamEndTime());
-                    
+
                     courseOrderMapper.updateById(order);
                     log.info("订单进度更新成功：orderId={}, progress={}", orderId, result.getProgress());
                 } catch (Exception e) {
@@ -380,33 +395,33 @@ public class CourseOrderServiceImpl implements CourseOrderService {
             order.getIsSelfOperated() != null && order.getIsSelfOperated() == 1 &&
             order.getCountdownStartTime() != null && order.getCountdownEndTime() != null &&
             order.getCountdownDuration() != null && order.getCountdownDuration() > 0) {
-            
+
             java.time.LocalDateTime now = java.time.LocalDateTime.now();
             java.time.LocalDateTime startTime = order.getCountdownStartTime();
             java.time.LocalDateTime endTime = order.getCountdownEndTime();
-            
+
             // 如果倒计时已过期，进度设为100%
             if (endTime.isBefore(now)) {
                 order.setProgress("100%");
                 return;
             }
-            
+
             // 计算总倒计时时长（分钟）
             long totalMinutes = order.getCountdownDuration();
-            
+
             // 计算已过去的时间（分钟）
             long elapsedMinutes = java.time.Duration.between(startTime, now).toMinutes();
-            
+
             // 确保已过去时间不为负数
             elapsedMinutes = Math.max(0, elapsedMinutes);
-            
+
             // 计算进度百分比
             int progressPercent = (int) Math.min(100, Math.max(0, (elapsedMinutes * 100) / totalMinutes));
-            
+
             // 设置进度
             order.setProgress(progressPercent + "%");
-            
-            log.debug("计算倒计时进度：orderId={}, 总时长={}分钟, 已过去={}分钟, 进度={}%", 
+
+            log.debug("计算倒计时进度：orderId={}, 总时长={}分钟, 已过去={}分钟, 进度={}%",
                     order.getId(), totalMinutes, elapsedMinutes, progressPercent);
         }
     }
@@ -416,19 +431,19 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         if (StrUtil.isBlank(orderNo)) {
             throw new BusinessException("订单编号不能为空");
         }
-        
+
         CourseOrder order = courseOrderMapper.selectOne(new LambdaQueryWrapper<CourseOrder>()
                 .eq(CourseOrder::getOrderNo, orderNo));
-        
+
         if (order == null) {
             throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
         }
-        
+
         // 非管理员只能查看自己的订单
-        if (!Constants.DEFAULT_ADMIN_ID.equals(userId) && !order.getUserId().equals(userId)) {
+        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(userId)) && !order.getUserId().equals(userId)) {
             throw new BusinessException(ResultCode.FORBIDDEN);
         }
-        
+
         return order;
     }
 

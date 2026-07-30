@@ -49,6 +49,7 @@ const whiteList = [
   "/register",
   "/register/validate-invite-code",
   "/auth/refresh", // 刷新token接口
+  "/auth/mfa/verify",
 ];
 
 /**

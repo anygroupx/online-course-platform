@@ -302,7 +302,7 @@ const loadRechargeHistory = async () => {
       pageNum: 1,
       pageSize: 10
     });
-    
+
     if (res.code === 1 && res.data && res.data.records) {
       // 将payment_order数据转换为充值记录格式
       rechargeHistory.value = res.data.records.map(order => ({
@@ -399,7 +399,7 @@ onMounted(() => {
 
 .balance-card {
   margin-bottom: 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   color: white;
 }
 
@@ -487,47 +487,47 @@ onMounted(() => {
 
 .amount-option {
   padding: 15px;
-  border: 2px solid #dcdfe6;
+  border: 2px solid var(--border-color);
   border-radius: 8px;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s;
-  background: #fff;
+  background: var(--bg-card);
 }
 
 .amount-option:hover {
-  border-color: #409eff;
+  border-color: var(--color-primary);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
+  box-shadow: 0 4px 12px rgba(78, 140, 255, 0.15);
 }
 
 .amount-option.active {
-  border-color: #409eff;
-  background: #ecf5ff;
+  border-color: var(--color-primary);
+  background: var(--brand-blue-soft);
 }
 
 .amount-value {
   display: block;
   font-size: 24px;
   font-weight: bold;
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .amount-unit {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 
 .tip {
   margin-top: 8px;
   font-size: 13px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 
 .total-amount {
   font-size: 24px;
   font-weight: bold;
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 /* Dark Mode Overrides */
@@ -541,7 +541,7 @@ html.dark .amount-option {
 }
 
 html.dark .amount-option.active {
-  background-color: rgba(64, 158, 255, 0.1);
+  background-color: rgba(78, 140, 255, 0.1);
 }
 
 @media (max-width: 768px) {

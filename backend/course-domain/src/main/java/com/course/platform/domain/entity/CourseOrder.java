@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 
 /**
  * 课程订单实体类
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
@@ -62,7 +62,7 @@ public class CourseOrder implements Serializable {
     private String thirdOrderId;
 
     // ========== 学生信息 ==========
-    
+
     /**
      * 学校名称
      */
@@ -82,9 +82,10 @@ public class CourseOrder implements Serializable {
     private String studentAccount;
 
     /**
-     * 学生密码
+     * 学生密码（禁止默认序列化到 API 响应）
      */
     @TableField("student_password")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String studentPassword;
 
     /**
@@ -94,7 +95,7 @@ public class CourseOrder implements Serializable {
     private String studentPhone;
 
     // ========== 课程信息 ==========
-    
+
     /**
      * 课程ID
      */
@@ -132,7 +133,7 @@ public class CourseOrder implements Serializable {
     private LocalDateTime examEndTime;
 
     // ========== 进度信息 ==========
-    
+
     /**
      * 总章节数
      */
@@ -152,7 +153,7 @@ public class CourseOrder implements Serializable {
     private String progress;
 
     // ========== 订单信息 ==========
-    
+
     /**
      * 订单金额
      */
@@ -202,7 +203,7 @@ public class CourseOrder implements Serializable {
     private String remarks;
 
     // ========== 自营订单倒计时相关字段 ==========
-    
+
     /**
      * 是否自营订单：0-否 1-是
      */
@@ -234,7 +235,7 @@ public class CourseOrder implements Serializable {
     private Integer autoCompleteEnabled;
 
     // ========== 考试倒计时相关字段 ==========
-    
+
     /**
      * 考试倒计时时长（分钟）
      */
@@ -277,4 +278,3 @@ public class CourseOrder implements Serializable {
     @TableField(value = "update_time", fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
 }
-

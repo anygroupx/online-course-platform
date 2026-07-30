@@ -746,8 +746,8 @@ onUnmounted(() => {
   /* 现代化渐变背景 */
   background: linear-gradient(
     135deg,
-    rgba(102, 126, 234, 0.8) 0%,
-    rgba(118, 75, 162, 0.8) 100%
+    rgba(78, 140, 255, 0.8) 0%,
+    rgba(118, 106, 246, 0.8) 100%
   );
   position: relative;
   overflow: hidden;
@@ -828,9 +828,9 @@ onUnmounted(() => {
   right: 8px;
   top: var(--active-top, 0px);
   height: var(--active-height, 0px);
-  background: rgba(102, 126, 234, 0.15);
+  background: rgba(78, 140, 255, 0.15);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2),
+  box-shadow: 0 4px 12px rgba(78, 140, 255, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   opacity: var(--active-opacity, 0);
@@ -846,7 +846,7 @@ onUnmounted(() => {
   top: var(--active-top, 0px);
   height: var(--active-height, 0px);
   width: 3px;
-  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(180deg, var(--primary-gradient-start) 0%, var(--primary-gradient-end) 100%);
   border-radius: 0 2px 2px 0;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   opacity: var(--active-opacity, 0);
@@ -1114,15 +1114,15 @@ html.dark .menu .el-menu-item.is-active {
 
 .collapse-btn {
   font-size: 18px;
-  color: #606266;
+  color: var(--text-regular);
   padding: 8px;
   border-radius: 4px;
   transition: all 0.3s;
 }
 
 .collapse-btn:hover {
-  background-color: #f5f7fa;
-  color: #409eff;
+  background-color: var(--bg-body);
+  color: var(--color-primary);
 }
 
 /* 移动端菜单按钮样式 */
@@ -1136,8 +1136,8 @@ html.dark .menu .el-menu-item.is-active {
 }
 
 .mobile-menu-btn:hover {
-  background-color: #f5f7fa;
-  color: #409eff;
+  background-color: var(--bg-body);
+  color: var(--color-primary);
 }
 
 .breadcrumb {
@@ -1161,7 +1161,7 @@ html.dark .menu .el-menu-item.is-active {
 }
 
 .user-info:hover {
-  background-color: #f5f7fa;
+  background-color: var(--bg-body);
   transform: translateY(-2px);
 }
 
@@ -1193,12 +1193,12 @@ html.dark .menu .el-menu-item.is-active {
   bottom: 0;
   background-image: radial-gradient(
       circle at 20% 80%,
-      rgba(102, 126, 234, 0.03) 0%,
+      rgba(78, 140, 255, 0.03) 0%,
       transparent 50%
     ),
     radial-gradient(
       circle at 80% 20%,
-      rgba(118, 75, 162, 0.03) 0%,
+      rgba(118, 106, 246, 0.03) 0%,
       transparent 50%
     );
   pointer-events: none;
@@ -1359,7 +1359,7 @@ html.dark .menu .el-menu-item.is-active {
 
 .announcement-header .el-icon {
   font-size: 20px;
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .announcement-header h3 {
@@ -1371,7 +1371,7 @@ html.dark .menu .el-menu-item.is-active {
 
 .announcement-content {
   line-height: 1.6;
-  color: #606266;
+  color: var(--text-regular);
   margin-bottom: 16px;
   white-space: pre-wrap;
   min-height: 60px;
@@ -1410,8 +1410,8 @@ html.dark .sidebar::before {
 html.dark .logo {
   background: linear-gradient(
     135deg,
-    rgba(102, 126, 234, 0.2) 0%,
-    rgba(118, 75, 162, 0.2) 100%
+    rgba(78, 140, 255, 0.2) 0%,
+    rgba(118, 106, 246, 0.2) 100%
   );
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }

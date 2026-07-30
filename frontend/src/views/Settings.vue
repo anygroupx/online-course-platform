@@ -4,10 +4,15 @@
       <template #header>
         <div class="card-header">
           <span>系统设置</span>
-          <el-button type="primary" @click="handleSave" :loading="saving">
-            <el-icon><Select /></el-icon>
-            保存设置
-          </el-button>
+          <div class="header-actions">
+            <el-button @click="handleResetAll" :loading="resetting">
+              重置全部
+            </el-button>
+            <el-button type="primary" @click="handleSave" :loading="saving">
+              <el-icon><Select /></el-icon>
+              保存设置
+            </el-button>
+          </div>
         </div>
       </template>
 
@@ -205,11 +210,13 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { InfoFilled, Select, Brush } from "@element-plus/icons-vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import axios from "@/utils/request";
+import { resetAllSettings } from "@/api/setting";
 
 const activeTab = ref("basic");
 const saving = ref(false);
+const resetting = ref(false);
 // Source: AURA-X-KYS 安全加固 - Token配置管理
 const configs = ref({
   site_name: "",
@@ -281,6 +288,43 @@ const handleSave = async () => {
   }
 };
 
+/**
+ * 将全部系统配置重置为默认值，并刷新页面展示
+ */
+const handleResetAll = async () => {
+  try {
+    await ElMessageBox.confirm(
+      "确定要将全部系统配置重置为默认值吗？此操作会覆盖当前配置。",
+      "重置确认",
+      {
+        confirmButtonText: "确定重置",
+        cancelButtonText: "取消",
+        type: "warning",
+      }
+    );
+  } catch (error) {
+    // 用户取消
+    return;
+  }
+
+  resetting.value = true;
+  try {
+    const res = await resetAllSettings();
+    if (res.code === 1) {
+      const count = res.data?.count;
+      ElMessage.success(
+        count != null ? `全部配置已重置（${count} 项）` : "全部配置已重置为默认值"
+      );
+      await loadConfigs();
+    }
+  } catch (error) {
+    console.error("重置配置失败：", error);
+    ElMessage.error("重置配置失败，请稍后重试");
+  } finally {
+    resetting.value = false;
+  }
+};
+
 const userRate = ref(1.0);
 
 onMounted(() => {
@@ -300,6 +344,12 @@ onMounted(() => {
 .card-header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
   align-items: center;
 }
 

@@ -1,10 +1,13 @@
 package com.course.platform.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.course.platform.infra.cache.SystemVariableCache;
 import com.course.platform.common.constant.Constants;
+import com.course.platform.security.SecurityUtils;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.Result;
 import com.course.platform.common.result.ResultCode;
@@ -18,6 +21,8 @@ import com.course.platform.domain.dto.SwitchStatusDTO;
 import com.course.platform.domain.dto.StartExamCountdownDTO;
 import com.course.platform.domain.dto.AdjustExamCountdownDTO;
 import com.course.platform.domain.entity.CourseOrder;
+import com.course.platform.domain.vo.CourseOrderVO;
+import com.course.platform.security.SensitiveDataMasker;
 import com.course.platform.domain.entity.User;
 import com.course.platform.domain.entity.CountdownHistory;
 import com.course.platform.domain.dto.CountdownHistoryDTO;
@@ -54,15 +59,16 @@ import java.util.ArrayList;
 /**
  * 管理员订单管理控制器
  * 提供系统管理员对自营平台的订单管理能力
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
 @Slf4j
 @Tag(name = "管理员订单管理", description = "系统管理员订单管理接口")
-@RestController
+@PreAuthorize("hasRole('ADMIN')")
 @RequestMapping("/admin/orders")
 @RequiredArgsConstructor
+@RestController
 public class AdminOrderController {
 
     private final CourseOrderMapper courseOrderMapper;
@@ -85,9 +91,7 @@ public class AdminOrderController {
      * 验证管理员权限
      */
     private void checkAdmin(Long userId) {
-        if (!Constants.DEFAULT_ADMIN_ID.equals(userId)) {
-            throw new BusinessException(ResultCode.FORBIDDEN);
-        }
+        SecurityUtils.requireAdmin();
     }
 
     /**
@@ -95,7 +99,7 @@ public class AdminOrderController {
      */
     @Operation(summary = "查询所有订单", description = "管理员查询平台所有订单")
     @PostMapping("/query-all")
-    public Result<IPage<CourseOrder>> queryAllOrders(@RequestBody OrderQueryRequest request,
+    public Result<IPage<CourseOrderVO>> queryAllOrders(@RequestBody OrderQueryRequest request,
                                                      Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         checkAdmin(userId);
@@ -133,27 +137,29 @@ public class AdminOrderController {
         queryWrapper.orderByDesc(CourseOrder::getCreateTime);
 
         IPage<CourseOrder> result = courseOrderMapper.selectPage(page, queryWrapper);
-        
+
         // 计算基于倒计时的进度
         if (result.getRecords() != null && !result.getRecords().isEmpty()) {
             for (CourseOrder order : result.getRecords()) {
                 calculateProgressBasedOnCountdown(order);
             }
         }
-        
+
         // 调试日志：检查查询结果
         if (result.getRecords() != null && !result.getRecords().isEmpty()) {
             CourseOrder firstOrder = result.getRecords().get(0);
-            log.info("查询到订单数据，第一个订单ID: {}, 订单编号: {}, 进度: {}", 
+            log.info("查询到订单数据，第一个订单ID: {}, 订单编号: {}, 进度: {}",
                     firstOrder.getId(), firstOrder.getOrderNo(), firstOrder.getProgress());
         }
-        
+
         // 记录操作日志
-        operationLogService.log(userId, "查询订单", 
+        operationLogService.log(userId, "查询订单",
                 String.format("管理员查询订单列表，条件：%s", request.toString()),
                 BigDecimal.ZERO, null);
 
-        return Result.success(result);
+        Page<CourseOrderVO> voPage = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        voPage.setRecords(result.getRecords().stream().map(SensitiveDataMasker::toOrderVO).toList());
+        return Result.success(voPage);
     }
 
     /**
@@ -203,19 +209,19 @@ public class AdminOrderController {
         statistics.setPendingOrders(courseOrderMapper.selectCount(
                 new LambdaQueryWrapper<CourseOrder>()
                         .eq(CourseOrder::getOrderStatus, getOrderStatus("pending"))));
-        
+
         statistics.setProcessingOrders(courseOrderMapper.selectCount(
                 new LambdaQueryWrapper<CourseOrder>()
                         .eq(CourseOrder::getOrderStatus, getOrderStatus("processing"))));
-        
+
         statistics.setCompletedOrders(courseOrderMapper.selectCount(
                 new LambdaQueryWrapper<CourseOrder>()
                         .eq(CourseOrder::getOrderStatus, getOrderStatus("completed"))));
-        
+
         statistics.setCancelledOrders(courseOrderMapper.selectCount(
                 new LambdaQueryWrapper<CourseOrder>()
                         .eq(CourseOrder::getOrderStatus, getOrderStatus("cancelled"))));
-        
+
         statistics.setFailedOrders(courseOrderMapper.selectCount(
                 new LambdaQueryWrapper<CourseOrder>()
                         .eq(CourseOrder::getOrderStatus, getOrderStatus("failed"))));
@@ -227,7 +233,7 @@ public class AdminOrderController {
                     new LambdaQueryWrapper<CourseOrder>()
                             .eq(CourseOrder::getOrderStatus, getOrderStatus("completed"))
                             .select(CourseOrder::getAmount));
-            
+
             for (CourseOrder order : completedOrders) {
                 if (order.getAmount() != null) {
                     totalRevenue = totalRevenue.add(order.getAmount());
@@ -241,7 +247,7 @@ public class AdminOrderController {
         // 今日订单统计
         LocalDateTime todayStart = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0);
         LocalDateTime todayEnd = LocalDateTime.now().withHour(23).withMinute(59).withSecond(59);
-        
+
         statistics.setTodayOrders(courseOrderMapper.selectCount(
                 new LambdaQueryWrapper<CourseOrder>()
                         .between(CourseOrder::getCreateTime, todayStart, todayEnd)));
@@ -276,13 +282,13 @@ public class AdminOrderController {
         courseOrderMapper.updateById(order);
 
         // 记录操作日志
-        String operationDesc = String.format("管理员强制修改订单状态：%s -> %s，原因：%s", 
-                getStatusText(oldStatus), getStatusText(newStatus), 
+        String operationDesc = String.format("管理员强制修改订单状态：%s -> %s，原因：%s",
+                getStatusText(oldStatus), getStatusText(newStatus),
                 reason != null ? reason : "无");
         operationLogService.log(userId, "强制修改订单状态", operationDesc,
                 BigDecimal.ZERO, null);
 
-        log.info("管理员强制修改订单状态：orderId={}, oldStatus={}, newStatus={}, reason={}, operatorId={}", 
+        log.info("管理员强制修改订单状态：orderId={}, oldStatus={}, newStatus={}, reason={}, operatorId={}",
                 orderId, oldStatus, newStatus, reason, userId);
 
         return Result.success("订单状态修改成功");
@@ -311,13 +317,13 @@ public class AdminOrderController {
         courseOrderMapper.updateById(order);
 
         // 记录操作日志
-        String operationDesc = String.format("管理员强制修改对接状态：%s -> %s，原因：%s", 
-                getDockStatusText(oldStatus), getDockStatusText(newStatus), 
+        String operationDesc = String.format("管理员强制修改对接状态：%s -> %s，原因：%s",
+                getDockStatusText(oldStatus), getDockStatusText(newStatus),
                 reason != null ? reason : "无");
         operationLogService.log(userId, "强制修改对接状态", operationDesc,
                 BigDecimal.ZERO, null);
 
-        log.info("管理员强制修改对接状态：orderId={}, oldStatus={}, newStatus={}, reason={}, operatorId={}", 
+        log.info("管理员强制修改对接状态：orderId={}, oldStatus={}, newStatus={}, reason={}, operatorId={}",
                 orderId, oldStatus, newStatus, reason, userId);
 
         return Result.success("对接状态修改成功");
@@ -341,15 +347,15 @@ public class AdminOrderController {
         }
 
         String oldRemark = order.getRemarks();
-        String newRemark = oldRemark != null ? oldRemark + "\n[" + 
-                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) + 
+        String newRemark = oldRemark != null ? oldRemark + "\n[" +
+                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) +
                 "] " + remark : remark;
-        
+
         order.setRemarks(newRemark);
         courseOrderMapper.updateById(order);
 
         // 记录操作日志
-        operationLogService.log(userId, "添加订单备注", 
+        operationLogService.log(userId, "添加订单备注",
                 String.format("为订单 %s 添加备注：%s", order.getOrderNo(), remark),
                 BigDecimal.ZERO, null);
 
@@ -361,7 +367,7 @@ public class AdminOrderController {
      */
     @Operation(summary = "查看订单详情", description = "管理员查看任意订单详情")
     @GetMapping("/{orderId}/detail")
-    public Result<CourseOrder> getOrderDetail(@PathVariable Long orderId,
+    public Result<CourseOrderVO> getOrderDetail(@PathVariable Long orderId,
                                                Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         checkAdmin(userId);
@@ -372,11 +378,11 @@ public class AdminOrderController {
         }
 
         // 记录操作日志
-        operationLogService.log(userId, "查看订单详情", 
+        operationLogService.log(userId, "查看订单详情",
                 String.format("管理员查看订单详情：%s", order.getOrderNo()),
                 BigDecimal.ZERO, null);
 
-        return Result.success(order);
+        return Result.success(SensitiveDataMasker.toOrderVO(order));
     }
 
     /**
@@ -408,9 +414,9 @@ public class AdminOrderController {
             if (user != null) {
                 user.setBalance(user.getBalance().add(order.getAmount()));
                 userMapper.updateById(user);
-                
+
                 // 记录余额退回日志
-                operationLogService.log(order.getUserId(), "订单删除退回", 
+                operationLogService.log(order.getUserId(), "订单删除退回",
                         String.format("管理员删除订单退回：%s，金额：%s元", order.getOrderNo(), order.getAmount()),
                         order.getAmount(), user.getBalance());
             }
@@ -420,8 +426,8 @@ public class AdminOrderController {
         courseOrderMapper.deleteById(orderId);
 
         // 5. 记录操作日志
-        operationLogService.log(userId, "删除订单", 
-                String.format("管理员删除订单：%s，原因：%s", order.getOrderNo(), 
+        operationLogService.log(userId, "删除订单",
+                String.format("管理员删除订单：%s，原因：%s", order.getOrderNo(),
                         reason != null ? reason : "无"),
                 BigDecimal.ZERO, null);
 
@@ -462,9 +468,9 @@ public class AdminOrderController {
                             user.setBalance(user.getBalance().add(order.getAmount()));
                             userMapper.updateById(user);
                             totalRefund = totalRefund.add(order.getAmount());
-                            
+
                             // 记录余额退回日志
-                            operationLogService.log(order.getUserId(), "批量删除订单退回", 
+                            operationLogService.log(order.getUserId(), "批量删除订单退回",
                                     String.format("管理员批量删除订单退回：%s，金额：%s元", order.getOrderNo(), order.getAmount()),
                                     order.getAmount(), user.getBalance());
                         }
@@ -480,9 +486,9 @@ public class AdminOrderController {
         }
 
         // 记录操作日志
-        operationLogService.log(userId, "批量删除订单", 
-                String.format("批量删除订单：成功%d/%d，退回金额：%s元，原因：%s", 
-                        successCount, orderIds.size(), totalRefund, 
+        operationLogService.log(userId, "批量删除订单",
+                String.format("批量删除订单：成功%d/%d，退回金额：%s元，原因：%s",
+                        successCount, orderIds.size(), totalRefund,
                         reason != null ? reason : "无"),
                 BigDecimal.ZERO, null);
 
@@ -527,14 +533,14 @@ public class AdminOrderController {
                 // 从配置中获取默认倒计时时长
                 countdownDuration = countdownConfigService.getIntConfigValue("default_countdown_duration", 60);
             }
-            
+
             LocalDateTime now = LocalDateTime.now();
             order.setCountdownDuration(countdownDuration);
             order.setCountdownStartTime(now);
             order.setCountdownEndTime(now.plusMinutes(countdownDuration));
             order.setAutoCompleteEnabled(autoComplete != null && autoComplete ? 1 : 0);
-            
-            log.info("自营订单倒计时启动：orderId={}, duration={}分钟, autoComplete={}", 
+
+            log.info("自营订单倒计时启动：orderId={}, duration={}分钟, autoComplete={}",
                     orderId, countdownDuration, autoComplete);
         } else {
             // 其他状态时清除倒计时
@@ -548,14 +554,14 @@ public class AdminOrderController {
         courseOrderMapper.updateById(order);
 
         // 6. 记录操作日志
-        operationLogService.log(userId, "切换自营订单状态", 
-                String.format("切换自营订单状态：%s，从%d到%d，倒计时：%s分钟，原因：%s", 
-                        order.getOrderNo(), oldStatus, newStatus, 
+        operationLogService.log(userId, "切换自营订单状态",
+                String.format("切换自营订单状态：%s，从%d到%d，倒计时：%s分钟，原因：%s",
+                        order.getOrderNo(), oldStatus, newStatus,
                         countdownDuration != null ? countdownDuration.toString() : "无",
                         reason != null ? reason : "无"),
                 BigDecimal.ZERO, null);
 
-        log.info("自营订单状态切换成功：orderId={}, oldStatus={}, newStatus={}, operatorId={}", 
+        log.info("自营订单状态切换成功：orderId={}, oldStatus={}, newStatus={}, operatorId={}",
                 orderId, oldStatus, newStatus, userId);
 
         return Result.success("订单状态切换成功");
@@ -592,7 +598,7 @@ public class AdminOrderController {
         Integer oldDuration = order.getCountdownDuration();
         Integer newDuration = adjustCountdownDTO.getNewDuration();
         LocalDateTime now = LocalDateTime.now();
-        
+
         order.setCountdownDuration(newDuration);
         order.setCountdownStartTime(now);
         order.setCountdownEndTime(now.plusMinutes(newDuration));
@@ -601,19 +607,19 @@ public class AdminOrderController {
         courseOrderMapper.updateById(order);
 
         // 5. 记录操作日志
-        operationLogService.log(userId, "调整倒计时", 
-                String.format("调整倒计时：%s，从%d分钟到%d分钟，原因：%s", 
+        operationLogService.log(userId, "调整倒计时",
+                String.format("调整倒计时：%s，从%d分钟到%d分钟，原因：%s",
                         order.getOrderNo(), oldDuration, newDuration,
                         adjustCountdownDTO.getReason() != null ? adjustCountdownDTO.getReason() : "无"),
                 BigDecimal.ZERO, null);
 
         // 6. 记录倒计时历史
         User operator = userMapper.selectById(userId);
-        countdownHistoryService.recordHistory(orderId, order.getOrderNo(), "adjust", 
-                oldDuration, newDuration, adjustCountdownDTO.getReason(), 
+        countdownHistoryService.recordHistory(orderId, order.getOrderNo(), "adjust",
+                oldDuration, newDuration, adjustCountdownDTO.getReason(),
                 userId, operator != null ? operator.getUsername() : "系统");
 
-        log.info("倒计时调整成功：orderId={}, oldDuration={}, newDuration={}, operatorId={}", 
+        log.info("倒计时调整成功：orderId={}, oldDuration={}, newDuration={}, operatorId={}",
                 orderId, oldDuration, newDuration, userId);
 
         return Result.success("倒计时调整成功");
@@ -624,12 +630,12 @@ public class AdminOrderController {
      */
     @Operation(summary = "获取倒计时订单", description = "获取所有正在倒计时的自营订单")
     @GetMapping("/countdown")
-    public Result<List<CourseOrder>> getActiveCountdownOrders(Authentication authentication) {
+    public Result<List<CourseOrderVO>> getActiveCountdownOrders(Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         checkAdmin(userId);
 
         List<CourseOrder> orders = orderCountdownService.getActiveCountdownOrders();
-        return Result.success(orders);
+        return Result.success(orders.stream().map(SensitiveDataMasker::toOrderVO).toList());
     }
 
     /**
@@ -661,9 +667,9 @@ public class AdminOrderController {
         orderCountdownService.completeOrder(orderId, userId);
 
         // 记录操作日志
-        String reason = completeOrderDTO != null && completeOrderDTO.getReason() != null 
+        String reason = completeOrderDTO != null && completeOrderDTO.getReason() != null
                 ? completeOrderDTO.getReason() : "无";
-        operationLogService.log(userId, "手动完成订单", 
+        operationLogService.log(userId, "手动完成订单",
                 String.format("手动完成自营订单：%d，原因：%s", orderId, reason),
                 BigDecimal.ZERO, null);
 
@@ -671,8 +677,8 @@ public class AdminOrderController {
         CourseOrder order = courseOrderMapper.selectById(orderId);
         User operator = userMapper.selectById(userId);
         if (order != null) {
-            countdownHistoryService.recordHistory(orderId, order.getOrderNo(), "complete", 
-                    order.getCountdownDuration(), 0, reason, 
+            countdownHistoryService.recordHistory(orderId, order.getOrderNo(), "complete",
+                    order.getCountdownDuration(), 0, reason,
                     userId, operator != null ? operator.getUsername() : "系统");
         }
 
@@ -693,7 +699,7 @@ public class AdminOrderController {
         Long userId = (Long) authentication.getPrincipal();
         checkAdmin(userId);
 
-        orderCountdownService.restartCountdown(orderId, restartCountdownDTO.getDuration(), 
+        orderCountdownService.restartCountdown(orderId, restartCountdownDTO.getDuration(),
                 userId, restartCountdownDTO.getReason());
 
         return Result.success("倒计时重新开始成功");
@@ -711,7 +717,7 @@ public class AdminOrderController {
         Long userId = (Long) authentication.getPrincipal();
         checkAdmin(userId);
 
-        orderCountdownService.switchOrderStatus(orderId, switchStatusDTO.getNewStatus(), 
+        orderCountdownService.switchOrderStatus(orderId, switchStatusDTO.getNewStatus(),
                 userId, switchStatusDTO.getReason());
 
         return Result.success("订单状态切换成功");
@@ -731,7 +737,7 @@ public class AdminOrderController {
 
         // 调用下一步任务倒计时服务
         orderCountdownService.startNextTaskCountdown(orderId, restartCountdownDTO.getDuration(), userId, restartCountdownDTO.getReason());
-        
+
         return Result.success("下一步任务倒计时开始成功");
     }
 
@@ -807,13 +813,13 @@ public class AdminOrderController {
         }
 
         // 记录操作日志
-        String logDesc = String.format("批量%s操作：成功%d个，失败%d个，原因：%s", 
+        String logDesc = String.format("批量%s操作：成功%d个，失败%d个，原因：%s",
                 "complete".equals(operationType) ? "完成订单" : "调整倒计时",
                 successCount, failCount, reason != null ? reason : "无");
         operationLogService.log(userId, "批量倒计时操作", logDesc, BigDecimal.ZERO, null);
 
         if (failCount > 0) {
-            return Result.error(String.format("批量操作完成：成功%d个，失败%d个。失败详情：%s", 
+            return Result.error(String.format("批量操作完成：成功%d个，失败%d个。失败详情：%s",
                     successCount, failCount, failMessages.toString()));
         } else {
             return Result.success(String.format("批量操作成功：共处理%d个订单", successCount));
@@ -893,8 +899,8 @@ public class AdminOrderController {
                             break;
                         case "addRemark":
                             String oldRemark = order.getRemarks();
-                            String newRemark = oldRemark != null ? oldRemark + "\n[" + 
-                                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) + 
+                            String newRemark = oldRemark != null ? oldRemark + "\n[" +
+                                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) +
                                     "] " + value : value;
                             order.setRemarks(newRemark);
                             break;
@@ -903,15 +909,15 @@ public class AdminOrderController {
                     successCount++;
                 }
             } catch (Exception e) {
-                log.error("批量操作订单失败：orderId={}, operation={}, error={}", 
+                log.error("批量操作订单失败：orderId={}, operation={}, error={}",
                         orderId, operation, e.getMessage());
             }
         }
 
         // 记录操作日志
-        operationLogService.log(userId, "批量操作订单", 
-                String.format("批量操作订单：%s，操作：%s，成功：%d/%d，原因：%s", 
-                        operation, value, successCount, orderIds.size(), 
+        operationLogService.log(userId, "批量操作订单",
+                String.format("批量操作订单：%s，操作：%s，成功：%d/%d，原因：%s",
+                        operation, value, successCount, orderIds.size(),
                         reason != null ? reason : "无"),
                 BigDecimal.ZERO, null);
 
@@ -939,31 +945,31 @@ public class AdminOrderController {
 
         // 根据文件类型导出
         String fileType = request.getFileType() != null ? request.getFileType() : "txt";
-        
+
         try {
             if ("xlsx".equalsIgnoreCase(fileType)) {
                 // 导出为xlsx格式
                 ByteArrayResource resource = orderExportService.exportAsXlsx(orders, request.getFormat());
-                
+
                 String filename = "订单导出_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".xlsx";
-                
+
                 // 记录操作日志
-                operationLogService.log(userId, "导出订单", 
-                        String.format("导出xlsx格式订单：格式%d，数量：%d，原因：%s", 
-                                request.getFormat(), orders.size(), 
+                operationLogService.log(userId, "导出订单",
+                        String.format("导出xlsx格式订单：格式%d，数量：%d，原因：%s",
+                                request.getFormat(), orders.size(),
                                 request.getReason() != null ? request.getReason() : "无"),
                         BigDecimal.ZERO, null);
-                
+
                 return ResponseEntity.ok()
-                        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + 
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" +
                                 new String(filename.getBytes("UTF-8"), "ISO-8859-1") + "\"")
                         .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                         .body(resource);
-                        
+
             } else {
                 // 导出为txt格式（原有逻辑）
                 String content = orderExportService.exportAsTxt(orders, request.getFormat());
-                
+
                 OrderExportResponse response = new OrderExportResponse();
                 response.setContent(content);
                 response.setFormat(request.getFormat());
@@ -971,13 +977,13 @@ public class AdminOrderController {
                 response.setExportTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
 
                 // 记录操作日志
-                operationLogService.log(userId, "导出订单", 
-                        String.format("导出txt格式订单：格式%d，数量：%d，原因：%s", 
-                                request.getFormat(), orders.size(), 
+                operationLogService.log(userId, "导出订单",
+                        String.format("导出txt格式订单：格式%d，数量：%d，原因：%s",
+                                request.getFormat(), orders.size(),
                                 request.getReason() != null ? request.getReason() : "无"),
                         BigDecimal.ZERO, null);
 
-                log.info("管理员导出订单：orderIds={}, format={}, fileType={}, count={}, operatorId={}", 
+                log.info("管理员导出订单：orderIds={}, format={}, fileType={}, count={}, operatorId={}",
                         request.getOrderIds(), request.getFormat(), fileType, orders.size(), userId);
 
                 return ResponseEntity.ok(Result.success(response));
@@ -1039,33 +1045,33 @@ public class AdminOrderController {
             order.getIsSelfOperated() != null && order.getIsSelfOperated() == 1 &&
             order.getCountdownStartTime() != null && order.getCountdownEndTime() != null &&
             order.getCountdownDuration() != null && order.getCountdownDuration() > 0) {
-            
+
             LocalDateTime now = LocalDateTime.now();
             LocalDateTime startTime = order.getCountdownStartTime();
             LocalDateTime endTime = order.getCountdownEndTime();
-            
+
             // 如果倒计时已过期，进度设为100%
             if (endTime.isBefore(now)) {
                 order.setProgress("100%");
                 return;
             }
-            
+
             // 计算总倒计时时长（分钟）
             long totalMinutes = order.getCountdownDuration();
-            
+
             // 计算已过去的时间（分钟）
             long elapsedMinutes = java.time.Duration.between(startTime, now).toMinutes();
-            
+
             // 确保已过去时间不为负数
             elapsedMinutes = Math.max(0, elapsedMinutes);
-            
+
             // 计算进度百分比
             int progressPercent = (int) Math.min(100, Math.max(0, (elapsedMinutes * 100) / totalMinutes));
-            
+
             // 设置进度
             order.setProgress(progressPercent + "%");
-            
-            log.debug("计算倒计时进度：orderId={}, 总时长={}分钟, 已过去={}分钟, 进度={}%", 
+
+            log.debug("计算倒计时进度：orderId={}, 总时长={}分钟, 已过去={}分钟, 进度={}%",
                     order.getId(), totalMinutes, elapsedMinutes, progressPercent);
         }
     }
@@ -1077,12 +1083,12 @@ public class AdminOrderController {
      */
     @Operation(summary = "获取考试倒计时订单", description = "获取所有正在考试倒计时的自营订单")
     @GetMapping("/exam-countdown")
-    public Result<List<CourseOrder>> getActiveExamCountdownOrders(Authentication authentication) {
+    public Result<List<CourseOrderVO>> getActiveExamCountdownOrders(Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         checkAdmin(userId);
 
         List<CourseOrder> orders = orderCountdownService.getActiveExamCountdownOrders();
-        return Result.success(orders);
+        return Result.success(orders.stream().map(SensitiveDataMasker::toOrderVO).toList());
     }
 
     /**
@@ -1125,9 +1131,9 @@ public class AdminOrderController {
         Long userId = (Long) authentication.getPrincipal();
         checkAdmin(userId);
 
-        orderCountdownService.startExamCountdown(orderId, 
-                startExamCountdownDTO.getDuration(), 
-                userId, 
+        orderCountdownService.startExamCountdown(orderId,
+                startExamCountdownDTO.getDuration(),
+                userId,
                 startExamCountdownDTO.getReason());
         return Result.success("考试倒计时开始成功");
     }
@@ -1154,7 +1160,7 @@ public class AdminOrderController {
 
         orderCountdownService.adjustExamCountdown(orderId, newDuration, userId, adjustExamCountdownDTO.getReason());
 
-        log.info("考试倒计时调整成功：orderId={}, oldDuration={}, newDuration={}, operatorId={}", 
+        log.info("考试倒计时调整成功：orderId={}, oldDuration={}, newDuration={}, operatorId={}",
                 orderId, oldDuration, newDuration, userId);
 
         return Result.success("考试倒计时调整成功");

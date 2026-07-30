@@ -20,6 +20,7 @@ import com.course.platform.infra.persistence.mapper.PaymentNotifyLogMapper;
 import com.course.platform.infra.persistence.mapper.PaymentOrderMapper;
 import com.course.platform.infra.persistence.mapper.UserMapper;
 import com.course.platform.application.service.payment.AlipayService;
+import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.application.service.system.SystemConfigService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,7 +34,7 @@ import java.util.Map;
 
 /**
  * 支付宝支付服务实现类
- * 
+ *
  * @author AI Assistant
  * @date 2025-11-26
  */
@@ -55,6 +56,15 @@ public class AlipayServiceImpl implements AlipayService {
 
     @Autowired
     private SystemConfigService systemConfigService;
+
+    @Autowired
+    private AccountLedgerServiceImpl accountLedgerService;
+
+    @Autowired
+    private com.course.platform.infra.persistence.mapper.PaymentEventMapper paymentEventMapper;
+
+    @Autowired
+    private SecurityAuditService securityAuditService;
 
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -140,7 +150,7 @@ public class AlipayServiceImpl implements AlipayService {
         request.setBizModel(model);
 
         AlipayTradePagePayResponse response = client.pageExecute(request);
-        
+
         if (!response.isSuccess()) {
             throw new AlipayApiException("生成PC支付表单失败：" + response.getSubMsg());
         }
@@ -169,7 +179,7 @@ public class AlipayServiceImpl implements AlipayService {
         request.setBizModel(model);
 
         AlipayTradeWapPayResponse response = client.pageExecute(request);
-        
+
         if (!response.isSuccess()) {
             throw new AlipayApiException("生成WAP支付表单失败：" + response.getSubMsg());
         }
@@ -208,6 +218,9 @@ public class AlipayServiceImpl implements AlipayService {
                 log.setProcessMessage("签名验证失败");
                 log.setResponseContent("fail");
                 paymentNotifyLogMapper.insert(log);
+                securityAuditService.record("PAYMENT_CALLBACK", "CRITICAL", null, null,
+                        "/payment/notify", "POST", "支付宝回调签名验证失败",
+                        "orderNo=" + params.get("out_trade_no") + ",ip=" + requestIp);
                 return "fail";
             }
 
@@ -243,25 +256,23 @@ public class AlipayServiceImpl implements AlipayService {
                 log.setProcessMessage("金额不匹配");
                 log.setResponseContent("fail");
                 paymentNotifyLogMapper.insert(log);
+                securityAuditService.record("PAYMENT_CALLBACK", "CRITICAL", order.getUserId(), null,
+                        "/payment/notify", "POST", "支付宝回调金额不匹配",
+                        "orderNo=" + orderNo + ", expect=" + order.getAmount() + ", actual=" + notifyAmount);
                 return "fail";
             }
 
             // 6. 处理交易状态
             String tradeStatus = params.get("trade_status");
             if ("TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus)) {
-                // 更新订单状态
-                order.setStatus("PAID");
-                order.setAlipayTradeNo(params.get("trade_no"));
-                order.setBuyerLogonId(params.get("buyer_logon_id"));
-                order.setBuyerUserId(params.get("buyer_user_id"));
-                order.setPaidTime(LocalDateTime.now());
-                paymentOrderMapper.updateById(order);
-
-                // 更新用户余额
-                updateUserBalance(order.getUserId(), order.getAmount(), order.getId());
-
+                boolean credited = markPaidAndCredit(
+                        order,
+                        params.get("trade_no"),
+                        params.get("buyer_logon_id"),
+                        params.get("buyer_user_id")
+                );
                 log.setProcessStatus(1);
-                log.setProcessMessage("支付成功，余额已更新");
+                log.setProcessMessage(credited ? "支付成功，余额已更新" : "支付成功（重复通知，未重复入账）");
                 log.setProcessTime(LocalDateTime.now());
             } else {
                 log.setProcessStatus(2);
@@ -330,7 +341,7 @@ public class AlipayServiceImpl implements AlipayService {
             request.setBizModel(model);
 
             AlipayTradeQueryResponse response = client.execute(request);
-            
+
             if (response.isSuccess()) {
                 String tradeStatus = response.getTradeStatus();
                 return "TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus);
@@ -348,7 +359,7 @@ public class AlipayServiceImpl implements AlipayService {
     @Transactional(rollbackFor = Exception.class)
     public boolean closeOrder(String orderNo) {
         PaymentOrder order = queryPaymentStatus(orderNo);
-        
+
         if (order == null || !"PENDING".equals(order.getStatus())) {
             return false;
         }
@@ -364,7 +375,7 @@ public class AlipayServiceImpl implements AlipayService {
     @Transactional(rollbackFor = Exception.class)
     public boolean refund(String orderNo, String refundReason) {
         PaymentOrder order = queryPaymentStatus(orderNo);
-        
+
         if (order == null || !"PAID".equals(order.getStatus())) {
             throw new RuntimeException("订单状态不正确，无法退款");
         }
@@ -380,7 +391,7 @@ public class AlipayServiceImpl implements AlipayService {
             request.setBizModel(model);
 
             AlipayTradeRefundResponse response = client.execute(request);
-            
+
             if (response.isSuccess()) {
                 // 更新订单状态
                 order.setStatus("REFUNDED");
@@ -404,22 +415,72 @@ public class AlipayServiceImpl implements AlipayService {
     }
 
     /**
-     * 更新用户余额
+     * 更新用户余额（原子 + 账本）
      */
     private void updateUserBalance(Long userId, BigDecimal amount, Long paymentOrderId) {
-        User user = userMapper.selectById(userId);
-        if (user == null) {
-            throw new RuntimeException("用户不存在");
-        }
-
-        user.setBalance(user.getBalance().add(amount));
+        String bizNo = String.valueOf(paymentOrderId);
         if (amount.compareTo(BigDecimal.ZERO) > 0) {
-            user.setTotalRecharge(user.getTotalRecharge().add(amount));
+            accountLedgerService.credit(userId, amount, AccountLedgerServiceImpl.BIZ_PAYMENT, bizNo,
+                    "支付宝充值入账", true);
+        } else if (amount.compareTo(BigDecimal.ZERO) < 0) {
+            accountLedgerService.debit(userId, amount.abs(), AccountLedgerServiceImpl.BIZ_REFUND, bizNo,
+                    "支付宝退款扣减");
         }
-        userMapper.updateById(user);
+    }
 
-        log.info("用户余额更新成功，用户ID：{}，变动金额：{}，当前余额：{}", 
-                userId, amount, user.getBalance());
+    /**
+     * 条件更新订单为已支付并入账，返回是否由本线程完成入账
+     */
+    private boolean markPaidAndCredit(PaymentOrder order, String alipayTradeNo,
+                                      String buyerLogonId, String buyerUserId) {
+        int updated = paymentOrderMapper.markPaidIfPending(
+                order.getOrderNo(),
+                alipayTradeNo,
+                buyerLogonId,
+                buyerUserId,
+                LocalDateTime.now()
+        );
+        if (updated != 1) {
+            // 可能是并发回调/主动同步：若已是 PAID，仍需确保账本入账（幂等）
+            PaymentOrder latest = paymentOrderMapper.selectById(order.getId());
+            if (latest == null || !"PAID".equals(latest.getStatus())) {
+                log.info("支付订单非待支付且未完成，跳过入账：{}", order.getOrderNo());
+                return false;
+            }
+            order = latest;
+            log.info("支付订单已标记支付，执行账本幂等补齐：{}", order.getOrderNo());
+        }
+        // 支付事件审计（唯一键幂等，失败不阻断入账）
+        try {
+            com.course.platform.domain.entity.PaymentEvent event = new com.course.platform.domain.entity.PaymentEvent();
+            event.setOrderNo(order.getOrderNo());
+            event.setEventType("PAID");
+            event.setProviderEventId(alipayTradeNo);
+            paymentEventMapper.insert(event);
+        } catch (Exception e) {
+            log.info("支付事件已存在：{}", order.getOrderNo());
+        }
+        // 账本唯一键保证余额只加一次
+        updateUserBalance(order.getUserId(), order.getAmount(), order.getId());
+        return true;
+    }
+
+    /**
+     * 主动同步：查询支付宝成功后安全入账
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean syncPaidOrder(String orderNo) {
+        PaymentOrder order = queryPaymentStatus(orderNo);
+        if (order == null) {
+            return false;
+        }
+        if ("PAID".equals(order.getStatus())) {
+            return true;
+        }
+        if (!queryAlipayTradeStatus(orderNo)) {
+            return false;
+        }
+        return markPaidAndCredit(order, order.getAlipayTradeNo(), order.getBuyerLogonId(), order.getBuyerUserId());
     }
 
     /**

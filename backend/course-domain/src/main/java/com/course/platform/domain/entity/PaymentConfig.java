@@ -7,14 +7,14 @@ import java.time.LocalDateTime;
 
 /**
  * 支付配置实体类
- * 
+ *
  * @author AI Assistant
  * @date 2025-11-26
  */
 @Data
 @TableName("payment_config")
 public class PaymentConfig implements Serializable {
-    
+
     private static final long serialVersionUID = 1L;
 
     /**
@@ -39,13 +39,15 @@ public class PaymentConfig implements Serializable {
     private String appId;
 
     /**
-     * 应用私钥
+     * 应用私钥（禁止默认序列化）
      */
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String privateKey;
 
     /**
-     * 支付宝公钥
+     * 支付宝公钥（禁止默认序列化完整密钥）
      */
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String alipayPublicKey;
 
     /**

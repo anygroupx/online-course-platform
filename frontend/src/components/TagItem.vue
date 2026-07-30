@@ -18,10 +18,10 @@
     <el-icon v-if="tag.icon" class="tag-icon">
       <component :is="tag.icon" />
     </el-icon>
-    
+
     <!-- 标签标题 -->
     <span class="tag-title">{{ tag.title }}</span>
-    
+
     <!-- 关闭按钮 -->
     <el-icon
       v-if="tag.closable && !tag.fixed"
@@ -30,7 +30,7 @@
     >
       <Close />
     </el-icon>
-    
+
     <!-- 固定图标 -->
     <el-icon
       v-if="tag.fixed"
@@ -102,17 +102,17 @@ const emit = defineEmits([
 
 .tag-item:hover {
   background: rgba(255, 255, 255, 0.8);
-  border-color: rgba(64, 158, 255, 0.3);
+  border-color: rgba(78, 140, 255, 0.3);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .tag-item.active {
-  background: linear-gradient(135deg, 
-    rgba(64, 158, 255, 0.15) 0%, 
-    rgba(64, 158, 255, 0.1) 100%);
-  border-color: #409eff;
-  color: #409eff;
+  background: linear-gradient(135deg,
+    rgba(78, 140, 255, 0.15) 0%,
+    rgba(78, 140, 255, 0.1) 100%);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
   font-weight: 500;
 }
 
@@ -123,18 +123,18 @@ const emit = defineEmits([
   top: 0;
   bottom: 0;
   width: 3px;
-  background: linear-gradient(180deg, #409eff 0%, #67c23a 100%);
+  background: linear-gradient(180deg, var(--color-primary) 0%, var(--color-success) 100%);
   border-radius: 0 2px 2px 0;
 }
 
 .tag-item.fixed {
-  background: rgba(103, 194, 58, 0.1);
-  border-color: rgba(103, 194, 58, 0.3);
+  background: rgba(99, 197, 110, 0.1);
+  border-color: rgba(99, 197, 110, 0.3);
 }
 
 .tag-item.fixed:hover {
-  background: rgba(103, 194, 58, 0.15);
-  border-color: rgba(103, 194, 58, 0.5);
+  background: rgba(99, 197, 110, 0.15);
+  border-color: rgba(99, 197, 110, 0.5);
 }
 
 .tag-item.dragging {
@@ -163,22 +163,22 @@ const emit = defineEmits([
 .tag-close {
   margin-left: 6px;
   font-size: 12px;
-  color: #909399;
+  color: var(--text-secondary);
   transition: all 0.3s;
   padding: 2px;
   border-radius: 2px;
 }
 
 .tag-close:hover {
-  color: #f56c6c;
-  background: rgba(245, 108, 108, 0.1);
+  color: var(--color-danger);
+  background: rgba(240, 101, 101, 0.1);
   transform: scale(1.1);
 }
 
 .tag-fixed {
   margin-left: 6px;
   font-size: 12px;
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 /* 标签项动画效果 */
@@ -221,21 +221,21 @@ const emit = defineEmits([
     min-width: 60px;
     max-width: 120px;
   }
-  
+
   .tag-title {
     font-size: 12px;
   }
-  
+
   .tag-icon {
     margin-right: 4px;
     font-size: 12px;
   }
-  
+
   .tag-close {
     margin-left: 4px;
     font-size: 10px;
   }
-  
+
   .tag-fixed {
     margin-left: 4px;
     font-size: 10px;
@@ -250,7 +250,7 @@ const emit = defineEmits([
     min-width: 50px;
     max-width: 100px;
   }
-  
+
   .tag-title {
     font-size: 11px;
   }

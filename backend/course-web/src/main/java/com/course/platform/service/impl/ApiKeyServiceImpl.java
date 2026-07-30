@@ -1,25 +1,26 @@
 package com.course.platform.service.impl;
 
 import cn.hutool.core.util.IdUtil;
+import com.course.platform.application.service.auth.ApiKeyService;
+import com.course.platform.application.service.security.SecurityAuditService;
+import com.course.platform.application.service.support.OperationLogService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
+import com.course.platform.common.security.TokenHashUtil;
 import com.course.platform.domain.entity.User;
 import com.course.platform.infra.persistence.mapper.UserMapper;
-import com.course.platform.application.service.auth.ApiKeyService;
-import com.course.platform.application.service.support.OperationLogService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
- * API密钥服务实现类
- * 
- * @author AI Assistant
- * @since 2025-01-17
+ * API密钥服务实现：明文仅返回一次，落库仅存哈希/前缀/作用域/过期时间
  */
 @Slf4j
 @Service
@@ -28,6 +29,8 @@ public class ApiKeyServiceImpl implements ApiKeyService {
 
     private final UserMapper userMapper;
     private final OperationLogService operationLogService;
+    private final AccountLedgerServiceImpl accountLedgerService;
+    private final SecurityAuditService securityAuditService;
 
     @Value("${course.business.api-enable-free-threshold:300}")
     private BigDecimal apiEnableFreeThreshold;
@@ -39,121 +42,112 @@ public class ApiKeyServiceImpl implements ApiKeyService {
     @Transactional(rollbackFor = Exception.class)
     public String enableApiKey(Long userId, Integer type, Long targetUserId) {
         if (type == 1) {
-            // 自己开通
             return enableForSelf(userId);
         } else if (type == 2) {
-            // 给下级开通
             return enableForSubordinate(userId, targetUserId);
-        } else {
-            throw new BusinessException("开通类型错误");
         }
+        throw new BusinessException("开通类型错误");
     }
 
-    /**
-     * 自己开通API密钥
-     */
     private String enableForSelf(Long userId) {
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
-
-        // 检查是否已开通
-        if (!"0".equals(user.getApiKey()) && user.getApiKey()!=null) {
+        if (hasActiveApiKey(user)) {
             throw new BusinessException("API接口已开通");
         }
 
-        // 生成密钥
-        String apiKey = IdUtil.simpleUUID().substring(0, 16);
-
-        // 判断是否免费开通
-        if (user.getBalance().compareTo(apiEnableFreeThreshold) >= 0) {
-            // 免费开通
-            user.setApiKey(apiKey);
-            userMapper.updateById(user);
-
-            operationLogService.log(userId, "开通API", "免费开通API接口成功", BigDecimal.ZERO, user.getBalance());
-
-            log.info("免费开通API成功：userId={}", userId);
-
-            return apiKey;
-        } else {
-            // 收费开通
-            if (user.getBalance().compareTo(apiEnableFee) < 0) {
-                throw new BusinessException(ResultCode.BALANCE_INSUFFICIENT.getCode(), "余额不足，需要" + apiEnableFee + "元");
-            }
-
-            user.setApiKey(apiKey);
-            user.setBalance(user.getBalance().subtract(apiEnableFee));
-            userMapper.updateById(user);
-
-            operationLogService.log(userId, "开通API", 
-                    String.format("开通API接口成功，扣费%s元", apiEnableFee),
-                    apiEnableFee.negate(), user.getBalance());
-
-            log.info("付费开通API成功：userId={}, fee={}", userId, apiEnableFee);
-
-            return apiKey;
+        boolean free = user.getBalance() != null
+                && user.getBalance().compareTo(apiEnableFreeThreshold) >= 0;
+        if (!free) {
+            accountLedgerService.debit(
+                    userId,
+                    apiEnableFee,
+                    AccountLedgerServiceImpl.BIZ_API_FEE,
+                    "API-ENABLE-" + userId + "-" + System.currentTimeMillis(),
+                    "开通API接口扣费"
+            );
+            user = userMapper.selectById(userId);
         }
+
+        String plain = generatePlainApiKey();
+        storeApiKey(user, plain, free ? "免费开通" : "付费开通");
+        securityAuditService.record("KEY_CHANGE", "WARN", userId, user.getUsername(),
+                "/api-key/enable", "POST", "用户开通/轮换 API Key", free ? "free" : "paid");
+        operationLogService.log(userId, "开通API",
+                free ? "免费开通API接口成功" : String.format("开通API接口成功，扣费%s元", apiEnableFee),
+                free ? BigDecimal.ZERO : apiEnableFee.negate(),
+                user.getBalance());
+        return plain;
     }
 
-    /**
-     * 给下级开通API密钥
-     */
     private String enableForSubordinate(Long operatorId, Long targetUserId) {
         if (targetUserId == null) {
             throw new BusinessException("目标用户ID不能为空");
         }
-
         User operator = userMapper.selectById(operatorId);
         if (operator == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
-
         User target = userMapper.selectById(targetUserId);
         if (target == null) {
             throw new BusinessException("目标用户不存在");
         }
-
-        // 检查权限
-        if (!target.getParentId().equals(operatorId)) {
+        if (target.getParentId() == null || !target.getParentId().equals(operatorId)) {
             throw new BusinessException("只能给自己的下级开通");
         }
-
-        // 检查是否已开通
-        if (!"0".equals(target.getApiKey())) {
+        if (hasActiveApiKey(target)) {
             throw new BusinessException("该用户API接口已开通");
         }
 
-        // 检查余额
         BigDecimal cost = new BigDecimal("5");
-        if (operator.getBalance().compareTo(cost) < 0) {
-            throw new BusinessException("余额不足，需要" + cost + "元");
-        }
+        accountLedgerService.debit(
+                operatorId,
+                cost,
+                AccountLedgerServiceImpl.BIZ_API_FEE,
+                "API-SUB-" + targetUserId + "-" + System.currentTimeMillis(),
+                String.format("给下级[%s]开通API", target.getUsername())
+        );
+        operator = userMapper.selectById(operatorId);
 
-        // 生成密钥
-        String apiKey = IdUtil.simpleUUID().substring(0, 16);
-
-        // 开通API
-        target.setApiKey(apiKey);
-        userMapper.updateById(target);
-
-        // 扣费
-        operator.setBalance(operator.getBalance().subtract(cost));
-        userMapper.updateById(operator);
-
-        // 记录日志
+        String plain = generatePlainApiKey();
+        storeApiKey(target, plain, "上级开通");
+        securityAuditService.record("KEY_CHANGE", "WARN", operatorId, operator.getUsername(),
+                "/api-key/enable", "POST", "上级为下级开通 API Key", "targetUserId=" + targetUserId);
         operationLogService.log(operatorId, "开通API",
                 String.format("给下级用户[%s]开通API接口，扣费%s元", target.getUsername(), cost),
                 cost.negate(), operator.getBalance());
-
         operationLogService.log(targetUserId, "开通API",
                 String.format("上级[%s]为你开通API接口", operator.getUsername()),
                 BigDecimal.ZERO, null);
+        return plain;
+    }
 
-        log.info("给下级开通API成功：operatorId={}, targetUserId={}", operatorId, targetUserId);
+    private boolean hasActiveApiKey(User user) {
+        if (StringUtils.hasText(user.getApiKeyHash())) {
+            return true;
+        }
+        return StringUtils.hasText(user.getApiKey()) && !"0".equals(user.getApiKey());
+    }
 
-        return apiKey;
+    private String generatePlainApiKey() {
+        // 32 hex chars
+        return IdUtil.simpleUUID() + IdUtil.simpleUUID().substring(0, 16);
+    }
+
+    private void storeApiKey(User user, String plain, String source) {
+        // ensure non-empty longer key
+        if (plain == null || plain.length() < 16) {
+            plain = IdUtil.simpleUUID();
+        }
+        String prefix = plain.length() >= 8 ? plain.substring(0, 8) : plain;
+        user.setApiKey(null); // 不再保存明文
+        user.setApiKeyHash(TokenHashUtil.sha256(plain));
+        user.setApiKeyPrefix(prefix);
+        user.setApiKeyScopes("orders:read,orders:write,platforms:read");
+        user.setApiKeyExpireTime(LocalDateTime.now().plusYears(1));
+        userMapper.updateById(user);
+        log.info("API Key 已生成并哈希存储：userId={}, prefix={}, source={}", user.getId(), prefix, source);
     }
 }
-

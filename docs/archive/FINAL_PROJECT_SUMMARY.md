@@ -239,7 +239,7 @@
 2. 双击：start-backend.bat
 3. 双击：start-frontend.bat
 4. 访问：http://localhost:5173
-5. 使用部署后安全创建的管理员账号登录
+5. 登录：admin / 123456
 ```
 
 **Linux/macOS**:
@@ -248,7 +248,7 @@
 2. chmod +x start-backend.sh && ./start-backend.sh
 3. chmod +x start-frontend.sh && ./start-frontend.sh
 4. 访问：http://localhost:5173
-5. 使用部署后安全创建的管理员账号登录
+5. 登录：admin / 123456
 ```
 
 ---

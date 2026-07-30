@@ -267,7 +267,7 @@ html.dark .register-box {
   width: 60px;
   height: 60px;
   margin: 0 auto 15px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -298,7 +298,7 @@ html.dark .register-box {
   height: 48px;
   font-size: 16px;
   font-weight: 600;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   border: none;
   border-radius: 12px;
   transition: all 0.3s ease;
@@ -306,7 +306,7 @@ html.dark .register-box {
 
 .register-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+  box-shadow: var(--primary-shadow-hover);
 }
 
 .register-footer {
@@ -404,7 +404,7 @@ html.dark .register-box {
     width: 90%;
     padding: 30px 20px;
   }
-  
+
   .register-header h2 {
     font-size: 24px;
   }
