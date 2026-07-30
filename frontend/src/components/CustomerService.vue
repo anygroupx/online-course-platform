@@ -381,14 +381,14 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(78, 140, 255, 0.4);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--brand-primary) 40%, transparent);
   transition: all 0.3s ease;
   z-index: 1000;
 }
 
 .service-button:hover {
   transform: scale(1.1);
-  box-shadow: 0 6px 16px rgba(78, 140, 255, 0.6);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--brand-primary) 52%, transparent);
 }
 
 .service-button .el-icon {
@@ -514,7 +514,7 @@ onUnmounted(() => {
 }
 
 .message-right .message-content {
-  background: var(--color-primary);
+  background: var(--brand-primary);
   color: white;
 }
 
@@ -577,7 +577,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(78, 140, 255, 0.4);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--brand-primary) 40%, transparent);
   transition: all 0.3s ease;
   z-index: 1000;
 }
@@ -631,7 +631,7 @@ html.dark .message-content {
 }
 
 html.dark .message-right .message-content {
-  background: var(--color-primary);
+  background: var(--brand-primary);
   color: white;
 }
 

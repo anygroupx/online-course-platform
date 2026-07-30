@@ -1,0 +1,388 @@
+/*
+ * Fluent 2 × 3D Elements 主题层
+ * Fluent 负责系统控件与清晰层级，3D 只服务于品牌舞台和关键操作。
+ */
+:root {
+  --el-color-primary: var(--brand-primary);
+  --el-color-success: var(--color-success);
+  --el-color-warning: var(--color-warning);
+  --el-color-danger: var(--color-danger);
+  --el-color-info: var(--color-info);
+  --el-bg-color: var(--surface-solid);
+  --el-bg-color-overlay: var(--surface-solid);
+  --el-fill-color-blank: var(--surface-solid);
+  --el-fill-color-light: color-mix(in srgb, var(--brand-primary) 5%, var(--surface-solid));
+  --el-fill-color-lighter: color-mix(in srgb, var(--brand-primary) 3%, var(--surface-solid));
+  --el-fill-color-dark: color-mix(in srgb, var(--brand-primary) 10%, var(--surface-solid));
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: var(--text-regular);
+  --el-text-color-secondary: var(--text-secondary);
+  --el-text-color-placeholder: var(--text-placeholder);
+  --el-border-color: var(--border-color);
+  --el-border-color-light: var(--border-color-light);
+  --el-border-color-lighter: var(--border-color-light);
+  --el-border-radius-base: var(--radius-sm);
+  --el-border-radius-small: var(--radius-xs);
+  --el-box-shadow-light: var(--shadow-md);
+  --el-box-shadow: var(--shadow-lg);
+}
+
+html.dark {
+  --el-mask-color: rgba(1, 8, 18, 0.68);
+  --el-mask-color-extra-light: rgba(1, 8, 18, 0.40);
+}
+
+/* 通用页面容器继承空间舞台，而高密度内容保持二维可读。 */
+.main-content > * {
+  position: relative;
+  animation: fluent-enter var(--motion-slow) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.fluent-spatial-stage {
+  perspective: 1400px;
+  transform-style: preserve-3d;
+}
+
+.fluent-acrylic {
+  border: 1px solid var(--border-color-light);
+  background: var(--surface-acrylic);
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-md);
+  backdrop-filter: blur(24px) saturate(1.24);
+  -webkit-backdrop-filter: blur(24px) saturate(1.24);
+}
+
+.fluent-depth-card {
+  transform-style: preserve-3d;
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-md);
+  transition:
+    transform var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow var(--motion-base) ease,
+    border-color var(--motion-fast) ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .fluent-depth-card:hover {
+    transform: translate3d(0, -4px, 14px) rotateX(0.6deg);
+    border-color: color-mix(in srgb, var(--brand-primary) 34%, var(--border-color));
+    box-shadow:
+      inset 0 1px 0 var(--stroke-highlight),
+      var(--shadow-lg);
+  }
+}
+
+/* 常用业务卡统一采用低 elevation，避免表单与表格被过度立体化。 */
+:where(
+  .search-card,
+  .table-card,
+  .settings-card,
+  .main-card,
+  .operation-card,
+  .info-card,
+  .result-card,
+  .order-list-card,
+  .theme-config-card,
+  .api-card,
+  .stats-card
+) {
+  border: 1px solid var(--border-color-light) !important;
+  border-radius: var(--radius-lg) !important;
+  background: var(--bg-card) !important;
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-sm) !important;
+  backdrop-filter: blur(18px) saturate(1.12);
+}
+
+:where(.page-header, .list-header, .header-content) h1,
+:where(.page-header, .list-header, .header-content) h2 {
+  color: var(--text-primary);
+  letter-spacing: -0.025em;
+}
+
+/* Element Plus 控件使用 Fluent 的状态深浅与清晰焦点。 */
+.el-button {
+  min-height: 32px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  transition:
+    transform var(--motion-fast) cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
+}
+
+.el-button:not(.is-disabled):hover {
+  transform: translate3d(0, -1px, 0);
+}
+
+.el-button:not(.is-disabled):active {
+  transform: translate3d(0, 1px, 0);
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--brand-primary);
+  --el-button-border-color: var(--brand-primary);
+  --el-button-hover-bg-color: var(--brand-primary-hover);
+  --el-button-hover-border-color: var(--brand-primary-hover);
+  --el-button-active-bg-color: var(--brand-primary-pressed);
+  --el-button-active-border-color: var(--brand-primary-pressed);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--brand-primary) 28%, transparent);
+}
+
+.el-button.is-disabled,
+.el-button.is-disabled:hover {
+  opacity: 0.58;
+  box-shadow: none;
+  transform: none;
+}
+
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner,
+.el-input-number,
+.el-date-editor.el-input__wrapper {
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-solid) 84%, transparent);
+  box-shadow: inset 0 0 0 1px var(--border-color);
+  transition:
+    box-shadow var(--motion-fast) ease,
+    background-color var(--motion-fast) ease;
+}
+
+.el-input__wrapper:hover,
+.el-select__wrapper:hover,
+.el-textarea__inner:hover {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-primary) 56%, var(--border-color));
+}
+
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  background: var(--surface-solid);
+  box-shadow:
+    inset 0 0 0 2px var(--brand-primary),
+    0 0 0 3px var(--focus-ring) !important;
+}
+
+.el-input__inner::placeholder,
+.el-textarea__inner::placeholder {
+  color: var(--text-placeholder);
+  opacity: 1;
+}
+
+.el-form-item__label {
+  color: var(--text-regular);
+  font-weight: 600;
+}
+
+.el-card {
+  overflow: hidden;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-sm);
+  backdrop-filter: blur(18px) saturate(1.12);
+}
+
+.el-card__header {
+  border-bottom-color: var(--border-color-light);
+  background: color-mix(in srgb, var(--surface-solid) 44%, transparent);
+}
+
+/* 表格使用 solid 材质，滚动和密集阅读时不让背景光干扰文本。 */
+.el-table {
+  --el-table-bg-color: var(--surface-solid);
+  --el-table-tr-bg-color: var(--surface-solid);
+  --el-table-header-bg-color: color-mix(in srgb, var(--brand-primary) 6%, var(--surface-solid));
+  --el-table-row-hover-bg-color: color-mix(in srgb, var(--brand-primary) 7%, var(--surface-solid));
+  --el-table-border-color: var(--border-color-light);
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  color: var(--text-regular);
+}
+
+.el-table th.el-table__cell {
+  height: 44px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.el-table td.el-table__cell {
+  height: 46px;
+}
+
+.el-table__inner-wrapper::before {
+  background-color: var(--border-color-light);
+}
+
+.el-pagination {
+  --el-pagination-bg-color: transparent;
+  --el-pagination-button-disabled-bg-color: transparent;
+  gap: 4px;
+}
+
+.el-pagination button,
+.el-pager li {
+  border-radius: var(--radius-sm);
+}
+
+.el-pager li.is-active {
+  color: var(--text-on-brand);
+  background: var(--brand-primary);
+}
+
+/* 弹出层采用高 elevation，保持与底层命令区域的距离感。 */
+.el-dialog,
+.el-drawer,
+.el-message-box,
+.el-popper,
+.el-dropdown__popper,
+.el-select__popper {
+  border-color: var(--border-color-light) !important;
+  background: var(--surface-acrylic) !important;
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-float) !important;
+  backdrop-filter: blur(28px) saturate(1.32);
+  -webkit-backdrop-filter: blur(28px) saturate(1.32);
+}
+
+.el-dialog,
+.el-message-box {
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-xl);
+}
+
+.el-dialog__header {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.el-dialog__title,
+.el-drawer__title {
+  color: var(--text-primary);
+  font-weight: 650;
+}
+
+.el-dropdown-menu {
+  padding: 6px;
+  background: transparent;
+}
+
+.el-dropdown-menu__item {
+  min-height: 34px;
+  border-radius: var(--radius-sm);
+  color: var(--text-regular);
+}
+
+.el-dropdown-menu__item:not(.is-disabled):focus,
+.el-dropdown-menu__item:not(.is-disabled):hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--brand-primary) 10%, transparent);
+}
+
+.el-tabs__item {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.el-tabs__item.is-active,
+.el-tabs__item:hover {
+  color: var(--brand-primary);
+}
+
+.el-tabs__active-bar {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--primary-gradient);
+}
+
+.el-tag {
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.el-switch.is-checked .el-switch__core {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+}
+
+.el-alert {
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
+}
+
+.el-loading-mask {
+  background: color-mix(in srgb, var(--surface-solid) 74%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+/* 业务统计卡通过同一材质和色条获得一致性。 */
+.statistics-cards,
+.stats-grid {
+  gap: 16px;
+}
+
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border-color-light) !important;
+  border-radius: var(--radius-lg) !important;
+  background: var(--bg-card) !important;
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-sm) !important;
+  backdrop-filter: blur(18px);
+  transition:
+    transform var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow var(--motion-base) ease;
+}
+
+.stat-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--primary-gradient);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .stat-card:hover {
+    transform: translate3d(0, -3px, 8px);
+    box-shadow: var(--shadow-md) !important;
+  }
+}
+
+.stat-value {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .fluent-acrylic,
+  .el-card,
+  .el-dialog,
+  .el-drawer,
+  .el-popper {
+    background: var(--surface-solid) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .el-dialog {
+    width: calc(100vw - 24px) !important;
+    margin: 12px auto;
+    border-radius: var(--radius-lg);
+  }
+
+  .main-content > * {
+    animation-duration: var(--motion-base);
+  }
+}

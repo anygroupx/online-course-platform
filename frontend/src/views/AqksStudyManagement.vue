@@ -359,7 +359,7 @@
           currentOrderDetail.updateTime
         }}</el-descriptions-item>
         <el-descriptions-item label="订单金额" v-if="currentOrderDetail.amount">
-          <span style="color: var(--color-danger); font-weight: bold"
+          <span style="color: #f56c6c; font-weight: bold"
             >￥{{ currentOrderDetail.amount }}</span
           >
         </el-descriptions-item>
@@ -1462,7 +1462,7 @@ html.dark {
   /* 批量操作卡片在暗色模式下的渐变 */
   .batch-actions-card {
     border-color: var(--primary-gradient-end);
-    background: rgba(78, 140, 255, 0.05);
+    background: color-mix(in srgb, var(--brand-primary) 5%, transparent);
   }
 
   /* 表格在暗色模式下的边框 */
@@ -1472,7 +1472,7 @@ html.dark {
 
   /* 悬停效果增强 */
   .stat-card:hover {
-    box-shadow: 0 8px 24px rgba(78, 140, 255, 0.3);
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--brand-primary) 30%, transparent);
   }
 }
 

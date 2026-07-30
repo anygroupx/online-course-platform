@@ -1,605 +1,86 @@
-/* Element Plus Deep Customization
- * Button & component colors aligned with Dashboard homepage palette
+/*
+ * Element Plus 兼容边界
+ * 主题、材质与控件主样式位于 fluent-spatial.scss，本文件只补齐组件库的特殊结构。
  */
+.el-overlay {
+  background: color-mix(in srgb, #020817 58%, transparent);
+  backdrop-filter: blur(5px);
+}
 
-/* Global Reset/Base */
-body {
-  background-color: var(--bg-body);
+.el-message,
+.el-notification {
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
+  background: var(--surface-acrylic);
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-lg);
+  backdrop-filter: blur(24px) saturate(1.2);
+}
+
+.el-message__content,
+.el-notification__title,
+.el-notification__content {
+  color: var(--text-regular);
+}
+
+.el-breadcrumb__inner.is-link,
+.el-breadcrumb__inner a {
+  color: var(--text-secondary);
+  font-weight: 560;
+}
+
+.el-breadcrumb__inner.is-link:hover,
+.el-breadcrumb__inner a:hover {
+  color: var(--brand-primary);
+}
+
+.el-step__title {
+  color: var(--text-secondary);
+}
+
+.el-step__title.is-process {
   color: var(--text-primary);
-  transition: background-color 0.3s ease, color 0.3s ease;
+  font-weight: 650;
 }
 
-/* Cards - Glassmorphism & Modern */
-.el-card {
-  background: var(--bg-card) !important;
-  border: 1px solid var(--border-color-light) !important;
-  border-radius: var(--radius-lg) !important;
-  box-shadow: var(--shadow-sm) !important;
-  backdrop-filter: blur(10px);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  color: var(--text-primary) !important;
+.el-step__head.is-process,
+.el-step__head.is-finish,
+.el-step__title.is-finish {
+  color: var(--brand-primary);
+  border-color: var(--brand-primary);
 }
 
-.el-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md) !important;
-  background: var(--bg-card-hover) !important;
-}
-
-.el-card__header {
-  border-bottom: 1px solid var(--border-color-light) !important;
-  padding: 16px 20px !important;
-  font-weight: 600;
-}
-
-/* =========================================================
- * Buttons - Homepage palette
- * Primary: soft blue → purple gradient
- * Success / Warning / Danger / Info: solid brand tones
- * ========================================================= */
-
-.el-button {
-  border-radius: var(--radius-md) !important;
-  font-weight: 600 !important;
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease,
-    opacity 0.2s ease,
-    background-color 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease !important;
-}
-
-.el-button:not(.is-disabled):not(.is-loading):active {
-  transform: translateY(0);
-}
-
-/* Default / plain neutral button */
-.el-button--default {
-  color: var(--text-regular) !important;
-  border-color: var(--border-color) !important;
-  background: var(--bg-card) !important;
-}
-
-.el-button--default:hover,
-.el-button--default:focus {
-  color: var(--color-primary) !important;
-  border-color: var(--el-color-primary-light-5) !important;
-  background: var(--el-color-primary-light-9) !important;
-}
-
-/* Primary - gradient CTA */
-.el-button--primary {
-  background: var(--primary-gradient) !important;
-  border: none !important;
-  color: #fff !important;
-  box-shadow: var(--primary-shadow);
-}
-
-.el-button--primary:hover,
-.el-button--primary:focus {
-  opacity: 0.94;
-  transform: translateY(-1px);
-  box-shadow: var(--primary-shadow-hover);
-  color: #fff !important;
-}
-
-.el-button--primary:active {
-  transform: translateY(0);
-  opacity: 0.9;
-}
-
-.el-button--primary.is-disabled,
-.el-button--primary.is-disabled:hover,
-.el-button--primary.is-disabled:focus {
-  opacity: 0.55 !important;
-  transform: none !important;
-  box-shadow: none !important;
-  color: #fff !important;
-}
-
-/* Primary plain */
-.el-button--primary.is-plain {
-  background: var(--el-color-primary-light-9) !important;
-  color: var(--color-primary) !important;
-  border: 1px solid var(--el-color-primary-light-5) !important;
-  box-shadow: none !important;
-}
-
-.el-button--primary.is-plain:hover,
-.el-button--primary.is-plain:focus {
-  background: var(--primary-gradient) !important;
-  color: #fff !important;
-  border-color: transparent !important;
-  box-shadow: var(--primary-shadow);
-}
-
-/* Primary text / link */
-.el-button--primary.is-text,
-.el-button--primary.is-link {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  color: var(--color-primary) !important;
-}
-
-.el-button--primary.is-text:hover,
-.el-button--primary.is-link:hover,
-.el-button--primary.is-text:focus,
-.el-button--primary.is-link:focus {
-  background: var(--el-color-primary-light-9) !important;
-  color: var(--el-color-primary-dark-2) !important;
-  transform: none;
-  box-shadow: none !important;
-}
-
-/* Success */
-.el-button--success {
-  background: var(--color-success) !important;
-  border-color: var(--color-success) !important;
-  color: #fff !important;
-  box-shadow: 0 4px 12px rgba(99, 197, 110, 0.28);
-}
-
-.el-button--success:hover,
-.el-button--success:focus {
-  background: var(--el-color-success-dark-2) !important;
-  border-color: var(--el-color-success-dark-2) !important;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(99, 197, 110, 0.36);
-  color: #fff !important;
-}
-
-.el-button--success.is-plain {
-  background: var(--el-color-success-light-9) !important;
-  color: var(--color-success) !important;
-  border: 1px solid var(--el-color-success-light-5) !important;
-  box-shadow: none !important;
-}
-
-.el-button--success.is-plain:hover,
-.el-button--success.is-plain:focus {
-  background: var(--color-success) !important;
-  color: #fff !important;
-  border-color: var(--color-success) !important;
-}
-
-.el-button--success.is-text,
-.el-button--success.is-link {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  color: var(--color-success) !important;
-}
-
-/* Warning */
-.el-button--warning {
-  background: var(--color-warning) !important;
-  border-color: var(--color-warning) !important;
-  color: #fff !important;
-  box-shadow: 0 4px 12px rgba(247, 166, 47, 0.28);
-}
-
-.el-button--warning:hover,
-.el-button--warning:focus {
-  background: var(--el-color-warning-dark-2) !important;
-  border-color: var(--el-color-warning-dark-2) !important;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(247, 166, 47, 0.36);
-  color: #fff !important;
-}
-
-.el-button--warning.is-plain {
-  background: var(--el-color-warning-light-9) !important;
-  color: var(--color-warning) !important;
-  border: 1px solid var(--el-color-warning-light-5) !important;
-  box-shadow: none !important;
-}
-
-.el-button--warning.is-plain:hover,
-.el-button--warning.is-plain:focus {
-  background: var(--color-warning) !important;
-  color: #fff !important;
-  border-color: var(--color-warning) !important;
-}
-
-.el-button--warning.is-text,
-.el-button--warning.is-link {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  color: var(--color-warning) !important;
-}
-
-/* Danger */
-.el-button--danger {
-  background: var(--color-danger) !important;
-  border-color: var(--color-danger) !important;
-  color: #fff !important;
-  box-shadow: 0 4px 12px rgba(240, 101, 101, 0.28);
-}
-
-.el-button--danger:hover,
-.el-button--danger:focus {
-  background: var(--el-color-danger-dark-2) !important;
-  border-color: var(--el-color-danger-dark-2) !important;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(240, 101, 101, 0.36);
-  color: #fff !important;
-}
-
-.el-button--danger.is-plain {
-  background: var(--el-color-danger-light-9) !important;
-  color: var(--color-danger) !important;
-  border: 1px solid var(--el-color-danger-light-5) !important;
-  box-shadow: none !important;
-}
-
-.el-button--danger.is-plain:hover,
-.el-button--danger.is-plain:focus {
-  background: var(--color-danger) !important;
-  color: #fff !important;
-  border-color: var(--color-danger) !important;
-}
-
-.el-button--danger.is-text,
-.el-button--danger.is-link {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  color: var(--color-danger) !important;
-}
-
-/* Info */
-.el-button--info {
-  background: var(--color-info) !important;
-  border-color: var(--color-info) !important;
-  color: #fff !important;
-  box-shadow: 0 4px 12px rgba(139, 149, 167, 0.24);
-}
-
-.el-button--info:hover,
-.el-button--info:focus {
-  background: var(--el-color-info-dark-2) !important;
-  border-color: var(--el-color-info-dark-2) !important;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(139, 149, 167, 0.32);
-  color: #fff !important;
-}
-
-.el-button--info.is-plain {
-  background: var(--el-color-info-light-9) !important;
-  color: var(--color-info) !important;
-  border: 1px solid var(--el-color-info-light-5) !important;
-  box-shadow: none !important;
-}
-
-.el-button--info.is-plain:hover,
-.el-button--info.is-plain:focus {
-  background: var(--color-info) !important;
-  color: #fff !important;
-  border-color: var(--color-info) !important;
-}
-
-.el-button--info.is-text,
-.el-button--info.is-link {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  color: var(--color-info) !important;
-}
-
-/* Round / circle keep consistent shadow */
-.el-button.is-round,
-.el-button.is-circle {
-  box-shadow: none;
-}
-
-.el-button--primary.is-round,
-.el-button--primary.is-circle {
-  box-shadow: var(--primary-shadow);
-}
-
-/* Button group spacing */
-.el-button + .el-button {
-  margin-left: 10px;
-}
-
-/* Inputs - Modern Borders */
-.el-input__wrapper {
-  background-color: var(--bg-card) !important;
-  box-shadow: 0 0 0 1px var(--border-color) inset !important;
-  border-radius: var(--radius-md) !important;
-  transition: all 0.3s ease !important;
-}
-
-.el-input__wrapper:hover {
-  box-shadow: 0 0 0 1px var(--text-secondary) inset !important;
-}
-
-.el-input__wrapper.is-focus {
-  box-shadow: 0 0 0 2px var(--color-primary) inset !important;
-}
-
-.el-textarea__inner:focus {
-  border-color: var(--color-primary) !important;
-}
-
-.el-select__wrapper.is-focused {
-  box-shadow: 0 0 0 1px var(--color-primary) inset !important;
-}
-
-/* Radio / Checkbox */
-.el-radio__input.is-checked .el-radio__inner,
-.el-checkbox__input.is-checked .el-checkbox__inner {
-  background-color: var(--color-primary) !important;
-  border-color: var(--color-primary) !important;
-}
-
-.el-radio__input.is-checked + .el-radio__label,
-.el-checkbox__input.is-checked + .el-checkbox__label {
-  color: var(--color-primary) !important;
-}
-
-.el-switch.is-checked .el-switch__core {
-  background-color: var(--color-primary) !important;
-  border-color: var(--color-primary) !important;
-}
-
-/* Tags */
-.el-tag--primary {
-  --el-tag-bg-color: var(--el-color-primary-light-9);
-  --el-tag-border-color: var(--el-color-primary-light-7);
-  --el-tag-text-color: var(--color-primary);
-}
-
-.el-tag--success {
-  --el-tag-bg-color: var(--el-color-success-light-9);
-  --el-tag-border-color: var(--el-color-success-light-7);
-  --el-tag-text-color: var(--color-success);
-}
-
-.el-tag--warning {
-  --el-tag-bg-color: var(--el-color-warning-light-9);
-  --el-tag-border-color: var(--el-color-warning-light-7);
-  --el-tag-text-color: var(--color-warning);
-}
-
-.el-tag--danger {
-  --el-tag-bg-color: var(--el-color-danger-light-9);
-  --el-tag-border-color: var(--el-color-danger-light-7);
-  --el-tag-text-color: var(--color-danger);
-}
-
-.el-tag--info {
-  --el-tag-bg-color: var(--el-color-info-light-9);
-  --el-tag-border-color: var(--el-color-info-light-7);
-  --el-tag-text-color: var(--color-info);
-}
-
-/* Links */
-.el-link--primary {
-  --el-link-text-color: var(--color-primary);
-  --el-link-hover-text-color: var(--el-color-primary-dark-2);
-}
-
-/* Pagination active */
-.el-pagination .el-pager li.is-active {
-  color: var(--color-primary) !important;
-  font-weight: 700;
-}
-
-.el-pagination .el-pager li:hover {
-  color: var(--color-primary) !important;
-}
-
-/* Tables */
-.el-table td.el-table__cell {
-  border-bottom: 1px solid var(--border-color-light) !important;
-}
-
-/* Dialogs/Modals */
-.el-dialog {
-  background: var(--bg-card) !important;
-  border-radius: var(--radius-lg) !important;
-  box-shadow: var(--shadow-lg) !important;
-}
-
-.el-dialog__title {
-  color: var(--text-primary) !important;
-}
-
-.el-dialog__body {
-  color: var(--text-regular) !important;
-}
-
-/* Menu/Sidebar */
-.el-menu {
-  background-color: var(--bg-card) !important;
-  border-right: none !important;
-}
-
-.el-menu-item {
-  color: var(--text-regular) !important;
-}
-
-.el-menu-item:hover {
-  background-color: var(--bg-body) !important;
-  color: var(--color-primary) !important;
-}
-
-.el-menu-item.is-active {
-  background: var(--bg-body) !important;
-  color: var(--color-primary) !important;
-  font-weight: 600;
-  position: relative;
-}
-
-.el-menu-item.is-active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: var(--primary-gradient);
-  border-radius: 0 4px 4px 0;
-}
-
-/* Tabs active underline */
-.el-tabs__active-bar {
-  background-color: var(--color-primary) !important;
-}
-
-.el-tabs__item.is-active,
-.el-tabs__item:hover {
-  color: var(--color-primary) !important;
-}
-
-/* Progress */
-.el-progress-bar__inner {
-  background: var(--primary-gradient) !important;
-}
-
-/* Loading spinner */
-.el-loading-spinner .path {
-  stroke: var(--color-primary) !important;
-}
-
-/* =========================================================
- * Dark Mode Specific Fixes
- * ========================================================= */
-html.dark .el-loading-mask {
-  background-color: rgba(0, 0, 0, 0.7);
-}
-
-html.dark .el-drawer,
-html.dark .el-dialog {
-  background-color: var(--bg-card);
-}
-
-html.dark .el-form-item__label {
-  color: var(--text-regular) !important;
-}
-
-html.dark .el-input__wrapper,
-html.dark .el-textarea__inner {
-  background-color: rgba(255, 255, 255, 0.05) !important;
-  box-shadow: 0 0 0 1px var(--border-color) inset !important;
-}
-
-html.dark .el-input__inner {
-  color: var(--text-primary) !important;
-}
-
-html.dark .el-select-dropdown,
-html.dark .el-dropdown-menu,
-html.dark .el-picker-panel {
-  background-color: var(--bg-card) !important;
-  border-color: var(--border-color-light) !important;
-}
-
-html.dark .el-select-dropdown__item,
-html.dark .el-dropdown-menu__item {
+.el-radio-button__inner,
+.el-checkbox-button__inner {
   color: var(--text-regular);
+  background: var(--surface-solid);
+  border-color: var(--border-color);
 }
 
-html.dark .el-select-dropdown__item.hover,
-html.dark .el-select-dropdown__item:hover,
-html.dark .el-dropdown-menu__item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
+.el-radio-button__original-radio:checked + .el-radio-button__inner,
+.el-checkbox-button.is-checked .el-checkbox-button__inner {
+  color: var(--text-on-brand);
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  box-shadow: -1px 0 0 0 var(--brand-primary);
 }
 
-html.dark .el-select__wrapper {
-  background-color: rgba(255, 255, 255, 0.05) !important;
-  box-shadow: 0 0 0 1px var(--border-color) inset !important;
+.el-empty__description p,
+.el-result__subtitle p {
+  color: var(--text-secondary);
 }
 
-html.dark .el-pagination button,
-html.dark .el-pagination .el-pager li {
-  background-color: transparent !important;
-  color: var(--text-regular);
-}
-
-html.dark .el-pagination .el-pager li.is-active {
-  color: var(--color-primary);
-}
-
-html.dark .el-step__title,
-html.dark .el-breadcrumb__inner {
-  color: var(--text-regular);
-}
-
-html.dark .el-breadcrumb__inner.is-link:hover {
-  color: var(--color-primary);
-}
-
-html.dark .el-table {
-  --el-table-bg-color: transparent;
-  --el-table-tr-bg-color: transparent;
-  --el-table-header-bg-color: rgba(255, 255, 255, 0.04);
-  --el-table-row-hover-bg-color: rgba(78, 140, 255, 0.08);
-  --el-table-border-color: var(--border-color-light);
-  --el-table-text-color: var(--text-regular);
-  --el-table-header-text-color: var(--text-primary);
-  background-color: transparent !important;
-  color: var(--text-regular) !important;
-}
-
-html.dark .el-table th.el-table__cell {
-  background-color: rgba(255, 255, 255, 0.04) !important;
-  color: var(--text-primary) !important;
-}
-
-html.dark .el-table td.el-table__cell {
-  background-color: transparent !important;
+.el-skeleton__item {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--brand-primary) 5%, var(--surface-solid)) 25%,
+    color-mix(in srgb, var(--brand-primary) 10%, var(--surface-solid)) 37%,
+    color-mix(in srgb, var(--brand-primary) 5%, var(--surface-solid)) 63%
+  );
+  background-size: 400% 100%;
 }
 
 html.dark .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
-  background: rgba(255, 255, 255, 0.03) !important;
-}
-
-html.dark .el-table__inner-wrapper::before {
-  background-color: var(--border-color-light);
-}
-
-html.dark .el-alert {
-  background-color: rgba(255, 255, 255, 0.05);
-  border-color: var(--border-color-light);
-}
-
-html.dark .el-alert__title {
-  color: var(--text-primary);
-}
-
-html.dark .el-alert__description {
-  color: var(--text-regular);
-}
-
-html.dark .el-card {
-  background: var(--bg-card) !important;
-}
-
-html.dark .el-button--default {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border-color: var(--border-color) !important;
-  color: var(--text-regular) !important;
-}
-
-html.dark .el-button--default:hover,
-html.dark .el-button--default:focus {
-  color: var(--color-primary) !important;
-  border-color: rgba(78, 140, 255, 0.45) !important;
-  background: rgba(78, 140, 255, 0.12) !important;
-}
-
-html.dark .el-button--primary.is-plain {
-  background: rgba(78, 140, 255, 0.14) !important;
-  border-color: rgba(78, 140, 255, 0.35) !important;
-}
-
-html.dark .el-button--primary.is-text:hover,
-html.dark .el-button--primary.is-link:hover {
-  background: rgba(78, 140, 255, 0.12) !important;
+  background: color-mix(in srgb, var(--brand-primary) 4%, var(--surface-solid));
 }

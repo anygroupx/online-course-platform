@@ -1,5 +1,5 @@
 <template>
-  <div class="enterprise-filter">
+  <div class="enterprise-filter fluent-filter-surface" data-depth="toolbar">
     <!-- 移动端：筛选按钮 + 抽屉 -->
     <template v-if="isMobile">
       <div class="mobile-filter-trigger">
@@ -548,5 +548,71 @@ defineExpose({
 :deep(.el-drawer__footer) {
   padding: 12px;
   border-top: 1px solid var(--border-color-light);
+}
+</style>
+
+<style scoped>
+/* 筛选器是表格的命令栏，使用亚克力但不引入明显旋转。 */
+.enterprise-filter {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.desktop-filter-wrapper {
+  padding: 16px 16px 4px;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), transparent),
+    var(--bg-card);
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-sm);
+  backdrop-filter: blur(18px) saturate(1.12);
+}
+
+.common-filter-form {
+  margin-bottom: 8px;
+}
+
+.common-filter-form :deep(.el-form-item) {
+  margin-bottom: 12px;
+}
+
+.advanced-filter-collapse {
+  margin: 0 -4px;
+  padding: 4px 4px 0;
+  border-top-color: var(--border-color-light);
+}
+
+.advanced-filter-collapse :deep(.el-collapse-item__header) {
+  min-height: 42px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.advanced-filter-collapse :deep(.el-collapse-item__header:hover) {
+  color: var(--brand-primary);
+}
+
+.advanced-filter-collapse :deep(.el-collapse-item__content) {
+  padding: 12px 0 4px;
+}
+
+.mobile-filter-trigger {
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-sm);
+  backdrop-filter: blur(16px);
+}
+
+:deep(.el-drawer__footer) {
+  border-top-color: var(--border-color-light);
+  background: color-mix(in srgb, var(--surface-solid) 42%, transparent);
 }
 </style>

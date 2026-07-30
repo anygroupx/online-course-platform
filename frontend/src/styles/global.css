@@ -1,162 +1,155 @@
-/* 全局样式文件 - 现代化设计 */
-
-/* 渐变背景 */
-.gradient-bg {
-    background: var(--primary-gradient);
+/* 全局基底只负责排版、可访问性与通用动画，具体组件材质放在主题层。 */
+html {
+  min-width: 320px;
+  min-height: 100%;
+  color-scheme: light;
+  background: var(--bg-body);
+  scroll-behavior: smooth;
 }
 
-/* 卡片阴影 */
-.card-shadow {
-    box-shadow: var(--shadow-sm);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+html.dark {
+  color-scheme: dark;
 }
 
-.card-shadow:hover {
-    box-shadow: var(--shadow-lg);
-    transform: translateY(-4px);
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  color: var(--text-regular);
+  background: var(--bg-body);
+  font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI",
+    "PingFang SC", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
 }
 
-/* 动画 */
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
 
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+a {
+  color: var(--brand-primary);
+  text-decoration: none;
+}
+
+::selection {
+  color: var(--text-on-brand);
+  background: var(--brand-primary);
+}
+
+/* 键盘焦点必须独立于颜色状态，避免只靠 hover 传达可操作性。 */
+:where(
+  a,
+  button,
+  input,
+  textarea,
+  select,
+  [role="button"],
+  [tabindex]
+):focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px var(--focus-ring);
+}
+
+/* 页面进入以轻微的 z 轴归位表达空间，不制造无意义的大幅位移。 */
+@keyframes fluent-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, -12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes spatial-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(0, -10px, 0) rotate(2deg);
+  }
+}
+
+@keyframes sheen-pass {
+  from {
+    transform: translateX(-140%) skewX(-18deg);
+  }
+  to {
+    transform: translateX(220%) skewX(-18deg);
+  }
 }
 
 .fade-in {
-    animation: fadeIn 0.5s ease-in-out;
+  animation: fluent-enter var(--motion-slow) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* 响应式表格 */
-@media (max-width: 768px) {
-    .el-table {
-        font-size: 12px;
-    }
-
-    .el-table__header th {
-        padding: 8px 0;
-    }
-
-    .el-table__body td {
-        padding: 8px 0;
-    }
+.gradient-bg {
+  background: var(--primary-gradient);
 }
 
-/* 美化滚动条 */
+.card-shadow {
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow var(--motion-base) ease;
+}
+
+.card-shadow:hover {
+  transform: translate3d(0, -3px, 0);
+  box-shadow: var(--shadow-lg);
+}
+
+/* 细滚动条保持系统感，同时兼顾深色主题。 */
+* {
+  scrollbar-color: color-mix(in srgb, var(--text-placeholder) 58%, transparent)
+    transparent;
+  scrollbar-width: thin;
+}
+
 ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+  width: 9px;
+  height: 9px;
 }
 
 ::-webkit-scrollbar-track {
-    background: var(--bg-body);
-    border-radius: 4px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: var(--text-placeholder);
-    border-radius: 4px;
+  min-height: 36px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-placeholder) 62%, transparent);
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-secondary) 76%, transparent);
+  background-clip: padding-box;
 }
 
-/* 表单优化 */
-.el-form-item__label {
-    font-weight: 500;
-    color: var(--text-regular);
+/* 用户关闭动效时，保留状态变化但移除空间位移。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }
 
-/* 按钮组 */
-.el-button-group {
-    display: flex;
-    gap: 10px;
-}
-
-/* 标签美化 */
-.el-tag {
-    border-radius: 4px;
-    font-weight: 500;
-    padding: 4px 12px !important;
-}
-
-/* 卡片头部 */
-.card-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 16px;
-    font-weight: bold;
-    color: var(--text-primary);
-}
-
-.card-header .el-icon {
-    font-size: 20px;
-}
-
-/* 标签页导航条全局样式优化 */
-.tags-view-container {
-    /* 确保在所有页面下都有一致的高度和样式 */
-    height: 44px !important;
-    min-height: 44px !important;
-    max-height: 44px !important;
-}
-
-/* 确保标签页项目在所有页面下都有一致的高度 */
-.tag-item {
-    height: 36px !important;
-    min-height: 36px !important;
-    max-height: 36px !important;
-}
-
-/* 移动端标签页高度优化 */
 @media (max-width: 768px) {
-    .tags-view-container {
-        height: 40px !important;
-        min-height: 40px !important;
-        max-height: 40px !important;
-    }
-
-    .tag-item {
-        height: 32px !important;
-        min-height: 32px !important;
-        max-height: 32px !important;
-    }
-}
-
-@media (max-width: 480px) {
-    .tags-view-container {
-        height: 36px !important;
-        min-height: 36px !important;
-        max-height: 36px !important;
-    }
-
-    .tag-item {
-        height: 28px !important;
-        min-height: 28px !important;
-        max-height: 28px !important;
-    }
-}
-
-/* Primary action utility classes (homepage palette) */
-.btn-primary-gradient,
-.primary-action {
-  background: var(--primary-gradient) !important;
-  border: none !important;
-  color: #fff !important;
-  box-shadow: var(--primary-shadow);
-}
-
-.btn-primary-gradient:hover,
-.primary-action:hover {
-  opacity: 0.94;
-  box-shadow: var(--primary-shadow-hover);
-  transform: translateY(-1px);
+  .el-table {
+    font-size: 12px;
+  }
 }

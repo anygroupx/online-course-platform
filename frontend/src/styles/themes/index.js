@@ -1,150 +1,93 @@
 /**
- * Design Tokens & Theme Definitions
- *
- * Aligned with Dashboard homepage palette:
- * blue #4e8cff / green #63c56e / orange #f7a62f / purple #766af6
+ * Fluent 2 × 3D Elements 运行时主题。
+ * 这里只维护语义变量，组件样式不再依赖具体色值，避免主题逻辑与业务组件耦合。
  */
-
 export const commonTokens = {
-  // Spacing & Radius
-  '--radius-sm': '4px',
-  '--radius-md': '8px',
-  '--radius-lg': '12px',
-  '--radius-xl': '16px',
-
-  '--header-height': '60px',
-  '--sidebar-width': '240px',
-
-  // Brand
-  '--brand-blue': '#4e8cff',
-  '--brand-blue-deep': '#3b7af0',
-  '--brand-green': '#63c56e',
-  '--brand-orange': '#f7a62f',
-  '--brand-purple': '#766af6',
-  '--brand-teal': '#39c9c1',
-
-  // Primary gradient
-  '--primary-gradient-start': '#4e8cff',
-  '--primary-gradient-end': '#766af6',
-  '--primary-gradient':
-    'linear-gradient(135deg, var(--primary-gradient-start) 0%, var(--primary-gradient-end) 100%)',
-  '--primary-shadow': '0 4px 14px rgba(78, 140, 255, 0.28)',
-  '--primary-shadow-hover': '0 8px 20px rgba(78, 140, 255, 0.36)',
-
-  // Functional Colors
-  '--color-primary': '#4e8cff',
-  '--color-success': '#63c56e',
-  '--color-warning': '#f7a62f',
-  '--color-danger': '#f06565',
-  '--color-info': '#8b95a7',
-
-  // Element Plus bridge
-  '--el-color-primary': '#4e8cff',
-  '--el-color-primary-light-3': '#7aabff',
-  '--el-color-primary-light-5': '#a6c7ff',
-  '--el-color-primary-light-7': '#c9dcff',
-  '--el-color-primary-light-8': '#dce9ff',
-  '--el-color-primary-light-9': '#eef4ff',
-  '--el-color-primary-dark-2': '#3b7af0',
-
-  '--el-color-success': '#63c56e',
-  '--el-color-success-light-3': '#8ad692',
-  '--el-color-success-light-5': '#b1e4b7',
-  '--el-color-success-light-7': '#d0f0d4',
-  '--el-color-success-light-8': '#e0f5e3',
-  '--el-color-success-light-9': '#effaf0',
-  '--el-color-success-dark-2': '#4fb45b',
-
-  '--el-color-warning': '#f7a62f',
-  '--el-color-warning-light-3': '#f9bc63',
-  '--el-color-warning-light-5': '#fbd296',
-  '--el-color-warning-light-7': '#fce4c0',
-  '--el-color-warning-light-8': '#fdeed7',
-  '--el-color-warning-light-9': '#fff6e8',
-  '--el-color-warning-dark-2': '#e0921f',
-
-  '--el-color-danger': '#f06565',
-  '--el-color-danger-light-3': '#f48c8c',
-  '--el-color-danger-light-5': '#f7b1b1',
-  '--el-color-danger-light-7': '#fad0d0',
-  '--el-color-danger-light-8': '#fbe0e0',
-  '--el-color-danger-light-9': '#fdf0f0',
-  '--el-color-danger-dark-2': '#e04f4f',
-
-  '--el-color-info': '#8b95a7',
-  '--el-color-info-light-3': '#a8b0be',
-  '--el-color-info-light-5': '#c4cad4',
-  '--el-color-info-light-7': '#dce0e6',
-  '--el-color-info-light-8': '#e8ebf0',
-  '--el-color-info-light-9': '#f3f5f8',
-  '--el-color-info-dark-2': '#727c8f',
-}
+  "--radius-xs": "4px",
+  "--radius-sm": "8px",
+  "--radius-md": "12px",
+  "--radius-lg": "16px",
+  "--radius-xl": "24px",
+  "--header-height": "68px",
+  "--sidebar-width": "252px",
+  "--motion-fast": "160ms",
+  "--motion-base": "240ms",
+  "--motion-slow": "420ms",
+};
 
 export const lightTheme = {
   ...commonTokens,
-
-  '--brand-blue-soft': '#eef4ff',
-  '--brand-green-soft': '#effaf0',
-  '--brand-orange-soft': '#fff6e8',
-  '--brand-purple-soft': '#f1efff',
-  '--brand-teal-soft': '#eafbf8',
-
-  // Backgrounds
-  '--bg-body': '#f5f7fa',
-  '--bg-card': 'rgba(255, 255, 255, 0.92)',
-  '--bg-card-hover': 'rgba(255, 255, 255, 1)',
-  '--bg-overlay': 'rgba(255, 255, 255, 0.8)',
-
-  // Text
-  '--text-primary': '#1f2937',
-  '--text-regular': '#4b5563',
-  '--text-secondary': '#6b7280',
-  '--text-placeholder': '#9ca3af',
-
-  // Borders
-  '--border-color': '#dcdfe6',
-  '--border-color-light': '#e4e7ed',
-
-  // Shadows
-  '--shadow-sm': '0 2px 4px rgba(139, 168, 218, 0.08)',
-  '--shadow-md': '0 8px 30px rgba(139, 168, 218, 0.16)',
-  '--shadow-lg': '0 12px 32px rgba(126, 164, 223, 0.22)',
-}
+  "--brand-primary": "#0f6cbd",
+  "--brand-primary-hover": "#115ea3",
+  "--brand-primary-pressed": "#0c3b5e",
+  "--brand-cyan": "#00b7c3",
+  "--brand-violet": "#7160e8",
+  "--primary-gradient-start": "#0f6cbd",
+  "--primary-gradient-end": "#00b7c3",
+  "--primary-gradient": "linear-gradient(135deg, #0f6cbd 0%, #1683d8 48%, #00b7c3 100%)",
+  "--color-success": "#107c10",
+  "--color-warning": "#f7630c",
+  "--color-danger": "#c50f1f",
+  "--color-info": "#0078d4",
+  "--bg-body": "#eef4fb",
+  "--bg-card": "rgba(255, 255, 255, 0.78)",
+  "--bg-card-hover": "rgba(255, 255, 255, 0.94)",
+  "--bg-overlay": "rgba(244, 248, 253, 0.78)",
+  "--surface-solid": "#ffffff",
+  "--surface-mica": "rgba(242, 247, 252, 0.82)",
+  "--surface-acrylic": "rgba(255, 255, 255, 0.68)",
+  "--text-primary": "#17202b",
+  "--text-regular": "#354052",
+  "--text-secondary": "#5c6675",
+  "--text-placeholder": "#737d8c",
+  "--text-on-brand": "#ffffff",
+  "--border-color": "rgba(74, 91, 113, 0.22)",
+  "--border-color-light": "rgba(74, 91, 113, 0.12)",
+  "--stroke-highlight": "rgba(255, 255, 255, 0.92)",
+  "--focus-ring": "rgba(15, 108, 189, 0.32)",
+  "--shadow-sm": "0 2px 4px rgba(33, 51, 78, 0.10), 0 1px 1px rgba(33, 51, 78, 0.08)",
+  "--shadow-md": "0 8px 24px rgba(33, 51, 78, 0.14), 0 2px 8px rgba(33, 51, 78, 0.08)",
+  "--shadow-lg": "0 20px 52px rgba(33, 51, 78, 0.18), 0 8px 20px rgba(33, 51, 78, 0.10)",
+  "--shadow-float": "0 32px 80px rgba(21, 48, 82, 0.22), 0 10px 28px rgba(21, 48, 82, 0.12)",
+};
 
 export const darkTheme = {
   ...commonTokens,
-
-  '--brand-blue-soft': 'rgba(78, 140, 255, 0.16)',
-  '--brand-green-soft': 'rgba(99, 197, 110, 0.16)',
-  '--brand-orange-soft': 'rgba(247, 166, 47, 0.16)',
-  '--brand-purple-soft': 'rgba(118, 106, 246, 0.16)',
-  '--brand-teal-soft': 'rgba(57, 201, 193, 0.16)',
-
-  // Backgrounds
-  '--bg-body': '#0f172a',
-  '--bg-card': 'rgba(30, 41, 59, 0.8)',
-  '--bg-card-hover': 'rgba(40, 50, 70, 0.9)',
-  '--bg-overlay': 'rgba(0, 0, 0, 0.8)',
-
-  // Text
-  '--text-primary': '#FFFFFF',
-  '--text-regular': '#E5EAF3',
-  '--text-secondary': '#A3A6AD',
-  '--text-placeholder': '#8D9095',
-
-  // Borders
-  '--border-color': '#4C4D4F',
-  '--border-color-light': '#363637',
-
-  // Shadows
-  '--shadow-sm': '0 2px 4px rgba(0, 0, 0, 0.3)',
-  '--shadow-md': '0 4px 12px rgba(0, 0, 0, 0.4)',
-  '--shadow-lg': '0 8px 24px rgba(0, 0, 0, 0.5)',
-  '--primary-shadow': '0 4px 14px rgba(78, 140, 255, 0.35)',
-  '--primary-shadow-hover': '0 8px 20px rgba(78, 140, 255, 0.45)',
-}
+  "--brand-primary": "#479ef5",
+  "--brand-primary-hover": "#62abf5",
+  "--brand-primary-pressed": "#2886de",
+  "--brand-cyan": "#38d5de",
+  "--brand-violet": "#9c89ff",
+  "--primary-gradient-start": "#479ef5",
+  "--primary-gradient-end": "#38d5de",
+  "--primary-gradient": "linear-gradient(135deg, #479ef5 0%, #6e7df2 48%, #38d5de 100%)",
+  "--color-success": "#54b054",
+  "--color-warning": "#f9a825",
+  "--color-danger": "#f1707b",
+  "--color-info": "#62abf5",
+  "--bg-body": "#07111f",
+  "--bg-card": "rgba(14, 29, 48, 0.76)",
+  "--bg-card-hover": "rgba(20, 40, 64, 0.90)",
+  "--bg-overlay": "rgba(7, 17, 31, 0.80)",
+  "--surface-solid": "#101d2e",
+  "--surface-mica": "rgba(11, 24, 41, 0.86)",
+  "--surface-acrylic": "rgba(17, 35, 57, 0.68)",
+  "--text-primary": "#f5f8fc",
+  "--text-regular": "#d6e0ec",
+  "--text-secondary": "#a8b5c5",
+  "--text-placeholder": "#8391a3",
+  "--text-on-brand": "#ffffff",
+  "--border-color": "rgba(157, 192, 231, 0.24)",
+  "--border-color-light": "rgba(157, 192, 231, 0.13)",
+  "--stroke-highlight": "rgba(209, 231, 255, 0.20)",
+  "--focus-ring": "rgba(71, 158, 245, 0.40)",
+  "--shadow-sm": "0 2px 6px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(157, 192, 231, 0.04)",
+  "--shadow-md": "0 10px 28px rgba(0, 0, 0, 0.38), 0 2px 10px rgba(0, 0, 0, 0.28)",
+  "--shadow-lg": "0 24px 58px rgba(0, 0, 0, 0.48), 0 0 28px rgba(71, 158, 245, 0.08)",
+  "--shadow-float": "0 36px 90px rgba(0, 0, 0, 0.58), 0 0 44px rgba(56, 213, 222, 0.10)",
+};
 
 export const themes = {
   light: lightTheme,
   dark: darkTheme,
-}
+};

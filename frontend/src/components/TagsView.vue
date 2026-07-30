@@ -1,13 +1,13 @@
 <template>
-  <div class="tags-view-container">
+  <div class="tags-view-container fluent-acrylic" data-depth="command-tabs">
     <!-- 标签页滚动容器 -->
-    <div 
-      ref="scrollContainer" 
+    <div
+      ref="scrollContainer"
       class="tags-view-wrapper"
       @scroll="handleScroll"
     >
-      <div 
-        ref="tagsContainer" 
+      <div
+        ref="tagsContainer"
         class="tags-container"
         :style="{ transform: `translateX(${scrollLeft}px)` }"
       >
@@ -46,10 +46,10 @@
         @click="scrollRightAction"
         class="scroll-btn"
       />
-      
+
       <!-- 更多操作按钮 -->
-      <el-dropdown 
-        trigger="click" 
+      <el-dropdown
+        trigger="click"
         @command="handleDropdownCommand"
         class="more-actions"
       >
@@ -203,9 +203,9 @@ const handleTagClick = (tag) => {
 // 标签关闭
 const handleTagClose = async (tag) => {
   if (!tag.closable) return
-  
+
   await tagsViewStore.delView(tag)
-  
+
   // 如果关闭的是当前页面，跳转到上一个标签页
   if (tag.path === route.path) {
     const currentIndex = visitedViews.value.findIndex(v => v.path === tag.path)
@@ -226,7 +226,7 @@ const handleTagContextMenu = (event, tag) => {
   event.preventDefault()
   contextMenuTag.value = tag
   contextMenuVisible.value = true
-  
+
   nextTick(() => {
     if (contextMenuRef.value) {
       contextMenuRef.value.$el.style.left = `${event.clientX}px`
@@ -266,7 +266,7 @@ const handleContextMenuCommand = async (command) => {
       ElMessage.success(tag.fixed ? '已取消固定' : '已固定标签')
       break
   }
-  
+
   contextMenuVisible.value = false
 }
 
@@ -299,7 +299,7 @@ const handleDropdownCommand = async (command) => {
 const closeLeftTags = async (tag) => {
   const currentIndex = visitedViews.value.findIndex(v => v.path === tag.path)
   const leftTags = visitedViews.value.slice(0, currentIndex).filter(t => !t.fixed)
-  
+
   for (const leftTag of leftTags) {
     await tagsViewStore.delView(leftTag)
   }
@@ -309,7 +309,7 @@ const closeLeftTags = async (tag) => {
 const closeRightTags = async (tag) => {
   const currentIndex = visitedViews.value.findIndex(v => v.path === tag.path)
   const rightTags = visitedViews.value.slice(currentIndex + 1).filter(t => !t.fixed)
-  
+
   for (const rightTag of rightTags) {
     await tagsViewStore.delView(rightTag)
   }
@@ -332,7 +332,7 @@ const handleDragOver = (event, index) => {
 
 const handleDrop = (event, dropIndex) => {
   event.preventDefault()
-  
+
   if (draggingIndex.value !== -1 && draggingIndex.value !== dropIndex) {
     tagsViewStore.moveView(draggingIndex.value, dropIndex)
   }
@@ -380,10 +380,10 @@ watch(
 // 调整滚动位置
 const adjustScrollPosition = () => {
   if (!scrollContainer.value || !tagsContainer.value) return
-  
+
   const containerWidth = scrollContainer.value.clientWidth
   const tagsWidth = tagsContainer.value.scrollWidth
-  
+
   if (tagsWidth <= containerWidth) {
     scrollLeft.value = 0
   } else {
@@ -392,7 +392,7 @@ const adjustScrollPosition = () => {
     if (activeTag) {
       const tagRect = activeTag.getBoundingClientRect()
       const containerRect = scrollContainer.value.getBoundingClientRect()
-      
+
       if (tagRect.left < containerRect.left) {
         scrollLeft.value = Math.min(0, scrollLeft.value + (containerRect.left - tagRect.left))
       } else if (tagRect.right > containerRect.right) {
@@ -406,7 +406,7 @@ const adjustScrollPosition = () => {
 onMounted(() => {
   // 初始化时添加当前路由
   tagsViewStore.addView(route)
-  
+
   // 监听窗口大小变化
   window.addEventListener('resize', adjustScrollPosition)
 })
@@ -491,12 +491,12 @@ html.dark .more-btn:hover {
     height: 40px;
     padding: 0 8px;
   }
-  
+
   .tags-view-actions {
     margin-left: 8px;
     gap: 4px;
   }
-  
+
   .scroll-btn,
   .more-btn {
     width: 24px;
@@ -508,6 +508,94 @@ html.dark .more-btn:hover {
   .tags-view-container {
     height: 36px;
     padding: 0 6px;
+  }
+}
+</style>
+
+<style scoped>
+/* 标签栏是工作区命令层，采用低 elevation 亚克力而不是传统浏览器标签。 */
+.tags-view-container {
+  position: relative;
+  z-index: 8;
+  height: 44px !important;
+  min-height: 44px !important;
+  margin: 8px 10px 0;
+  padding: 4px 6px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-acrylic) 86%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-sm);
+  backdrop-filter: blur(22px) saturate(1.16);
+}
+
+.tags-view-wrapper {
+  height: 34px;
+}
+
+.tags-container {
+  gap: 4px;
+  height: 34px;
+}
+
+.tags-container :deep(.tag-item) {
+  height: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: var(--text-secondary);
+  background: transparent;
+  box-shadow: none;
+  transition:
+    color var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    transform var(--motion-fast) ease;
+}
+
+.tags-container :deep(.tag-item:hover) {
+  color: var(--text-primary);
+  border-color: var(--border-color-light);
+  background: color-mix(in srgb, var(--surface-solid) 52%, transparent);
+  transform: translateY(-1px);
+}
+
+.tags-container :deep(.tag-item.active),
+.tags-container :deep(.tag-item.is-active) {
+  color: var(--brand-primary);
+  border-color: color-mix(in srgb, var(--brand-primary) 24%, var(--border-color-light));
+  background: color-mix(in srgb, var(--brand-primary) 10%, var(--surface-solid));
+  box-shadow: inset 0 -2px 0 var(--brand-primary);
+}
+
+.tags-view-actions {
+  gap: 2px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border-color-light);
+}
+
+.scroll-btn,
+.more-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+}
+
+.scroll-btn:hover,
+.more-btn:hover {
+  color: var(--brand-primary);
+  background: color-mix(in srgb, var(--brand-primary) 9%, transparent);
+}
+
+@media (max-width: 768px) {
+  .tags-view-container {
+    height: 42px !important;
+    min-height: 42px !important;
+    margin: 6px 8px 0;
+    border-radius: 12px;
   }
 }
 </style>

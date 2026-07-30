@@ -2,7 +2,8 @@
   <button
     class="theme-toggle"
     @click="toggleTheme"
-    :title="iconState ? 'Switch to Light Mode' : 'Switch to Dark Mode'"
+    :title="iconState ? '切换到浅色模式' : '切换到深色模式'"
+    :aria-label="iconState ? '切换到浅色模式' : '切换到深色模式'"
   >
     <div class="icon-container" :class="{ 'is-dark': iconState }">
       <!-- Sun Icon -->
@@ -137,6 +138,44 @@ const toggleTheme = async (event) => {
 
 ::view-transition-new(root) {
   z-index: 9999;
+}
+</style>
+
+<style scoped>
+/* 主题按钮模拟 Windows 11 的轻量实体控件，按下时回到基准面。 */
+.theme-toggle {
+  width: 38px;
+  height: 38px;
+  padding: 8px;
+  border: 1px solid var(--border-color-light);
+  border-radius: 12px;
+  color: var(--text-regular);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.14), transparent),
+    color-mix(in srgb, var(--surface-solid) 58%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    0 3px 8px rgba(33, 51, 78, 0.10);
+  transition:
+    transform var(--motion-fast) cubic-bezier(0.16, 1, 0.3, 1),
+    color var(--motion-fast) ease,
+    background-color var(--motion-fast) ease;
+}
+
+.theme-toggle:hover {
+  color: var(--brand-primary);
+  background: color-mix(in srgb, var(--brand-primary) 9%, var(--surface-solid));
+  transform: translateY(-1px);
+}
+
+.theme-toggle:active {
+  transform: translateY(1px);
+}
+
+.icon {
+  transition:
+    opacity var(--motion-base) ease,
+    transform var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1);
 }
 </style>
 
