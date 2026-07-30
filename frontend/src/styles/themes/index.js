@@ -1,94 +1,93 @@
 /**
- * Design Tokens & Theme Definitions
- * 
- * Defines the core color palette and semantic tokens for the application.
- * These are applied as CSS variables at runtime.
+ * Fluent 2 × 3D Elements 运行时主题。
+ * 这里只维护语义变量，组件样式不再依赖具体色值，避免主题逻辑与业务组件耦合。
  */
-
 export const commonTokens = {
-    // Spacing & Radius
-    '--radius-sm': '4px',
-    '--radius-md': '8px',
-    '--radius-lg': '12px',
-    '--radius-xl': '16px',
-
-    '--header-height': '60px',
-    '--sidebar-width': '240px',
-
-    // Shadows (Base definitions, can be overridden per theme if needed)
-    '--shadow-sm': '0 2px 4px rgba(0, 0, 0, 0.05)',
-    '--shadow-md': '0 4px 12px rgba(0, 0, 0, 0.08)',
-    '--shadow-lg': '0 8px 24px rgba(0, 0, 0, 0.12)',
-}
+  "--radius-xs": "4px",
+  "--radius-sm": "8px",
+  "--radius-md": "12px",
+  "--radius-lg": "16px",
+  "--radius-xl": "24px",
+  "--header-height": "68px",
+  "--sidebar-width": "252px",
+  "--motion-fast": "160ms",
+  "--motion-base": "240ms",
+  "--motion-slow": "420ms",
+};
 
 export const lightTheme = {
-    ...commonTokens,
-
-    // Brand Colors
-    '--primary-gradient-start': '#667eea',
-    '--primary-gradient-end': '#764ba2',
-    '--primary-gradient': 'linear-gradient(135deg, var(--primary-gradient-start) 0%, var(--primary-gradient-end) 100%)',
-
-    // Functional Colors
-    '--color-success': '#67c23a',
-    '--color-warning': '#e6a23c',
-    '--color-danger': '#f56c6c',
-    '--color-info': '#909399',
-
-    // Backgrounds
-    '--bg-body': '#f5f7fa',
-    '--bg-card': 'rgba(255, 255, 255, 0.9)',
-    '--bg-card-hover': 'rgba(255, 255, 255, 1)',
-    '--bg-overlay': 'rgba(255, 255, 255, 0.8)',
-
-    // Text
-    '--text-primary': '#303133',
-    '--text-regular': '#606266',
-    '--text-secondary': '#909399',
-    '--text-placeholder': '#a8abb2',
-
-    // Borders
-    '--border-color': '#dcdfe6',
-    '--border-color-light': '#e4e7ed',
-}
+  ...commonTokens,
+  "--brand-primary": "#0f6cbd",
+  "--brand-primary-hover": "#115ea3",
+  "--brand-primary-pressed": "#0c3b5e",
+  "--brand-cyan": "#00b7c3",
+  "--brand-violet": "#7160e8",
+  "--primary-gradient-start": "#0f6cbd",
+  "--primary-gradient-end": "#00b7c3",
+  "--primary-gradient": "linear-gradient(135deg, #0f6cbd 0%, #1683d8 48%, #00b7c3 100%)",
+  "--color-success": "#107c10",
+  "--color-warning": "#f7630c",
+  "--color-danger": "#c50f1f",
+  "--color-info": "#0078d4",
+  "--bg-body": "#eef4fb",
+  "--bg-card": "rgba(255, 255, 255, 0.78)",
+  "--bg-card-hover": "rgba(255, 255, 255, 0.94)",
+  "--bg-overlay": "rgba(244, 248, 253, 0.78)",
+  "--surface-solid": "#ffffff",
+  "--surface-mica": "rgba(242, 247, 252, 0.82)",
+  "--surface-acrylic": "rgba(255, 255, 255, 0.68)",
+  "--text-primary": "#17202b",
+  "--text-regular": "#354052",
+  "--text-secondary": "#5c6675",
+  "--text-placeholder": "#737d8c",
+  "--text-on-brand": "#ffffff",
+  "--border-color": "rgba(74, 91, 113, 0.22)",
+  "--border-color-light": "rgba(74, 91, 113, 0.12)",
+  "--stroke-highlight": "rgba(255, 255, 255, 0.92)",
+  "--focus-ring": "rgba(15, 108, 189, 0.32)",
+  "--shadow-sm": "0 2px 4px rgba(33, 51, 78, 0.10), 0 1px 1px rgba(33, 51, 78, 0.08)",
+  "--shadow-md": "0 8px 24px rgba(33, 51, 78, 0.14), 0 2px 8px rgba(33, 51, 78, 0.08)",
+  "--shadow-lg": "0 20px 52px rgba(33, 51, 78, 0.18), 0 8px 20px rgba(33, 51, 78, 0.10)",
+  "--shadow-float": "0 32px 80px rgba(21, 48, 82, 0.22), 0 10px 28px rgba(21, 48, 82, 0.12)",
+};
 
 export const darkTheme = {
-    ...commonTokens,
-
-    // Brand Colors (Can be adjusted for dark mode if needed)
-    '--primary-gradient-start': '#667eea',
-    '--primary-gradient-end': '#764ba2',
-    '--primary-gradient': 'linear-gradient(135deg, var(--primary-gradient-start) 0%, var(--primary-gradient-end) 100%)',
-
-    // Functional Colors
-    '--color-success': '#67c23a',
-    '--color-warning': '#e6a23c',
-    '--color-danger': '#f56c6c',
-    '--color-info': '#909399',
-
-    // Backgrounds
-    '--bg-body': '#0f172a',
-    '--bg-card': 'rgba(30, 41, 59, 0.8)',
-    '--bg-card-hover': 'rgba(40, 50, 70, 0.9)',
-    '--bg-overlay': 'rgba(0, 0, 0, 0.8)',
-
-    // Text
-    '--text-primary': '#FFFFFF',
-    '--text-regular': '#E5EAF3',
-    '--text-secondary': '#A3A6AD',
-    '--text-placeholder': '#8D9095',
-
-    // Borders
-    '--border-color': '#4C4D4F',
-    '--border-color-light': '#363637',
-
-    // Shadow Overrides for Dark Mode
-    '--shadow-sm': '0 2px 4px rgba(0, 0, 0, 0.3)',
-    '--shadow-md': '0 4px 12px rgba(0, 0, 0, 0.4)',
-    '--shadow-lg': '0 8px 24px rgba(0, 0, 0, 0.5)',
-}
+  ...commonTokens,
+  "--brand-primary": "#479ef5",
+  "--brand-primary-hover": "#62abf5",
+  "--brand-primary-pressed": "#2886de",
+  "--brand-cyan": "#38d5de",
+  "--brand-violet": "#9c89ff",
+  "--primary-gradient-start": "#479ef5",
+  "--primary-gradient-end": "#38d5de",
+  "--primary-gradient": "linear-gradient(135deg, #479ef5 0%, #6e7df2 48%, #38d5de 100%)",
+  "--color-success": "#54b054",
+  "--color-warning": "#f9a825",
+  "--color-danger": "#f1707b",
+  "--color-info": "#62abf5",
+  "--bg-body": "#07111f",
+  "--bg-card": "rgba(14, 29, 48, 0.76)",
+  "--bg-card-hover": "rgba(20, 40, 64, 0.90)",
+  "--bg-overlay": "rgba(7, 17, 31, 0.80)",
+  "--surface-solid": "#101d2e",
+  "--surface-mica": "rgba(11, 24, 41, 0.86)",
+  "--surface-acrylic": "rgba(17, 35, 57, 0.68)",
+  "--text-primary": "#f5f8fc",
+  "--text-regular": "#d6e0ec",
+  "--text-secondary": "#a8b5c5",
+  "--text-placeholder": "#8391a3",
+  "--text-on-brand": "#ffffff",
+  "--border-color": "rgba(157, 192, 231, 0.24)",
+  "--border-color-light": "rgba(157, 192, 231, 0.13)",
+  "--stroke-highlight": "rgba(209, 231, 255, 0.20)",
+  "--focus-ring": "rgba(71, 158, 245, 0.40)",
+  "--shadow-sm": "0 2px 6px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(157, 192, 231, 0.04)",
+  "--shadow-md": "0 10px 28px rgba(0, 0, 0, 0.38), 0 2px 10px rgba(0, 0, 0, 0.28)",
+  "--shadow-lg": "0 24px 58px rgba(0, 0, 0, 0.48), 0 0 28px rgba(71, 158, 245, 0.08)",
+  "--shadow-float": "0 36px 90px rgba(0, 0, 0, 0.58), 0 0 44px rgba(56, 213, 222, 0.10)",
+};
 
 export const themes = {
-    light: lightTheme,
-    dark: darkTheme,
-}
+  light: lightTheme,
+  dark: darkTheme,
+};

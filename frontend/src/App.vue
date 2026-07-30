@@ -21,16 +21,16 @@ onMounted(() => {
 }
 
 #app {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 
-    Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', 
-    Arial, sans-serif;
+  min-height: 100vh;
+  font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI",
+    "PingFang SC", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* 全局过渡动画 */
+/* 页面切换只表达层级变化，避免干扰高频操作。 */
 .fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s, transform 0.3s;
+  transition: opacity var(--motion-base), transform var(--motion-base);
 }
 
 .fade-enter-from {
@@ -43,24 +43,10 @@ onMounted(() => {
   transform: translateY(-10px);
 }
 
-/* 全局滚动条美化 */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #764ba2 0%, #667eea 100%);
+@media (prefers-reduced-motion: reduce) {
+  .fade-enter-active,
+  .fade-leave-active {
+    transition-duration: 1ms;
+  }
 }
 </style>
-

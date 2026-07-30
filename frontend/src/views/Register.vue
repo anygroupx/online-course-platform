@@ -1,13 +1,36 @@
 <template>
-  <div class="register-container">
+  <div class="register-container auth-scene fluent-spatial-stage" data-spatial-page="register">
     <div class="background-overlay"></div>
-    <div class="register-box">
+    <!-- 注册入口沿用同一空间品牌层，避免认证流程出现视觉断裂。 -->
+    <section class="auth-story" data-depth="story" aria-label="产品介绍">
+      <div class="story-kicker">
+        <span></span>
+        JOIN LEARNING OPERATIONS
+      </div>
+      <h1>从一枚邀请码，<br />进入协作工作台。</h1>
+      <p>轻量注册、清晰权限，让每位成员快速找到自己的工作位置。</p>
+      <div class="story-module" aria-hidden="true">
+        <span class="story-module-top"></span>
+        <span class="story-module-face"></span>
+        <span class="story-module-light"></span>
+      </div>
+      <ul class="story-points">
+        <li><span></span>邀请制访问</li>
+        <li><span></span>角色化工作区</li>
+        <li><span></span>跨设备一致体验</li>
+      </ul>
+    </section>
+
+    <div class="register-box fluent-depth-card" data-depth="auth-form">
       <div class="register-header">
         <div class="logo-icon">
-          <i class="el-icon-reading"></i>
+          <i></i><i></i><i></i><i></i>
         </div>
-        <h2>用户注册</h2>
-        <p class="subtitle">通过邀请码注册新账号</p>
+        <div>
+          <span class="auth-eyebrow">CREATE ACCOUNT</span>
+          <h2>创建新账号</h2>
+          <p class="subtitle">使用邀请码加入工作台</p>
+        </div>
       </div>
 
       <el-form
@@ -99,7 +122,7 @@
       </el-form>
     </div>
 
-    <div class="decorative-elements">
+    <div class="decorative-elements" aria-hidden="true">
       <div class="circle circle-1"></div>
       <div class="circle circle-2"></div>
       <div class="circle circle-3"></div>
@@ -267,7 +290,7 @@ html.dark .register-box {
   width: 60px;
   height: 60px;
   margin: 0 auto 15px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -298,7 +321,7 @@ html.dark .register-box {
   height: 48px;
   font-size: 16px;
   font-weight: 600;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   border: none;
   border-radius: 12px;
   transition: all 0.3s ease;
@@ -306,7 +329,7 @@ html.dark .register-box {
 
 .register-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--brand-primary) 40%, transparent);
 }
 
 .register-footer {
@@ -410,3 +433,5 @@ html.dark .register-box {
   }
 }
 </style>
+
+<style scoped lang="scss" src="../styles/auth-spatial.scss"></style>

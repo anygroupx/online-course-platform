@@ -374,21 +374,21 @@ onUnmounted(() => {
   right: 20px;
   width: 60px;
   height: 60px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   border-radius: 50%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--brand-primary) 40%, transparent);
   transition: all 0.3s ease;
   z-index: 1000;
 }
 
 .service-button:hover {
   transform: scale(1.1);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.6);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--brand-primary) 52%, transparent);
 }
 
 .service-button .el-icon {
@@ -427,7 +427,7 @@ onUnmounted(() => {
 
 /* 聊天头部 */
 .chat-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   color: white;
   padding: 12px 16px;
   display: flex;
@@ -514,7 +514,7 @@ onUnmounted(() => {
 }
 
 .message-right .message-content {
-  background: #667eea;
+  background: var(--brand-primary);
   color: white;
 }
 
@@ -571,13 +571,13 @@ onUnmounted(() => {
   right: 20px;
   width: 50px;
   height: 50px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--brand-primary) 40%, transparent);
   transition: all 0.3s ease;
   z-index: 1000;
 }
@@ -631,7 +631,7 @@ html.dark .message-content {
 }
 
 html.dark .message-right .message-content {
-  background: #667eea;
+  background: var(--brand-primary);
   color: white;
 }
 

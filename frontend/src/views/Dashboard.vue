@@ -1,22 +1,43 @@
 <template>
-  <div class="dashboard">
-    <section class="hero-panel">
+  <div class="dashboard fluent-spatial-stage" data-spatial-page="dashboard">
+    <section class="hero-panel fluent-depth-card" data-depth="hero">
       <div class="hero-copy">
-        <h1>欢迎使用二开台</h1>
-        <p>高效管理订单，实时掌握业务动态</p>
+        <div class="hero-kicker">
+          <span class="hero-kicker-dot"></span>
+          LEARNING OPERATIONS · LIVE
+        </div>
+        <h1>学习业务，尽在掌控</h1>
+        <p>把课程、订单与账户状态汇聚到同一座 Fluent 空间控制台。</p>
+        <div class="hero-actions">
+          <button type="button" class="hero-action hero-action--primary" @click="router.push('/orders')">
+            创建新订单
+            <el-icon><ArrowRight /></el-icon>
+          </button>
+          <button type="button" class="hero-action hero-action--secondary" @click="router.push('/courses')">
+            浏览课程库
+          </button>
+        </div>
       </div>
 
-      <div v-if="!isMobile" class="hero-visual" aria-hidden="true">
+      <!-- 仪表装置使用真实模板语义连接 CSS 3D，而不是仅声明未使用的透视样式。 -->
+      <div
+        v-if="!isMobile"
+        class="hero-visual"
+        data-tilt-axis="xy"
+        aria-hidden="true"
+      >
         <div class="hero-orb hero-orb--left">
           <el-icon><Bell /></el-icon>
         </div>
         <div class="hero-orb hero-orb--top">
           <el-icon><Wallet /></el-icon>
         </div>
-        <div class="hero-device">
+        <div class="hero-device" data-depth="device">
           <div class="hero-device-side-card"></div>
           <div class="hero-device-screen">
-            <div class="hero-device-header"></div>
+            <div class="hero-device-header">
+              <span></span><span></span><span></span>
+            </div>
             <div class="hero-bars">
               <span class="hero-bar hero-bar--tall"></span>
               <span class="hero-bar hero-bar--medium"></span>
@@ -31,7 +52,7 @@
     </section>
 
     <section class="dashboard-grid dashboard-grid--top">
-      <article class="content-panel announcements-panel">
+      <article class="content-panel announcements-panel fluent-depth-card" data-depth="2">
         <header class="panel-header">
           <div class="panel-title">
             <span class="panel-icon panel-icon--blue">
@@ -68,7 +89,7 @@
         <div v-else class="panel-empty">暂无最新公告</div>
       </article>
 
-      <article class="content-panel metric-panel metric-panel--balance">
+      <article class="content-panel metric-panel metric-panel--balance fluent-depth-card" data-depth="2">
         <div class="panel-title">
           <span class="panel-icon panel-icon--blue">
             <el-icon><Wallet /></el-icon>
@@ -86,7 +107,8 @@
 
       <button
         type="button"
-        class="content-panel action-panel action-panel--blue"
+        class="content-panel action-panel action-panel--blue fluent-depth-card"
+        data-depth="3"
         @click="router.push('/orders')"
       >
         <div class="action-panel-main">
@@ -102,7 +124,7 @@
     </section>
 
     <section class="dashboard-grid dashboard-grid--stats">
-      <article class="content-panel stat-panel">
+      <article class="content-panel stat-panel fluent-depth-card" data-depth="2">
         <div class="panel-title">
           <span class="panel-icon panel-icon--blue">
             <el-icon><Document /></el-icon>
@@ -123,7 +145,7 @@
         </div>
       </article>
 
-      <article class="content-panel stat-panel">
+      <article class="content-panel stat-panel fluent-depth-card" data-depth="2">
         <div class="panel-title">
           <span class="panel-icon panel-icon--green">
             <el-icon><DataAnalysis /></el-icon>
@@ -141,7 +163,8 @@
 
       <button
         type="button"
-        class="content-panel action-panel action-panel--green"
+        class="content-panel action-panel action-panel--green fluent-depth-card"
+        data-depth="3"
         @click="router.push('/price-list')"
       >
         <div class="action-panel-main">
@@ -155,7 +178,7 @@
         </span>
       </button>
 
-      <article class="content-panel stat-panel">
+      <article class="content-panel stat-panel fluent-depth-card" data-depth="2">
         <div class="panel-title">
           <span class="panel-icon panel-icon--orange">
             <el-icon><Money /></el-icon>
@@ -177,7 +200,7 @@
       </article>
     </section>
 
-    <section class="quick-panel">
+    <section class="quick-panel fluent-depth-card" data-depth="1">
       <div class="quick-panel-title">快速操作：常用入口</div>
 
       <div class="quick-actions">
@@ -470,8 +493,8 @@ onMounted(() => {
   --dashboard-green-soft: #effaf0;
   --dashboard-orange: #f7a62f;
   --dashboard-orange-soft: #fff6e8;
-  --dashboard-purple: #766af6;
-  --dashboard-purple-soft: #f1efff;
+  --dashboard-purple: var(--brand-violet);
+  --dashboard-purple-soft: color-mix(in srgb, var(--brand-violet) 10%, transparent);
   --dashboard-teal: #39c9c1;
   --dashboard-teal-soft: #eafbf8;
   --dashboard-surface: rgba(255, 255, 255, 0.92);
@@ -1363,5 +1386,404 @@ button.content-panel:hover,
 :global(html.dark) .panel-empty,
 :global(html.dark) .announcement-dialog-content {
   color: #cbd5e1;
+}
+</style>
+
+<style scoped>
+/* 首页是品牌空间的主舞台，3D 强度高于其他业务页但不改变信息顺序。 */
+.dashboard {
+  --dashboard-blue: var(--brand-primary);
+  --dashboard-blue-soft: color-mix(in srgb, var(--brand-primary) 11%, transparent);
+  --dashboard-green: var(--color-success);
+  --dashboard-green-soft: color-mix(in srgb, var(--color-success) 10%, transparent);
+  --dashboard-orange: var(--color-warning);
+  --dashboard-orange-soft: color-mix(in srgb, var(--color-warning) 11%, transparent);
+  --dashboard-purple: var(--brand-violet);
+  --dashboard-purple-soft: color-mix(in srgb, var(--brand-violet) 10%, transparent);
+  --dashboard-teal: var(--brand-cyan);
+  --dashboard-teal-soft: color-mix(in srgb, var(--brand-cyan) 10%, transparent);
+  --dashboard-surface: var(--bg-card);
+  --dashboard-surface-strong: var(--surface-solid);
+  --dashboard-border: var(--border-color-light);
+  --dashboard-shadow: var(--shadow-sm);
+  --dashboard-shadow-hover: var(--shadow-lg);
+  gap: 18px;
+  max-width: 1540px;
+  transform-style: preserve-3d;
+}
+
+.hero-panel,
+.content-panel,
+.quick-panel {
+  border-color: var(--border-color-light);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-sm);
+  backdrop-filter: blur(22px) saturate(1.18);
+}
+
+.hero-panel {
+  min-height: 268px;
+  padding: 38px 44px;
+  overflow: visible;
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 82% 24%, color-mix(in srgb, var(--brand-cyan) 18%, transparent), transparent 24%),
+    radial-gradient(circle at 62% -8%, color-mix(in srgb, var(--brand-violet) 12%, transparent), transparent 36%),
+    linear-gradient(135deg, color-mix(in srgb, var(--surface-solid) 88%, transparent), var(--surface-acrylic));
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-lg);
+  transform: translateZ(22px) rotateX(0.35deg);
+}
+
+.hero-panel::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  right: 7%;
+  bottom: -14px;
+  left: 7%;
+  height: 30px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand-primary) 22%, transparent);
+  filter: blur(22px);
+  transform: translateZ(-28px);
+}
+
+.hero-panel::after {
+  border-radius: inherit;
+  background:
+    linear-gradient(112deg, transparent 16%, rgba(255, 255, 255, 0.20) 42%, transparent 58%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.10), transparent 36%);
+  background-size: 210% 100%, auto;
+  animation: hero-light 9s ease-in-out infinite;
+}
+
+@keyframes hero-light {
+  0%,
+  72%,
+  100% {
+    background-position: -140% 0, 0 0;
+  }
+  88% {
+    background-position: 160% 0, 0 0;
+  }
+}
+
+.hero-copy {
+  max-width: 650px;
+  transform: translateZ(42px);
+}
+
+.hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 16px;
+  color: var(--brand-primary);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.15em;
+}
+
+.hero-kicker-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--brand-cyan);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--brand-cyan) 13%, transparent),
+    0 0 18px color-mix(in srgb, var(--brand-cyan) 64%, transparent);
+}
+
+.hero-copy h1 {
+  margin-bottom: 12px;
+  color: var(--text-primary);
+  font-size: clamp(34px, 4.4vw, 58px);
+  font-weight: 720;
+  letter-spacing: -0.045em;
+}
+
+.hero-copy p {
+  max-width: 560px;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.hero-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    transform var(--motion-fast) cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow var(--motion-fast) ease,
+    background-color var(--motion-fast) ease;
+}
+
+.hero-action:hover {
+  transform: translate3d(0, -2px, 8px);
+}
+
+.hero-action:active {
+  transform: translate3d(0, 1px, 0);
+}
+
+.hero-action--primary {
+  color: var(--text-on-brand);
+  background: var(--primary-gradient);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 10px 22px color-mix(in srgb, var(--brand-primary) 28%, transparent);
+}
+
+.hero-action--secondary {
+  color: var(--text-primary);
+  border-color: var(--border-color);
+  background: color-mix(in srgb, var(--surface-solid) 62%, transparent);
+}
+
+.hero-visual {
+  min-height: 218px;
+  perspective: 920px;
+  transform-style: preserve-3d;
+  transform: translateZ(34px) rotateX(2deg) rotateY(-3deg);
+}
+
+.hero-device {
+  right: 34px;
+  bottom: 4px;
+  width: 278px;
+  height: 176px;
+  transform-style: preserve-3d;
+  animation: device-float 5.6s ease-in-out infinite;
+}
+
+@keyframes device-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 22px) rotateY(-8deg) rotateX(2deg);
+  }
+  50% {
+    transform: translate3d(0, -8px, 34px) rotateY(-4deg) rotateX(0deg);
+  }
+}
+
+.hero-device-screen,
+.hero-device-side-card {
+  border-color: color-mix(in srgb, var(--brand-primary) 30%, var(--border-color));
+  border-radius: 16px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.28), transparent),
+    color-mix(in srgb, var(--surface-acrylic) 92%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    0 24px 48px rgba(22, 54, 88, 0.22);
+  backdrop-filter: blur(18px) saturate(1.28);
+}
+
+.hero-device-screen {
+  width: 190px;
+  height: 150px;
+  transform: translateZ(46px);
+}
+
+.hero-device-side-card {
+  width: 116px;
+  height: 108px;
+  transform: translateZ(12px) rotateY(13deg) rotateZ(-7deg);
+}
+
+.hero-device-header {
+  display: flex;
+  gap: 5px;
+  width: auto;
+  background: transparent;
+}
+
+.hero-device-header span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand-primary) 28%, transparent);
+}
+
+.hero-device-header span:first-child {
+  background: var(--brand-primary);
+}
+
+.hero-bar {
+  background: linear-gradient(180deg, var(--brand-cyan), var(--brand-primary));
+  box-shadow: 0 7px 16px color-mix(in srgb, var(--brand-primary) 18%, transparent);
+}
+
+.hero-orb {
+  border: 1px solid var(--border-color-light);
+  border-radius: 14px;
+  color: var(--brand-primary);
+  background: var(--surface-acrylic);
+  box-shadow:
+    inset 0 1px 0 var(--stroke-highlight),
+    var(--shadow-md);
+  backdrop-filter: blur(16px);
+  animation: spatial-drift 4.8s ease-in-out infinite;
+}
+
+.hero-orb--top {
+  animation-delay: -2.2s;
+}
+
+.hero-pillar {
+  border-radius: 8px 8px 3px 3px;
+  background: linear-gradient(180deg, var(--brand-cyan), var(--brand-primary));
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--brand-primary) 20%, transparent);
+}
+
+.content-panel {
+  min-height: 168px;
+  padding: 22px 24px;
+  overflow: hidden;
+}
+
+.content-panel::before,
+.quick-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(125deg, rgba(255, 255, 255, 0.08), transparent 42%);
+  pointer-events: none;
+}
+
+.panel-title,
+.action-panel-text,
+.quick-panel-title {
+  color: var(--text-primary);
+}
+
+.panel-more,
+.metric-subtext,
+.agent-overview-label {
+  color: var(--text-secondary);
+}
+
+.announcement-text,
+.quick-action-label,
+.stat-label {
+  color: var(--text-regular);
+}
+
+.metric-value,
+.agent-overview-value {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+
+.action-panel {
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--brand-primary) 14%, transparent), transparent 52%),
+    var(--bg-card);
+}
+
+.action-panel--green {
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--color-success) 14%, transparent), transparent 52%),
+    var(--bg-card);
+}
+
+.quick-panel {
+  padding: 22px 26px;
+}
+
+.quick-action-icon {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 18px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 12px 24px rgba(25, 62, 102, 0.16);
+  transform: translateZ(14px) rotateX(4deg);
+}
+
+.quick-action:hover .quick-action-icon {
+  transform: translate3d(0, -3px, 22px) rotateX(0deg);
+}
+
+:global(html.dark) .hero-panel {
+  background:
+    radial-gradient(circle at 82% 24%, rgba(56, 213, 222, 0.14), transparent 24%),
+    radial-gradient(circle at 62% -8%, rgba(156, 137, 255, 0.12), transparent 36%),
+    linear-gradient(135deg, rgba(18, 37, 61, 0.94), rgba(10, 24, 42, 0.82));
+}
+
+:global(html.dark) .hero-device-screen,
+:global(html.dark) .hero-device-side-card,
+:global(html.dark) .hero-orb {
+  background:
+    linear-gradient(145deg, rgba(209, 231, 255, 0.10), transparent),
+    rgba(18, 38, 62, 0.76);
+}
+
+@media (max-width: 960px) {
+  .hero-panel {
+    min-height: 232px;
+    padding: 30px 28px;
+    transform: none;
+  }
+
+  .hero-copy {
+    transform: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-panel {
+    padding: 26px 20px;
+    border-radius: var(--radius-lg);
+  }
+
+  .hero-copy h1 {
+    font-size: 32px;
+  }
+
+  .hero-actions {
+    margin-top: 22px;
+  }
+
+  .hero-action {
+    flex: 1 1 148px;
+  }
+
+  .content-panel,
+  .quick-panel {
+    border-radius: var(--radius-md);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-panel,
+  .hero-copy,
+  .hero-visual,
+  .hero-device,
+  .hero-orb,
+  .quick-action-icon {
+    animation: none;
+    transform: none;
+  }
 }
 </style>

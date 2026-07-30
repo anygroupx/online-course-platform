@@ -15,7 +15,7 @@
             <p>
               所有接口均需使用 <code>uid</code> 和 <code>api_key</code> 进行认证
             </p>
-            <!-- 基础url：frp-dad.com:14255 -->
+            <!-- 基础 URL：默认使用当前站点的 /api，也可由环境变量覆盖。 -->
             <p>
               基础请求URL：<code>{{ apiBaseUrl }}</code>
             </p>
@@ -1276,8 +1276,7 @@ import { ArrowRight, VideoPlay } from "@element-plus/icons-vue";
 import * as externalApi from "@/api/external";
 import router from "@/router";
 
-const apiBaseUrl =
-  import.meta.env.VITE_API_BASE_URL || "https://frp-dad.com:14255";
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "/api";
 
 // 凭证信息
 const credentials = reactive({
@@ -1652,7 +1651,7 @@ const testBudan = async () => {
 .title {
   font-size: 18px;
   font-weight: 600;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
