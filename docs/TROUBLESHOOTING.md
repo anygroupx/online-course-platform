@@ -1,354 +1,173 @@
-# 常见问题解决方案
+# 故障排查
 
-## 后端启动问题
+> 更新时间：2026-07-12
 
-### 问题1: Invalid value type for attribute 'factoryBeanObjectType'
+## 1. 后端启动失败
 
-**错误信息**:
-```
-java.lang.IllegalArgumentException: Invalid value type for attribute 'factoryBeanObjectType': java.lang.String
-```
+### 1.1 多模块打包错误
 
-**原因**: MyBatis Plus版本与Spring Boot 3.x不兼容
+**现象**：在 `backend/` 执行 `mvn spring-boot:run` 失败，或找不到主类。
 
-**解决方案**: 
-已修复！升级MyBatis Plus到3.5.7版本
+**原因**：父 POM 为聚合工程。
 
-**操作步骤**:
+**处理**：
+
 ```bash
-# 1. 清理Maven缓存
 cd backend
-mvn clean
-
-# 2. 重新下载依赖
-mvn dependency:purge-local-repository
-
-# 3. 重新编译
-mvn clean install
-
-# 4. 启动
-mvn spring-boot:run
+mvn -pl course-web -am spring-boot:run
+# 或
+mvn clean package -DskipTests -pl course-web -am
+java -jar course-web/target/*.jar
 ```
 
----
+### 1.2 端口占用
 
-### 问题2: 数据库连接失败
-
-**错误信息**:
-```
-Communications link failure
-```
-
-**原因**: 数据库未启动或配置错误
-
-**解决方案**:
-1. 检查MySQL是否启动
-2. 检查 `application.yml` 中的数据库配置
-3. 确认数据库已创建并导入数据
-
-```yaml
-spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/online_course?...
-    username: root
-    password: your_password  # 修改为实际密码
-```
-
----
-
-### 问题3: 端口被占用
-
-**错误信息**:
-```
-Port 8080 was already in use
-```
-
-**解决方案**:
-修改 `application.yml` 中的端口：
-```yaml
-server:
-  port: 8081  # 改为其他端口
-```
-
----
-
-### 问题4: Redis连接失败（可选）
-
-**错误信息**:
-```
-Unable to connect to Redis
-```
-
-**解决方案**:
-Redis是可选功能，如果不需要可以：
-
-1. 注释掉 `pom.xml` 中的Redis依赖
-2. 注释掉 `application.yml` 中的Redis配置（已默认注释）
-
----
-
-## 前端启动问题
-
-### 问题1: 依赖安装失败
-
-**错误信息**:
-```
-npm ERR! network timeout
-```
-
-**解决方案**:
-使用国内镜像源：
-```bash
-npm config set registry https://registry.npmmirror.com
-npm install
-```
-
----
-
-### 问题2: Vite启动失败
-
-**错误信息**:
-```
-Port 5173 is already in use
-```
-
-**解决方案**:
-修改 `vite.config.js` 中的端口：
-```js
-export default defineConfig({
-  server: {
-    port: 5174,  // 改为其他端口
-    ...
-  }
-})
-```
-
----
-
-### 问题3: API请求404
-
-**错误信息**:
-```
-404 Not Found
-```
-
-**原因**: 后端未启动或代理配置错误
-
-**解决方案**:
-1. 确保后端已启动（http://localhost:8080）
-2. 检查 `vite.config.js` 中的代理配置
-3. 检查后端接口路径是否正确
-
----
-
-## 数据库问题
-
-### 问题1: 导入SQL失败
-
-**错误信息**:
-```
-ERROR 1064: You have an error in your SQL syntax
-```
-
-**解决方案**:
-1. 确保使用UTF-8编码
-2. 确保MySQL版本≥5.7
-3. 使用以下命令导入：
+- 开发默认 **8080**
+- Docker 映射 **8082**
 
 ```bash
-mysql -u root -p --default-character-set=utf8mb4 online_course < schema.sql
+# Linux
+ss -lntp | grep -E '8080|8082'
 ```
 
----
+### 1.3 数据库连接失败
 
-### 问题2: 表不存在
+检查：
 
-**解决方案**:
-重新导入数据库：
-```bash
-# 1. 删除数据库
-DROP DATABASE IF EXISTS online_course;
+1. MySQL 是否启动
+2. 库名 `online_course` 是否存在
+3. `application.yml` / 环境变量账号密码
+4. `allowPublicKeyRetrieval=true` 与时区参数
+5. Docker 内应使用服务名 `course-mysql`，不要写 `localhost`（除非网络模式允许）
+6. Compose 安全加固后 **没有** `localhost:13306` 映射，宿主机请用 `docker exec -it course-mysql mysql ...`
 
-# 2. 重新创建
-CREATE DATABASE online_course DEFAULT CHARACTER SET utf8mb4;
+### 1.4 Elasticsearch 不可用
 
-# 3. 导入
-mysql -u root -p online_course < database/schema.sql
-```
+**现象**：日志检索相关启动报错或健康检查变慢。
 
----
+**处理**：
 
-## Maven问题
+- 确保 ES 容器 healthy：`docker compose ps`
+- 或开发环境调整 `spring.elasticsearch.uris` / 相关自动配置
+- Compose 中 backend `depends_on: elasticsearch: service_healthy`
 
-### 问题1: 依赖下载慢
+### 1.5 Redis 连接失败
 
-**解决方案**:
-配置国内Maven镜像，编辑 `~/.m2/settings.xml`:
+Redis 为可选增强。若未启用：
 
-```xml
-<mirrors>
-  <mirror>
-    <id>aliyun</id>
-    <mirrorOf>central</mirrorOf>
-    <name>Aliyun Maven</name>
-    <url>https://maven.aliyun.com/repository/public</url>
-  </mirror>
-</mirrors>
-```
+- 注释相关配置
+- 或启动 `course-redis` 容器
 
----
+## 2. 前端问题
 
-### 问题2: 编译失败
+### 2.1 接口 404
 
-**错误信息**:
-```
-Failed to execute goal
-```
+- 是否带 `/api` 前缀
+- 开发代理是否指向正确后端端口（8080）
+- 生产 Nginx 是否把 `/api` 转到 8082
 
-**解决方案**:
-```bash
-# 清理并重新编译
-mvn clean install -DskipTests
+### 2.2 登录后立刻退出
 
-# 如果还是失败，删除本地仓库重新下载
-rm -rf ~/.m2/repository/com/baomidou
-mvn clean install
-```
+- Token 过期检查：`tokenTime` / `token_expire_minutes`
+- 系统配置中的 token 有效期过短
+- 浏览器本地存储被清
 
----
+### 2.3 管理菜单进不去
 
-## 运行时问题
+- 需要 `userInfo.isAdmin`（或角色 ADMIN）
+- 路由 `meta.adminOnly`
 
-### 问题1: 登录失败
-
-**原因**: 数据库中没有用户数据
-
-**解决方案**:
-检查数据库中是否有admin用户：
-```sql
-SELECT * FROM sys_user WHERE username = 'admin';
-```
-
-如果没有管理员账号，请通过受控运维流程创建。不要复制固定密码哈希或在文档中保存可直接登录的凭据。
-
----
-
-### 问题2: Token过期
-
-**解决方案**:
-修改 `application.yml` 增加Token有效期：
-```yaml
-jwt:
-  expiration: 2592000  # 30天（单位：秒）
-```
-
----
-
-## 性能问题
-
-### 问题1: 启动慢
-
-**解决方案**:
-1. 增加JVM内存：
-```bash
-export MAVEN_OPTS="-Xmx1024m"
-mvn spring-boot:run
-```
-
-2. 跳过测试：
-```bash
-mvn spring-boot:run -DskipTests
-```
-
----
-
-### 问题2: 查询慢
-
-**解决方案**:
-1. 添加数据库索引
-2. 启用Redis缓存
-3. 优化SQL查询
-
----
-
-## 其他问题
-
-### 查看详细错误
-
-**后端日志**:
-```bash
-# 查看日志文件
-tail -f logs/online-course-platform.log
-
-# 或查看控制台输出
-```
-
-**前端调试**:
-```bash
-# 打开浏览器控制台（F12）
-# 查看Network和Console标签
-```
-
----
-
-## 快速重置
-
-### 完全重置项目
+### 2.4 样式 / 构建失败
 
 ```bash
-# 1. 清理后端
-cd backend
-mvn clean
-
-# 2. 清理前端
 cd frontend
-rm -rf node_modules
-rm package-lock.json
-
-# 3. 重置数据库
-mysql -u root -p
-DROP DATABASE online_course;
-CREATE DATABASE online_course;
-USE online_course;
-SOURCE database/schema.sql;
-
-# 4. 重新启动
-# 后端：mvn spring-boot:run
-# 前端：npm install && npm run dev
+rm -rf node_modules dist
+npm install --legacy-peer-deps
+npm run build
 ```
 
----
+## 3. Docker 与网关
 
-## 联系支持
+### 3.1 容器不健康
 
-如果以上方案无法解决问题，请：
-
-1. 查看完整错误日志
-2. 检查环境配置（JDK、Maven、Node.js版本）
-3. 查看在线文档：http://localhost:8080/api/doc.html
-4. 查看项目README.md和其他文档
-
----
-
-## 成功启动标志
-
-### 后端成功
-```
-========================================
-   在线网课平台启动成功！
-   
-   API地址: http://localhost:8080/api
-   文档地址: http://localhost:8080/api/doc.html
-========================================
+```bash
+docker compose ps
+docker compose logs backend --tail=200
+curl -v http://localhost:8082/api/health
+curl -v http://localhost:8888/health
 ```
 
-### 前端成功
-```
-  ➜  Local:   http://localhost:5173/
-  ➜  Network: use --host to expose
-  ➜  press h + enter to show help
+### 3.2 405 Method Not Allowed / CORS
+
+见 [DOCKER_FIX_405_CORS.md](./DOCKER_FIX_405_CORS.md)。
+
+常见原因：
+
+- Nginx 只放行了 GET
+- 预检 OPTIONS 未正确转发
+- `allowed-origins` 未包含前端域名
+
+### 3.3 local_net 不存在
+
+```bash
+docker network create local_net
 ```
 
----
+### 3.4 外网能开首页但 API 失败
 
-**祝您顺利启动！** 🚀
+检查 VPS Nginx：
+
+- `/api/` 是否反代到 `192.0.2.11:8082`
+- WireGuard 是否连通
+- 后端 CORS / 防火墙
+
+## 4. 业务问题
+
+### 4.1 批量同步无更新
+
+- 是否 Benz 类提供商（见 batch-sync 文档）
+- `api_provider.last_sync_time` 是否异常
+- 第三方接口凭证是否有效
+
+### 4.2 支付回调失败
+
+- `/api/payment/notify` 必须公网可达
+- 确认在 Security 白名单中
+- 查看 `payment_notify_log` 与后端日志
+
+### 4.3 迁移执行报错（列已存在）
+
+`007_security_hardening.sql` 等脚本对已升级库可能重复 ADD COLUMN。
+手动跳过已存在语句，或先备份后按需裁剪。
+
+## 5. 日志位置
+
+| 环境 | 位置 |
+|------|------|
+| 本地开发 | `logs/online-course-platform.log`（配置项） |
+| Docker | volume `backend_logs`，`docker compose logs backend` |
+| 生产 yml | `/var/log/online-course-platform/application.log`（若未覆盖） |
+
+## 6. 快速自检清单
+
+```bash
+# 1 容器
+docker compose ps
+
+# 2 健康
+curl -s http://localhost:8082/api/health
+
+# 3 登录
+curl -s -X POST http://localhost:8082/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"123456"}'
+
+# 4 前端
+curl -I http://localhost:8888
+```
+
+## 7. 仍然无法解决
+
+1. 收集：后端最近 200 行日志、`docker compose ps`、复现步骤
+2. 确认文档版本与代码版本一致（后端 2.0.1 / 前端 1.1.2）
+3. 核对是否混用了旧端口 8080（生产容器）与新端口 8082

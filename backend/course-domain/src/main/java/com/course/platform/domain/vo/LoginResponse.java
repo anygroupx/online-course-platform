@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 
 /**
  * 登录响应VO
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
@@ -55,8 +55,32 @@ public class LoginResponse {
     private Boolean isAdmin;
 
     /**
+     * 角色
+     */
+    private String role;
+
+    /**
+     * 是否必须修改密码
+     */
+    private Boolean mustChangePassword;
+
+    /**
      * Refresh Token
      */
     private String refreshToken;
-}
 
+    /**
+     * 是否需要 MFA 二次验证
+     */
+    private Boolean mfaRequired;
+
+    /**
+     * 当前账号是否已启用 MFA
+     */
+    private Boolean mfaEnabled;
+
+    /**
+     * MFA 挑战 ID（mfaRequired=true 时返回）
+     */
+    private String mfaChallengeId;
+}

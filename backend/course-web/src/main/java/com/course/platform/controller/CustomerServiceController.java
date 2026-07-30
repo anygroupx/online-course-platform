@@ -1,5 +1,7 @@
 package com.course.platform.controller;
 
+import com.course.platform.security.SecurityUtils;
+
 import com.course.platform.common.result.Result;
 import com.course.platform.domain.dto.CustomerServiceMessageDTO;
 import com.course.platform.domain.entity.CustomerServiceSession;
@@ -11,6 +13,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -19,7 +22,7 @@ import java.util.List;
 
 /**
  * 客服管理控制器
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  * Source: 基于现有系统架构设计
@@ -65,8 +68,9 @@ public class CustomerServiceController {
     @Operation(summary = "获取会话消息列表", description = "获取指定会话的消息列表")
     public Result<List<CustomerServiceMessageVO>> getSessionMessages(
             @Parameter(description = "会话ID") @PathVariable String sessionId) {
-        
-        List<CustomerServiceMessageVO> messages = customerServiceService.getSessionMessages(sessionId);
+
+        Long userId = getCurrentUserId();
+        List<CustomerServiceMessageVO> messages = customerServiceService.getSessionMessages(sessionId, userId);
         return Result.success(messages);
     }
 
@@ -77,7 +81,7 @@ public class CustomerServiceController {
     @Operation(summary = "标记消息为已读", description = "用户标记消息为已读")
     public Result<Boolean> markMessagesAsRead(
             @Parameter(description = "会话ID") @PathVariable String sessionId) {
-        
+
         Long userId = getCurrentUserId();
         Boolean success = customerServiceService.markMessagesAsRead(sessionId, userId);
         return Result.success(success);
@@ -101,7 +105,7 @@ public class CustomerServiceController {
     @Operation(summary = "结束会话", description = "用户结束客服会话")
     public Result<Boolean> endSession(
             @Parameter(description = "会话ID") @PathVariable String sessionId) {
-        
+
         Long userId = getCurrentUserId();
         Boolean success = customerServiceService.endSession(sessionId, userId);
         return Result.success(success);
@@ -111,11 +115,12 @@ public class CustomerServiceController {
      * 分配客服（管理员接口）
      */
     @PostMapping("/session/{sessionId}/assign")
+    @PreAuthorize("hasAnyRole('ADMIN','CS')")
     @Operation(summary = "分配客服", description = "管理员为会话分配客服")
     public Result<Boolean> assignCustomerService(
             @Parameter(description = "会话ID") @PathVariable String sessionId,
             @Parameter(description = "客服ID") @RequestParam Long customerServiceId) {
-        
+
         Boolean success = customerServiceService.assignCustomerService(sessionId, customerServiceId);
         return Result.success(success);
     }
@@ -124,10 +129,11 @@ public class CustomerServiceController {
      * 获取所有会话列表（管理端）
      */
     @GetMapping("/admin/sessions")
+    @PreAuthorize("hasAnyRole('ADMIN','CS')")
     @Operation(summary = "获取所有会话列表", description = "管理端获取所有用户会话")
     public Result<List<CustomerServiceSessionVO>> getAllSessions(
             @Parameter(description = "会话状态") @RequestParam(required = false) Integer status) {
-        
+
         List<CustomerServiceSessionVO> sessions = customerServiceService.getAllSessions(status);
         return Result.success(sessions);
     }
@@ -136,10 +142,11 @@ public class CustomerServiceController {
      * 客服接入会话（管理端）
      */
     @PostMapping("/admin/session/{sessionId}/take")
+    @PreAuthorize("hasAnyRole('ADMIN','CS')")
     @Operation(summary = "接入会话", description = "客服接入用户会话")
     public Result<Boolean> takeSession(
             @Parameter(description = "会话ID") @PathVariable String sessionId) {
-        
+
         Long userId = getCurrentUserId();
         Boolean success = customerServiceService.takeSession(sessionId, userId);
         return Result.success(success);
@@ -150,20 +157,6 @@ public class CustomerServiceController {
      * 从JWT认证中获取用户ID
      */
     private Long getCurrentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() != null) {
-            try {
-                // JWT过滤器中将userId设置为principal
-                if (authentication.getPrincipal() instanceof Long) {
-                    return (Long) authentication.getPrincipal();
-                }
-                // 兼容字符串形式的userId
-                return Long.parseLong(authentication.getPrincipal().toString());
-            } catch (Exception e) {
-                log.error("获取用户ID失败: {}", e.getMessage());
-                throw new RuntimeException("用户未登录或认证信息无效");
-            }
-        }
-        throw new RuntimeException("用户未登录");
+        return SecurityUtils.getCurrentUserId();
     }
 }

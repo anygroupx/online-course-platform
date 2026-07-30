@@ -2881,16 +2881,16 @@ onUnmounted(() => {
 
 .stat-icon {
   font-size: 32px;
-  color: #409eff;
+  color: var(--color-primary);
   margin-top: 10px;
 }
 
 .stat-icon.success {
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .stat-icon.warning {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 
 .stat-icon.info {
@@ -3349,7 +3349,7 @@ onUnmounted(() => {
 }
 
 .expired-actions .el-button--primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   border: none;
 }
 
@@ -3377,7 +3377,7 @@ onUnmounted(() => {
 }
 
 .stat-value {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -3404,17 +3404,17 @@ html.dark .filter-card {
 }
 
 html.dark .target-row-highlight {
-  background-color: rgba(230, 162, 60, 0.2) !important;
-  border-color: #e6a23c !important;
+  background-color: rgba(247, 166, 47, 0.2) !important;
+  border-color: var(--color-warning) !important;
 }
 
 html.dark .countdown-status-pending {
-  background: rgba(230, 162, 60, 0.2);
-  border-color: #e6a23c;
+  background: rgba(247, 166, 47, 0.2);
+  border-color: var(--color-warning);
 }
 
 html.dark .countdown-status-expired {
-  background: rgba(245, 108, 108, 0.2);
-  border-color: #f56c6c;
+  background: rgba(240, 101, 101, 0.2);
+  border-color: var(--color-danger);
 }
 </style>

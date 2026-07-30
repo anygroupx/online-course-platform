@@ -6,7 +6,7 @@
  */
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
-import { login as loginApi, logout as logoutApi } from "@/api/auth";
+import { login as loginApi, logout as logoutApi, verifyMfa as verifyMfaApi } from "@/api/auth";
 import router from "@/router";
 import { ElMessage } from "element-plus";
 
@@ -21,52 +21,78 @@ export const useUserStore = defineStore("user", () => {
 
   // 登录
   // Source: AURA-X-KYS 安全加固 - Token时间戳管理 + 配置加载
+  const persistSession = async (data) => {
+    token.value = data.token;
+    userInfo.value = data;
+
+    const currentTime = Date.now().toString();
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("tokenTime", currentTime);
+    localStorage.setItem("userInfo", JSON.stringify(data));
+
+    if (data.refreshToken) {
+      localStorage.setItem("refreshToken", data.refreshToken);
+      localStorage.setItem("refreshTokenTime", currentTime);
+    }
+
+    try {
+      const settingsRes = await import("@/api/setting").then((m) =>
+        m.getSettings()
+      );
+      if (settingsRes.code === 1 && settingsRes.data) {
+        settingsRes.data.forEach((item) => {
+          if (
+            [
+              "token_expire_minutes",
+              "refresh_token_expire_days",
+              "auto_refresh_token_enabled",
+            ].includes(item.configKey)
+          ) {
+            localStorage.setItem(item.configKey, item.configValue);
+          }
+        });
+      }
+    } catch (error) {
+      console.log("加载系统配置失败，使用默认值");
+    }
+  };
+
+  // 登录（支持管理员 MFA 二次验证）
   const login = async (loginForm) => {
     try {
       const res = await loginApi(loginForm);
       if (res.code === 1) {
-        token.value = res.data.token;
-        userInfo.value = res.data;
-
-        // 保存到localStorage，包含时间戳
-        const currentTime = Date.now().toString();
-        localStorage.setItem("token", res.data.token);
-        localStorage.setItem("tokenTime", currentTime);
-        localStorage.setItem("userInfo", JSON.stringify(res.data));
-
-        // 如果后端返回了refreshToken，也保存
-        if (res.data.refreshToken) {
-          localStorage.setItem("refreshToken", res.data.refreshToken);
-          localStorage.setItem("refreshTokenTime", currentTime);
+        if (res.data?.mfaRequired) {
+          return {
+            mfaRequired: true,
+            mfaChallengeId: res.data.mfaChallengeId,
+            username: res.data.username,
+          };
         }
-
-        // 加载系统配置（包含Token过期时间配置）
-        try {
-          const settingsRes = await import("@/api/setting").then((m) =>
-            m.getSettings()
-          );
-          if (settingsRes.code === 1 && settingsRes.data) {
-            settingsRes.data.forEach((item) => {
-              if (
-                [
-                  "token_expire_minutes",
-                  "refresh_token_expire_days",
-                  "auto_refresh_token_enabled",
-                ].includes(item.configKey)
-              ) {
-                localStorage.setItem(item.configKey, item.configValue);
-              }
-            });
-          }
-        } catch (error) {
-          console.log("加载系统配置失败，使用默认值");
-        }
-
+        await persistSession(res.data);
         ElMessage.success("登录成功");
         router.push("/");
+        return { mfaRequired: false };
       }
+      return res;
     } catch (error) {
       console.error("登录失败：", error);
+      throw error;
+    }
+  };
+
+  // MFA 二次验证完成登录
+  const verifyMfaLogin = async (payload) => {
+    try {
+      const res = await verifyMfaApi(payload);
+      if (res.code === 1) {
+        await persistSession(res.data);
+        ElMessage.success("MFA 验证成功");
+        router.push("/");
+      }
+      return res;
+    } catch (error) {
+      console.error("MFA 验证失败：", error);
       throw error;
     }
   };
@@ -111,6 +137,7 @@ export const useUserStore = defineStore("user", () => {
     isLoggedIn,
     isAdmin,
     login,
+    verifyMfaLogin,
     logout,
   };
 });

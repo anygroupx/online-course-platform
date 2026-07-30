@@ -4,21 +4,21 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.course.platform.application.service.platform.ApiProviderService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
+import com.course.platform.common.security.SecretCrypto;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
-import com.course.platform.application.service.platform.ApiProviderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 /**
- * 第三方API接口服务实现类
- * 
- * @author AI Assistant
- * @since 2025-01-17
+ * 第三方API接口服务实现类（敏感字段加密存储）
  */
 @Slf4j
 @Service
@@ -27,21 +27,20 @@ public class ApiProviderServiceImpl implements ApiProviderService {
 
     private final ApiProviderMapper apiProviderMapper;
 
+    @Value("${app.crypto.secret:}")
+    private String cryptoSecret;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createApiProvider(ApiProvider apiProvider) {
-        // 检查名称是否重复
         ApiProvider existing = apiProviderMapper.selectOne(new LambdaQueryWrapper<ApiProvider>()
                 .eq(ApiProvider::getName, apiProvider.getName()));
-
         if (existing != null) {
             throw new BusinessException("接口名称已存在");
         }
-
+        encryptSecrets(apiProvider);
         apiProviderMapper.insert(apiProvider);
-
         log.info("API接口创建成功：id={}, name={}", apiProvider.getId(), apiProvider.getName());
-
         return apiProvider.getId();
     }
 
@@ -52,9 +51,21 @@ public class ApiProviderServiceImpl implements ApiProviderService {
         if (existing == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "API接口不存在");
         }
-
+        // 未提交敏感字段时保留原密文
+        if (!StringUtils.hasText(apiProvider.getPassword())) {
+            apiProvider.setPassword(existing.getPassword());
+        }
+        if (!StringUtils.hasText(apiProvider.getToken())) {
+            apiProvider.setToken(existing.getToken());
+        }
+        if (!StringUtils.hasText(apiProvider.getApiKey())) {
+            apiProvider.setApiKey(existing.getApiKey());
+        }
+        if (!StringUtils.hasText(apiProvider.getCookie())) {
+            apiProvider.setCookie(existing.getCookie());
+        }
+        encryptSecrets(apiProvider);
         apiProviderMapper.updateById(apiProvider);
-
         log.info("API接口更新成功：id={}", apiProvider.getId());
     }
 
@@ -65,31 +76,52 @@ public class ApiProviderServiceImpl implements ApiProviderService {
         if (apiProvider == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "API接口不存在");
         }
-
         apiProviderMapper.deleteById(id);
-
         log.info("API接口删除成功：id={}", id);
     }
 
     @Override
     public IPage<ApiProvider> queryApiProviders(String keyword, Integer status, Integer page, Integer pageSize) {
         Page<ApiProvider> pageObj = new Page<>(page, pageSize);
-
         LambdaQueryWrapper<ApiProvider> queryWrapper = new LambdaQueryWrapper<>();
-
         if (StrUtil.isNotBlank(keyword)) {
             queryWrapper.like(ApiProvider::getName, keyword)
                     .or()
                     .like(ApiProvider::getProviderType, keyword);
         }
-
         if (status != null) {
             queryWrapper.eq(ApiProvider::getStatus, status);
         }
-
         queryWrapper.orderByDesc(ApiProvider::getCreateTime);
-
         return apiProviderMapper.selectPage(pageObj, queryWrapper);
     }
-}
 
+    /**
+     * 运行时解密（供对接服务调用）
+     */
+    public ApiProvider loadDecrypted(Long id) {
+        ApiProvider provider = apiProviderMapper.selectById(id);
+        return decryptSecrets(provider);
+    }
+
+    private void encryptSecrets(ApiProvider provider) {
+        if (provider == null || !StringUtils.hasText(cryptoSecret)) {
+            return;
+        }
+        provider.setPassword(SecretCrypto.encrypt(provider.getPassword(), cryptoSecret));
+        provider.setToken(SecretCrypto.encrypt(provider.getToken(), cryptoSecret));
+        provider.setApiKey(SecretCrypto.encrypt(provider.getApiKey(), cryptoSecret));
+        provider.setCookie(SecretCrypto.encrypt(provider.getCookie(), cryptoSecret));
+    }
+
+    private ApiProvider decryptSecrets(ApiProvider provider) {
+        if (provider == null || !StringUtils.hasText(cryptoSecret)) {
+            return provider;
+        }
+        provider.setPassword(SecretCrypto.decrypt(provider.getPassword(), cryptoSecret));
+        provider.setToken(SecretCrypto.decrypt(provider.getToken(), cryptoSecret));
+        provider.setApiKey(SecretCrypto.decrypt(provider.getApiKey(), cryptoSecret));
+        provider.setCookie(SecretCrypto.decrypt(provider.getCookie(), cryptoSecret));
+        return provider;
+    }
+}

@@ -7,7 +7,7 @@ import java.io.Serializable;
 
 /**
  * 统一响应结果类
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
@@ -36,6 +36,11 @@ public class Result<T> implements Serializable {
      * 时间戳
      */
     private Long timestamp;
+
+    /**
+     * 错误追踪ID
+     */
+    private String errorId;
 
     public Result() {
         this.timestamp = System.currentTimeMillis();
@@ -115,4 +120,3 @@ public class Result<T> implements Serializable {
         return ResultCode.SUCCESS.getCode().equals(this.code);
     }
 }
-

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.course.platform.common.constant.Constants;
+import com.course.platform.security.SecurityUtils;
 import com.course.platform.domain.document.OperationLogDocument;
 import com.course.platform.domain.entity.OperationLog;
 import com.course.platform.infra.persistence.mapper.OperationLogMapper;
@@ -18,7 +19,7 @@ import java.time.LocalDateTime;
 
 /**
  * 操作日志服务实现类
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
@@ -40,10 +41,10 @@ public class OperationLogServiceImpl implements OperationLogService {
             logEntity.setOperationDesc(operationDesc);
             logEntity.setAmountChange(amountChange != null ? amountChange : BigDecimal.ZERO);
             logEntity.setBalanceAfter(balanceAfter);
-            
+
             // 手动设置创建时间，确保时间字段被正确填充
             logEntity.setCreateTime(LocalDateTime.now());
-            
+
             // 获取真实IP地址
             try {
                 logEntity.setIpAddress(com.course.platform.shared.util.ServletUtil.getClientIp());
@@ -53,7 +54,7 @@ public class OperationLogServiceImpl implements OperationLogService {
 
             operationLogMapper.insert(logEntity);
             log.info("操作日志记录成功：userId={}, type={}, desc={}", userId, operationType, operationDesc);
-            
+
             // 同步到 Elasticsearch（异步，不影响主流程）
             try {
                 OperationLogDocument document = OperationLogDocument.builder()
@@ -82,7 +83,7 @@ public class OperationLogServiceImpl implements OperationLogService {
         LambdaQueryWrapper<OperationLog> queryWrapper = new LambdaQueryWrapper<>();
 
         // 非管理员只能查看自己的日志
-        if (!Constants.DEFAULT_ADMIN_ID.equals(userId)) {
+        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(userId))) {
             queryWrapper.eq(OperationLog::getUserId, userId);
         }
 
@@ -100,4 +101,3 @@ public class OperationLogServiceImpl implements OperationLogService {
         return operationLogMapper.selectPage(pageObj, queryWrapper);
     }
 }
-

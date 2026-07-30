@@ -2891,7 +2891,7 @@ const getFormatText = (format) => {
 
 .stat-card .stat-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--color-info);
 }
 
 .stat-card .stat-icon {
@@ -2901,19 +2901,19 @@ const getFormatText = (format) => {
   transform: translateY(-50%);
   font-size: 40px;
   opacity: 0.3;
-  color: #409eff;
+  color: var(--color-primary);
 }
 
 .stat-card .stat-icon.success {
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .stat-card .stat-icon.warning {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 
 .stat-card .stat-icon.info {
-  color: #909399;
+  color: var(--color-info);
 }
 
 .main-card {
@@ -3019,28 +3019,28 @@ const getFormatText = (format) => {
 
 /* 状态颜色样式 */
 .status-pending .el-input__wrapper {
-  border-color: #409eff;
-  background-color: rgba(64, 158, 255, 0.1);
+  border-color: var(--color-primary);
+  background-color: rgba(78, 140, 255, 0.1);
 }
 
 .status-processing .el-input__wrapper {
-  border-color: #e6a23c;
-  background-color: rgba(230, 162, 60, 0.1);
+  border-color: var(--color-warning);
+  background-color: rgba(247, 166, 47, 0.1);
 }
 
 .status-completed .el-input__wrapper {
-  border-color: #67c23a;
-  background-color: rgba(103, 194, 58, 0.1);
+  border-color: var(--color-success);
+  background-color: rgba(99, 197, 110, 0.1);
 }
 
 .status-cancelled .el-input__wrapper {
-  border-color: #909399;
+  border-color: var(--color-info);
   background-color: rgba(144, 147, 153, 0.1);
 }
 
 .status-failed .el-input__wrapper {
-  border-color: #f56c6c;
-  background-color: rgba(245, 108, 108, 0.1);
+  border-color: var(--color-danger);
+  background-color: rgba(240, 101, 101, 0.1);
 }
 
 /* 状态指示器 */
@@ -3054,28 +3054,28 @@ const getFormatText = (format) => {
 }
 
 .indicator-pending {
-  background-color: #409eff;
-  box-shadow: 0 0 6px rgba(64, 158, 255, 0.6);
+  background-color: var(--color-primary);
+  box-shadow: 0 0 6px rgba(78, 140, 255, 0.6);
 }
 
 .indicator-processing {
-  background-color: #e6a23c;
-  box-shadow: 0 0 6px rgba(230, 162, 60, 0.6);
+  background-color: var(--color-warning);
+  box-shadow: 0 0 6px rgba(247, 166, 47, 0.6);
 }
 
 .indicator-completed {
-  background-color: #67c23a;
-  box-shadow: 0 0 6px rgba(103, 194, 58, 0.6);
+  background-color: var(--color-success);
+  box-shadow: 0 0 6px rgba(99, 197, 110, 0.6);
 }
 
 .indicator-cancelled {
-  background-color: #909399;
+  background-color: var(--color-info);
   box-shadow: 0 0 6px rgba(144, 147, 153, 0.6);
 }
 
 .indicator-failed {
-  background-color: #f56c6c;
-  box-shadow: 0 0 6px rgba(245, 108, 108, 0.6);
+  background-color: var(--color-danger);
+  box-shadow: 0 0 6px rgba(240, 101, 101, 0.6);
 }
 
 /* 密码输入框样式 */
@@ -3085,7 +3085,7 @@ const getFormatText = (format) => {
 }
 
 .el-table .el-input--small .el-input__wrapper:hover {
-  border-color: #409eff;
+  border-color: var(--color-primary);
 }
 
 /* 表格拖拽样式 */
@@ -3132,7 +3132,7 @@ const getFormatText = (format) => {
 
 .drag-handle {
   margin-right: 12px;
-  color: #909399;
+  color: var(--color-info);
   cursor: grab;
 }
 
@@ -3156,7 +3156,7 @@ const getFormatText = (format) => {
 .form-tip {
   margin-left: 10px;
   font-size: 12px;
-  color: #909399;
+  color: var(--color-info);
 }
 
 /* 操作列响应式样式 */
@@ -3429,15 +3429,15 @@ html.dark .operation-buttons .el-button {
 
 /* 状态指示器在 Dark Mode 下保持原有颜色，增强对比度 */
 html.dark .indicator-pending {
-  box-shadow: 0 0 8px rgba(64, 158, 255, 0.8);
+  box-shadow: 0 0 8px rgba(78, 140, 255, 0.8);
 }
 
 html.dark .indicator-processing {
-  box-shadow: 0 0 8px rgba(230, 162, 60, 0.8);
+  box-shadow: 0 0 8px rgba(247, 166, 47, 0.8);
 }
 
 html.dark .indicator-completed {
-  box-shadow: 0 0 8px rgba(103, 194, 58, 0.8);
+  box-shadow: 0 0 8px rgba(99, 197, 110, 0.8);
 }
 
 html.dark .indicator-cancelled {
@@ -3445,6 +3445,6 @@ html.dark .indicator-cancelled {
 }
 
 html.dark .indicator-failed {
-  box-shadow: 0 0 8px rgba(245, 108, 108, 0.8);
+  box-shadow: 0 0 8px rgba(240, 101, 101, 0.8);
 }
 </style>

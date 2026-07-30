@@ -5,7 +5,7 @@
         <!-- 支付成功 -->
         <div v-if="success" class="success-result">
           <div class="icon-wrapper">
-            <el-icon :size="80" color="#67C23A">
+            <el-icon :size="80" color="#63c56e">
               <SuccessFilled />
             </el-icon>
           </div>
@@ -23,7 +23,7 @@
         <!-- 支付失败 -->
         <div v-else-if="failed" class="failed-result">
           <div class="icon-wrapper">
-            <el-icon :size="80" color="#F56C6C">
+            <el-icon :size="80" color="#f06565">
               <CircleCloseFilled />
             </el-icon>
           </div>
@@ -40,7 +40,7 @@
         <!-- 处理中 -->
         <div v-else class="pending-result">
           <div class="icon-wrapper">
-            <el-icon :size="80" color="#E6A23C">
+            <el-icon :size="80" color="#f7a62f">
               <WarningFilled />
             </el-icon>
           </div>
@@ -88,7 +88,7 @@ export default {
       loading.value = true
       try {
         const outTradeNo = route.query.out_trade_no || route.query.orderNo
-        
+
         if (!outTradeNo) {
           failed.value = true
           errorMessage.value = '订单号参数缺失'
@@ -99,7 +99,7 @@ export default {
 
         // 改用同步查询接口，会主动查询支付宝状态
         const res = await syncPaymentOrder(outTradeNo)
-        
+
         if (res.code === 1 && res.data) {
           const order = res.data
           amount.value = order.amount
@@ -208,7 +208,7 @@ h2 {
 .amount {
   font-size: 24px;
   font-weight: bold;
-  color: #67C23A !important;
+  color: var(--color-success) !important;
   margin-top: 12px !important;
 }
 
@@ -232,7 +232,7 @@ h2 {
   .actions {
     flex-direction: column;
   }
-  
+
   .actions .el-button {
     width: 100%;
   }

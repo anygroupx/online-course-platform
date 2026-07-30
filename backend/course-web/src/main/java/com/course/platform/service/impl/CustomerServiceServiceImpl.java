@@ -1,14 +1,20 @@
 package com.course.platform.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.course.platform.application.service.support.CustomerServiceService;
+import com.course.platform.common.exception.BusinessException;
+import com.course.platform.common.result.ResultCode;
+import com.course.platform.common.security.SecurityRoles;
 import com.course.platform.domain.dto.CustomerServiceMessageDTO;
 import com.course.platform.domain.entity.CustomerServiceMessage;
 import com.course.platform.domain.entity.CustomerServiceSession;
+import com.course.platform.domain.entity.User;
 import com.course.platform.domain.vo.CustomerServiceMessageVO;
 import com.course.platform.domain.vo.CustomerServiceSessionVO;
 import com.course.platform.infra.persistence.mapper.CustomerServiceMessageMapper;
 import com.course.platform.infra.persistence.mapper.CustomerServiceSessionMapper;
-import com.course.platform.application.service.support.CustomerServiceService;
+import com.course.platform.infra.persistence.mapper.UserMapper;
+import com.course.platform.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,11 +25,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * 客服服务实现类
- * 
- * @author AI Assistant
- * @since 2025-01-17
- * Source: 基于现有系统架构设计
+ * 客服服务实现类（含会话归属与角色校验）
  */
 @Slf4j
 @Service
@@ -32,181 +34,155 @@ public class CustomerServiceServiceImpl implements CustomerServiceService {
 
     private final CustomerServiceSessionMapper sessionMapper;
     private final CustomerServiceMessageMapper messageMapper;
+    private final UserMapper userMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CustomerServiceSession createOrGetSession(Long userId) {
-        log.info("创建或获取用户会话，用户ID：{}", userId);
-        
-        // 查询用户是否有活跃会话
         CustomerServiceSession activeSession = sessionMapper.selectActiveSessionByUserId(userId);
         if (activeSession != null) {
-            log.info("用户已有活跃会话，会话ID：{}", activeSession.getSessionId());
             return activeSession;
         }
-        
-        // 创建新会话
         CustomerServiceSession session = new CustomerServiceSession();
         session.setSessionId(UUID.randomUUID().toString().replace("-", ""));
         session.setUserId(userId);
-        session.setStatus(1); // 等待中
+        session.setStatus(1);
         session.setStartTime(LocalDateTime.now());
         session.setLastMessageTime(LocalDateTime.now());
-        
         sessionMapper.insert(session);
-        
-        log.info("新会话创建成功，会话ID：{}", session.getSessionId());
         return session;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean sendMessage(CustomerServiceMessageDTO messageDTO, Long userId) {
-        log.info("发送消息，会话ID：{}，发送者：{}", messageDTO.getSessionId(), userId);
-        
-        // 验证会话是否存在
-        LambdaQueryWrapper<CustomerServiceSession> sessionWrapper = new LambdaQueryWrapper<>();
-        sessionWrapper.eq(CustomerServiceSession::getSessionId, messageDTO.getSessionId());
-        CustomerServiceSession session = sessionMapper.selectOne(sessionWrapper);
-        if (session == null) {
-            log.warn("会话不存在，会话ID：{}", messageDTO.getSessionId());
-            return false;
-        }
-        
-        // 创建消息
+        CustomerServiceSession session = requireSession(messageDTO.getSessionId());
+        assertCanAccessSession(session, userId);
+
+        // senderType 由服务端根据角色决定，禁止客户端伪造客服身份
+        int senderType = resolveSenderType(session, userId);
+
         CustomerServiceMessage message = new CustomerServiceMessage();
         message.setSessionId(messageDTO.getSessionId());
         message.setSenderId(userId);
-        message.setSenderType(messageDTO.getSenderType());
-        message.setMessageType(messageDTO.getMessageType());
+        message.setSenderType(senderType);
+        message.setMessageType(messageDTO.getMessageType() == null ? 1 : messageDTO.getMessageType());
         message.setContent(messageDTO.getContent());
         message.setIsRead(0);
-        
         messageMapper.insert(message);
-        
-        // 更新会话最后消息时间
+
         session.setLastMessageTime(LocalDateTime.now());
-        if (session.getStatus() == 1) {
-            session.setStatus(2); // 进行中
+        if (session.getStatus() != null && session.getStatus() == 1) {
+            session.setStatus(2);
         }
         sessionMapper.updateById(session);
-        
-        log.info("消息发送成功，消息ID：{}", message.getId());
         return true;
     }
 
     @Override
-    public List<CustomerServiceMessageVO> getSessionMessages(String sessionId) {
-        log.info("获取会话消息列表，会话ID：{}", sessionId);
-        
+    public List<CustomerServiceMessageVO> getSessionMessages(String sessionId, Long userId) {
+        CustomerServiceSession session = requireSession(sessionId);
+        assertCanAccessSession(session, userId);
         return messageMapper.selectMessagesBySessionId(sessionId);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean markMessagesAsRead(String sessionId, Long userId) {
-        log.info("标记消息为已读，会话ID：{}，用户ID：{}", sessionId, userId);
-        
+        CustomerServiceSession session = requireSession(sessionId);
+        assertCanAccessSession(session, userId);
         int result = messageMapper.markMessagesAsRead(sessionId, userId);
-        boolean success = result > 0;
-        
-        if (success) {
-            log.info("消息标记为已读成功，更新数量：{}", result);
-        } else {
-            log.warn("消息标记为已读失败");
-        }
-        
-        return success;
+        return result >= 0;
     }
 
     @Override
     public Integer getUnreadCount(Long userId) {
-        log.info("获取用户未读消息数量，用户ID：{}", userId);
-        
-        Integer count = messageMapper.selectUnreadCountByUserId(userId);
-        return count != null ? count : 0;
+        return messageMapper.selectUnreadCountByUserId(userId);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean endSession(String sessionId, Long userId) {
-        log.info("结束会话，会话ID：{}，用户ID：{}", sessionId, userId);
-        
-        LambdaQueryWrapper<CustomerServiceSession> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(CustomerServiceSession::getSessionId, sessionId)
-               .eq(CustomerServiceSession::getUserId, userId);
-        
-        CustomerServiceSession session = sessionMapper.selectOne(wrapper);
-        if (session == null) {
-            log.warn("会话不存在或无权限，会话ID：{}，用户ID：{}", sessionId, userId);
-            return false;
-        }
-        
-        session.setStatus(3); // 已结束
+        CustomerServiceSession session = requireSession(sessionId);
+        assertCanAccessSession(session, userId);
+        session.setStatus(3);
         session.setEndTime(LocalDateTime.now());
         sessionMapper.updateById(session);
-        
-        log.info("会话结束成功，会话ID：{}", sessionId);
         return true;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean assignCustomerService(String sessionId, Long customerServiceId) {
-        log.info("分配客服，会话ID：{}，客服ID：{}", sessionId, customerServiceId);
-        
-        LambdaQueryWrapper<CustomerServiceSession> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(CustomerServiceSession::getSessionId, sessionId);
-        
-        CustomerServiceSession session = sessionMapper.selectOne(wrapper);
-        if (session == null) {
-            log.warn("会话不存在，会话ID：{}", sessionId);
-            return false;
-        }
-        
+        SecurityUtils.requireCustomerService();
+        CustomerServiceSession session = requireSession(sessionId);
         session.setCustomerServiceId(customerServiceId);
-        session.setStatus(2); // 进行中
+        if (session.getStatus() != null && session.getStatus() == 1) {
+            session.setStatus(2);
+        }
         sessionMapper.updateById(session);
-        
-        log.info("客服分配成功，会话ID：{}，客服ID：{}", sessionId, customerServiceId);
         return true;
     }
 
     @Override
     public List<CustomerServiceSessionVO> getAllSessions(Integer status) {
-        log.info("获取所有会话列表，状态筛选：{}", status);
-        
-        List<CustomerServiceSessionVO> sessions = sessionMapper.selectAllSessionsWithInfo(status);
-        
-        log.info("查询到{}条会话记录", sessions != null ? sessions.size() : 0);
-        return sessions;
+        SecurityUtils.requireCustomerService();
+        return sessionMapper.selectAllSessionsWithInfo(status);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean takeSession(String sessionId, Long customerServiceId) {
-        log.info("客服接入会话，会话ID：{}，客服ID：{}", sessionId, customerServiceId);
-        
+        SecurityUtils.requireCustomerService();
+        CustomerServiceSession session = requireSession(sessionId);
+        session.setCustomerServiceId(customerServiceId);
+        session.setStatus(2);
+        sessionMapper.updateById(session);
+        return true;
+    }
+
+    private CustomerServiceSession requireSession(String sessionId) {
         LambdaQueryWrapper<CustomerServiceSession> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(CustomerServiceSession::getSessionId, sessionId);
-        
         CustomerServiceSession session = sessionMapper.selectOne(wrapper);
         if (session == null) {
-            log.warn("会话不存在，会话ID：{}", sessionId);
-            return false;
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "会话不存在");
         }
-        
-        // 检查会话是否已被其他客服接入
-        if (session.getCustomerServiceId() != null && !session.getCustomerServiceId().equals(customerServiceId)) {
-            log.warn("会话已被其他客服接入，会话ID：{}，当前客服ID：{}", sessionId, session.getCustomerServiceId());
-            return false;
+        return session;
+    }
+
+    private void assertCanAccessSession(CustomerServiceSession session, Long userId) {
+        if (userId == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
-        
-        session.setCustomerServiceId(customerServiceId);
-        session.setStatus(2); // 进行中
-        sessionMapper.updateById(session);
-        
-        log.info("客服接入成功，会话ID：{}，客服ID：{}", sessionId, customerServiceId);
-        return true;
+        if (userId.equals(session.getUserId())) {
+            return;
+        }
+        if (session.getCustomerServiceId() != null && userId.equals(session.getCustomerServiceId())) {
+            return;
+        }
+        if (SecurityUtils.isCustomerService()) {
+            return;
+        }
+        throw new BusinessException(ResultCode.FORBIDDEN);
+    }
+
+    private int resolveSenderType(CustomerServiceSession session, Long userId) {
+        if (userId.equals(session.getUserId())) {
+            return 1; // 用户
+        }
+        if (SecurityUtils.isCustomerService()
+                || (session.getCustomerServiceId() != null && userId.equals(session.getCustomerServiceId()))) {
+            return 2; // 客服
+        }
+        // 兜底再查角色
+        User user = userMapper.selectById(userId);
+        if (user != null && user.getRole() != null) {
+            String role = user.getRole().toUpperCase();
+            if (SecurityRoles.ADMIN.equals(role) || SecurityRoles.CS.equals(role)) {
+                return 2;
+            }
+        }
+        throw new BusinessException(ResultCode.FORBIDDEN);
     }
 }

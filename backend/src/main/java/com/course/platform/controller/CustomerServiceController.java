@@ -19,7 +19,7 @@ import java.util.List;
 
 /**
  * 客服管理控制器
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  * Source: 基于现有系统架构设计
@@ -65,8 +65,8 @@ public class CustomerServiceController {
     @Operation(summary = "获取会话消息列表", description = "获取指定会话的消息列表")
     public Result<List<CustomerServiceMessageVO>> getSessionMessages(
             @Parameter(description = "会话ID") @PathVariable String sessionId) {
-        
-        List<CustomerServiceMessageVO> messages = customerServiceService.getSessionMessages(sessionId);
+
+        List<CustomerServiceMessageVO> messages = customerServiceService.getSessionMessages(sessionId, userId);
         return Result.success(messages);
     }
 
@@ -77,7 +77,7 @@ public class CustomerServiceController {
     @Operation(summary = "标记消息为已读", description = "用户标记消息为已读")
     public Result<Boolean> markMessagesAsRead(
             @Parameter(description = "会话ID") @PathVariable String sessionId) {
-        
+
         Long userId = getCurrentUserId();
         Boolean success = customerServiceService.markMessagesAsRead(sessionId, userId);
         return Result.success(success);
@@ -101,7 +101,7 @@ public class CustomerServiceController {
     @Operation(summary = "结束会话", description = "用户结束客服会话")
     public Result<Boolean> endSession(
             @Parameter(description = "会话ID") @PathVariable String sessionId) {
-        
+
         Long userId = getCurrentUserId();
         Boolean success = customerServiceService.endSession(sessionId, userId);
         return Result.success(success);
@@ -115,7 +115,7 @@ public class CustomerServiceController {
     public Result<Boolean> assignCustomerService(
             @Parameter(description = "会话ID") @PathVariable String sessionId,
             @Parameter(description = "客服ID") @RequestParam Long customerServiceId) {
-        
+
         Boolean success = customerServiceService.assignCustomerService(sessionId, customerServiceId);
         return Result.success(success);
     }
@@ -127,7 +127,7 @@ public class CustomerServiceController {
     @Operation(summary = "获取所有会话列表", description = "管理端获取所有用户会话")
     public Result<List<CustomerServiceSessionVO>> getAllSessions(
             @Parameter(description = "会话状态") @RequestParam(required = false) Integer status) {
-        
+
         List<CustomerServiceSessionVO> sessions = customerServiceService.getAllSessions(status);
         return Result.success(sessions);
     }
@@ -139,7 +139,7 @@ public class CustomerServiceController {
     @Operation(summary = "接入会话", description = "客服接入用户会话")
     public Result<Boolean> takeSession(
             @Parameter(description = "会话ID") @PathVariable String sessionId) {
-        
+
         Long userId = getCurrentUserId();
         Boolean success = customerServiceService.takeSession(sessionId, userId);
         return Result.success(success);

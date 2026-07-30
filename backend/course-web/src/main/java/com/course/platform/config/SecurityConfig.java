@@ -1,7 +1,9 @@
 package com.course.platform.config;
 
 import com.course.platform.security.JwtAuthenticationFilter;
+import com.course.platform.security.MustChangePasswordFilter;
 import com.course.platform.security.JwtAuthenticationEntryPoint;
+import com.course.platform.security.RateLimitFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,7 +27,7 @@ import java.util.List;
 
 /**
  * Spring Security配置类
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
@@ -37,7 +39,9 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
-    
+    private final RateLimitFilter rateLimitFilter;
+    private final MustChangePasswordFilter mustChangePasswordFilter;
+
     // Source: Docker部署修复 - 使用@ConfigurationProperties正确读取YAML列表
     private final CorsProperties corsProperties;
 
@@ -74,32 +78,42 @@ public class SecurityConfig {
         http
                 // 禁用CSRF（使用JWT不需要）
                 .csrf(AbstractHttpConfigurer::disable)
-                
+
                 // 配置CORS
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                
+
                 // 配置异常处理
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(jwtAuthenticationEntryPoint)
                 )
-                
+
                 // 配置Session管理（无状态）
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
-                
+
                 // 配置授权规则
                 .authorizeHttpRequests(auth -> auth
                         // 第三方API路径 - 优先匹配（注意：context-path=/api，所以这里只需要匹配 /external/**）
                         .requestMatchers("/external/**").permitAll()
                         // 其他白名单路径
                         .requestMatchers(PERMIT_ALL_PATHS).permitAll()
+                        // 管理端路径必须 ADMIN
+                        .requestMatchers("/admin/**", "/payment/config/**", "/payment-config/**",
+                                "/aqks/**", "/system/**", "/system-config/**", "/system-variable/**",
+                                "/operation-log/**", "/order-batch/**",
+                                "/announcement/create", "/announcement/update", "/announcement/page",
+                                "/announcement/*/publish", "/announcement/*/offline").hasRole("ADMIN")
+                        .requestMatchers("/customer-service/admin/**",
+                                "/customer-service/session/*/assign").hasAnyRole("ADMIN", "CS")
                         // 所有其他请求需要认证
                         .anyRequest().authenticated()
                 )
-                
-                // 添加JWT过滤器
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+                // 添加限流与JWT过滤器
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(mustChangePasswordFilter, JwtAuthenticationFilter.class);
 
         return http.build();
     }
@@ -127,27 +141,31 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        
+
         // 允许的源（从CorsProperties读取）
         // 使用 setAllowedOriginPatterns 代替 setAllowedOrigins 以支持更灵活的匹配
-        configuration.setAllowedOriginPatterns(corsProperties.getAllowedOrigins());
-        
+        java.util.List<String> origins = corsProperties.getAllowedOrigins() == null
+                ? java.util.List.of()
+                : corsProperties.getAllowedOrigins().stream()
+                    .filter(o -> o != null && !"*".equals(o.trim()) && !o.contains("*"))
+                    .toList();
+        configuration.setAllowedOriginPatterns(origins);
+
         // 允许的HTTP方法
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        
+
         // 允许的请求头
         configuration.setAllowedHeaders(List.of("*"));
-        
+
         // 允许携带凭证
         configuration.setAllowCredentials(true);
-        
+
         // 预检请求的有效期（秒）
         configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
-        
+
         return source;
     }
 }
-

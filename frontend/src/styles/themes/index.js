@@ -1,94 +1,150 @@
 /**
  * Design Tokens & Theme Definitions
- * 
- * Defines the core color palette and semantic tokens for the application.
- * These are applied as CSS variables at runtime.
+ *
+ * Aligned with Dashboard homepage palette:
+ * blue #4e8cff / green #63c56e / orange #f7a62f / purple #766af6
  */
 
 export const commonTokens = {
-    // Spacing & Radius
-    '--radius-sm': '4px',
-    '--radius-md': '8px',
-    '--radius-lg': '12px',
-    '--radius-xl': '16px',
+  // Spacing & Radius
+  '--radius-sm': '4px',
+  '--radius-md': '8px',
+  '--radius-lg': '12px',
+  '--radius-xl': '16px',
 
-    '--header-height': '60px',
-    '--sidebar-width': '240px',
+  '--header-height': '60px',
+  '--sidebar-width': '240px',
 
-    // Shadows (Base definitions, can be overridden per theme if needed)
-    '--shadow-sm': '0 2px 4px rgba(0, 0, 0, 0.05)',
-    '--shadow-md': '0 4px 12px rgba(0, 0, 0, 0.08)',
-    '--shadow-lg': '0 8px 24px rgba(0, 0, 0, 0.12)',
+  // Brand
+  '--brand-blue': '#4e8cff',
+  '--brand-blue-deep': '#3b7af0',
+  '--brand-green': '#63c56e',
+  '--brand-orange': '#f7a62f',
+  '--brand-purple': '#766af6',
+  '--brand-teal': '#39c9c1',
+
+  // Primary gradient
+  '--primary-gradient-start': '#4e8cff',
+  '--primary-gradient-end': '#766af6',
+  '--primary-gradient':
+    'linear-gradient(135deg, var(--primary-gradient-start) 0%, var(--primary-gradient-end) 100%)',
+  '--primary-shadow': '0 4px 14px rgba(78, 140, 255, 0.28)',
+  '--primary-shadow-hover': '0 8px 20px rgba(78, 140, 255, 0.36)',
+
+  // Functional Colors
+  '--color-primary': '#4e8cff',
+  '--color-success': '#63c56e',
+  '--color-warning': '#f7a62f',
+  '--color-danger': '#f06565',
+  '--color-info': '#8b95a7',
+
+  // Element Plus bridge
+  '--el-color-primary': '#4e8cff',
+  '--el-color-primary-light-3': '#7aabff',
+  '--el-color-primary-light-5': '#a6c7ff',
+  '--el-color-primary-light-7': '#c9dcff',
+  '--el-color-primary-light-8': '#dce9ff',
+  '--el-color-primary-light-9': '#eef4ff',
+  '--el-color-primary-dark-2': '#3b7af0',
+
+  '--el-color-success': '#63c56e',
+  '--el-color-success-light-3': '#8ad692',
+  '--el-color-success-light-5': '#b1e4b7',
+  '--el-color-success-light-7': '#d0f0d4',
+  '--el-color-success-light-8': '#e0f5e3',
+  '--el-color-success-light-9': '#effaf0',
+  '--el-color-success-dark-2': '#4fb45b',
+
+  '--el-color-warning': '#f7a62f',
+  '--el-color-warning-light-3': '#f9bc63',
+  '--el-color-warning-light-5': '#fbd296',
+  '--el-color-warning-light-7': '#fce4c0',
+  '--el-color-warning-light-8': '#fdeed7',
+  '--el-color-warning-light-9': '#fff6e8',
+  '--el-color-warning-dark-2': '#e0921f',
+
+  '--el-color-danger': '#f06565',
+  '--el-color-danger-light-3': '#f48c8c',
+  '--el-color-danger-light-5': '#f7b1b1',
+  '--el-color-danger-light-7': '#fad0d0',
+  '--el-color-danger-light-8': '#fbe0e0',
+  '--el-color-danger-light-9': '#fdf0f0',
+  '--el-color-danger-dark-2': '#e04f4f',
+
+  '--el-color-info': '#8b95a7',
+  '--el-color-info-light-3': '#a8b0be',
+  '--el-color-info-light-5': '#c4cad4',
+  '--el-color-info-light-7': '#dce0e6',
+  '--el-color-info-light-8': '#e8ebf0',
+  '--el-color-info-light-9': '#f3f5f8',
+  '--el-color-info-dark-2': '#727c8f',
 }
 
 export const lightTheme = {
-    ...commonTokens,
+  ...commonTokens,
 
-    // Brand Colors
-    '--primary-gradient-start': '#667eea',
-    '--primary-gradient-end': '#764ba2',
-    '--primary-gradient': 'linear-gradient(135deg, var(--primary-gradient-start) 0%, var(--primary-gradient-end) 100%)',
+  '--brand-blue-soft': '#eef4ff',
+  '--brand-green-soft': '#effaf0',
+  '--brand-orange-soft': '#fff6e8',
+  '--brand-purple-soft': '#f1efff',
+  '--brand-teal-soft': '#eafbf8',
 
-    // Functional Colors
-    '--color-success': '#67c23a',
-    '--color-warning': '#e6a23c',
-    '--color-danger': '#f56c6c',
-    '--color-info': '#909399',
+  // Backgrounds
+  '--bg-body': '#f5f7fa',
+  '--bg-card': 'rgba(255, 255, 255, 0.92)',
+  '--bg-card-hover': 'rgba(255, 255, 255, 1)',
+  '--bg-overlay': 'rgba(255, 255, 255, 0.8)',
 
-    // Backgrounds
-    '--bg-body': '#f5f7fa',
-    '--bg-card': 'rgba(255, 255, 255, 0.9)',
-    '--bg-card-hover': 'rgba(255, 255, 255, 1)',
-    '--bg-overlay': 'rgba(255, 255, 255, 0.8)',
+  // Text
+  '--text-primary': '#1f2937',
+  '--text-regular': '#4b5563',
+  '--text-secondary': '#6b7280',
+  '--text-placeholder': '#9ca3af',
 
-    // Text
-    '--text-primary': '#303133',
-    '--text-regular': '#606266',
-    '--text-secondary': '#909399',
-    '--text-placeholder': '#a8abb2',
+  // Borders
+  '--border-color': '#dcdfe6',
+  '--border-color-light': '#e4e7ed',
 
-    // Borders
-    '--border-color': '#dcdfe6',
-    '--border-color-light': '#e4e7ed',
+  // Shadows
+  '--shadow-sm': '0 2px 4px rgba(139, 168, 218, 0.08)',
+  '--shadow-md': '0 8px 30px rgba(139, 168, 218, 0.16)',
+  '--shadow-lg': '0 12px 32px rgba(126, 164, 223, 0.22)',
 }
 
 export const darkTheme = {
-    ...commonTokens,
+  ...commonTokens,
 
-    // Brand Colors (Can be adjusted for dark mode if needed)
-    '--primary-gradient-start': '#667eea',
-    '--primary-gradient-end': '#764ba2',
-    '--primary-gradient': 'linear-gradient(135deg, var(--primary-gradient-start) 0%, var(--primary-gradient-end) 100%)',
+  '--brand-blue-soft': 'rgba(78, 140, 255, 0.16)',
+  '--brand-green-soft': 'rgba(99, 197, 110, 0.16)',
+  '--brand-orange-soft': 'rgba(247, 166, 47, 0.16)',
+  '--brand-purple-soft': 'rgba(118, 106, 246, 0.16)',
+  '--brand-teal-soft': 'rgba(57, 201, 193, 0.16)',
 
-    // Functional Colors
-    '--color-success': '#67c23a',
-    '--color-warning': '#e6a23c',
-    '--color-danger': '#f56c6c',
-    '--color-info': '#909399',
+  // Backgrounds
+  '--bg-body': '#0f172a',
+  '--bg-card': 'rgba(30, 41, 59, 0.8)',
+  '--bg-card-hover': 'rgba(40, 50, 70, 0.9)',
+  '--bg-overlay': 'rgba(0, 0, 0, 0.8)',
 
-    // Backgrounds
-    '--bg-body': '#0f172a',
-    '--bg-card': 'rgba(30, 41, 59, 0.8)',
-    '--bg-card-hover': 'rgba(40, 50, 70, 0.9)',
-    '--bg-overlay': 'rgba(0, 0, 0, 0.8)',
+  // Text
+  '--text-primary': '#FFFFFF',
+  '--text-regular': '#E5EAF3',
+  '--text-secondary': '#A3A6AD',
+  '--text-placeholder': '#8D9095',
 
-    // Text
-    '--text-primary': '#FFFFFF',
-    '--text-regular': '#E5EAF3',
-    '--text-secondary': '#A3A6AD',
-    '--text-placeholder': '#8D9095',
+  // Borders
+  '--border-color': '#4C4D4F',
+  '--border-color-light': '#363637',
 
-    // Borders
-    '--border-color': '#4C4D4F',
-    '--border-color-light': '#363637',
-
-    // Shadow Overrides for Dark Mode
-    '--shadow-sm': '0 2px 4px rgba(0, 0, 0, 0.3)',
-    '--shadow-md': '0 4px 12px rgba(0, 0, 0, 0.4)',
-    '--shadow-lg': '0 8px 24px rgba(0, 0, 0, 0.5)',
+  // Shadows
+  '--shadow-sm': '0 2px 4px rgba(0, 0, 0, 0.3)',
+  '--shadow-md': '0 4px 12px rgba(0, 0, 0, 0.4)',
+  '--shadow-lg': '0 8px 24px rgba(0, 0, 0, 0.5)',
+  '--primary-shadow': '0 4px 14px rgba(78, 140, 255, 0.35)',
+  '--primary-shadow-hover': '0 8px 20px rgba(78, 140, 255, 0.45)',
 }
 
 export const themes = {
-    light: lightTheme,
-    dark: darkTheme,
+  light: lightTheme,
+  dark: darkTheme,
 }

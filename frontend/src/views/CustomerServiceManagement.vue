@@ -202,11 +202,11 @@ const formatTime = (time) => {
   const now = new Date()
   const diffMs = now - date
   const diffMins = Math.floor(diffMs / 60000)
-  
+
   if (diffMins < 1) return '刚刚'
   if (diffMins < 60) return `${diffMins}分钟前`
   if (diffMins < 1440) return `${Math.floor(diffMins / 60)}小时前`
-  
+
   return date.toLocaleDateString('zh-CN', {
     month: '2-digit',
     day: '2-digit',
@@ -642,7 +642,7 @@ onUnmounted(() => {
 }
 
 .message-right .message-content {
-  background: #667eea;
+  background: var(--color-primary);
   color: white;
 }
 
@@ -704,7 +704,7 @@ html.dark .message-content {
 }
 
 html.dark .message-right .message-content {
-  background: #667eea;
+  background: var(--color-primary);
   color: white;
 }
 
@@ -719,7 +719,7 @@ html.dark .message-right .message-content {
   .main-content {
     flex-direction: column;
   }
-  
+
   .session-list {
     width: 100%;
     max-height: 300px;

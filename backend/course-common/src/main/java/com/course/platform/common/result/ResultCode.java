@@ -5,7 +5,7 @@ import lombok.Getter;
 
 /**
  * 响应状态码枚举
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
@@ -31,6 +31,14 @@ public enum ResultCode {
     USERNAME_OR_PASSWORD_ERROR(-104, "用户名或密码错误"),
     ACCOUNT_DISABLED(-105, "账号已被禁用"),
     ACCOUNT_LOCKED(-106, "账号已被锁定"),
+    MUST_CHANGE_PASSWORD(-107, "首次登录必须修改密码"),
+    PASSWORD_TOO_WEAK(-108, "密码强度不足"),
+    RATE_LIMITED(-109, "请求过于频繁，请稍后再试"),
+    CONFLICT(-110, "资源状态冲突"),
+    MFA_REQUIRED(-111, "需要多因素认证"),
+    MFA_CODE_INVALID(-112, "MFA验证码无效"),
+    MFA_CHALLENGE_INVALID(-113, "MFA挑战无效或已过期"),
+    MFA_NOT_ENABLED(-114, "账号未启用MFA"),
 
     // 业务错误 (-200 ~ -299)
     BALANCE_INSUFFICIENT(-200, "余额不足"),
@@ -66,4 +74,3 @@ public enum ResultCode {
      */
     private final String message;
 }
-

@@ -591,7 +591,7 @@ onMounted(() => {
 }
 
 .info-item .price {
-  color: #f56c6c;
+  color: var(--color-danger);
   font-weight: 600;
 }
 

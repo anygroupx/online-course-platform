@@ -16,7 +16,7 @@ import java.util.Map;
 
 /**
  * JWT工具类
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
@@ -24,8 +24,11 @@ import java.util.Map;
 @Component
 public class JwtUtil {
 
-    @Value("${jwt.secret}")
+    @Value("${jwt.secret:}")
     private String secret;
+
+    @Value("${spring.profiles.active:dev}")
+    private String activeProfile;
 
     private final com.course.platform.application.service.system.SystemConfigService systemConfigService;
 
@@ -36,15 +39,33 @@ public class JwtUtil {
 
 
     /**
-     * 生成密钥
+     * 生成密钥（生产/通用：密钥必须显式配置且长度足够）
      */
     private SecretKey getSecretKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("JWT_SECRET is required and must be configured");
+        }
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < 32) {
+            throw new IllegalStateException("JWT_SECRET must be at least 32 bytes");
+        }
+        String lower = secret.toLowerCase();
+        boolean placeholder = lower.contains("change_me")
+                || "secret".equals(lower)
+                || "jwt_secret".equals(lower)
+                || lower.startsWith("change_me");
+        if (placeholder) {
+            if (!"dev".equalsIgnoreCase(activeProfile) && !"local".equalsIgnoreCase(activeProfile)) {
+                throw new IllegalStateException("JWT_SECRET looks like a placeholder; refuse to start in non-dev profile");
+            }
+            log.warn("JWT_SECRET looks weak/placeholder; only acceptable in dev/local");
+        }
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
     /**
      * 生成Token
-     * 
+     *
      * @param userId 用户ID
      * @param username 用户名
      * @return Token字符串
@@ -67,7 +88,7 @@ public class JwtUtil {
 
     /**
      * 生成Token（带额外信息）
-     * 
+     *
      * @param userId 用户ID
      * @param username 用户名
      * @param claims 额外信息
@@ -92,7 +113,7 @@ public class JwtUtil {
 
     /**
      * 从Token中获取Claims
-     * 
+     *
      * @param token Token字符串
      * @return Claims对象
      */
@@ -111,7 +132,7 @@ public class JwtUtil {
 
     /**
      * 从Token中获取用户ID
-     * 
+     *
      * @param token Token字符串
      * @return 用户ID
      */
@@ -125,7 +146,7 @@ public class JwtUtil {
 
     /**
      * 从Token中获取用户名
-     * 
+     *
      * @param token Token字符串
      * @return 用户名
      */
@@ -139,7 +160,7 @@ public class JwtUtil {
 
     /**
      * 验证Token是否有效
-     * 
+     *
      * @param token Token字符串
      * @return true-有效 false-无效
      */
@@ -159,7 +180,7 @@ public class JwtUtil {
 
     /**
      * 判断Token是否过期
-     * 
+     *
      * @param token Token字符串
      * @return true-已过期 false-未过期
      */
@@ -178,7 +199,7 @@ public class JwtUtil {
 
     /**
      * 刷新Token
-     * 
+     *
      * @param token 旧Token
      * @return 新Token
      */
@@ -196,7 +217,7 @@ public class JwtUtil {
 
     /**
      * 生成Refresh Token
-     * 
+     *
      * @param userId 用户ID
      * @param username 用户名
      * @return Refresh Token字符串
@@ -220,7 +241,7 @@ public class JwtUtil {
 
     /**
      * 验证Refresh Token是否有效
-     * 
+     *
      * @param refreshToken Refresh Token字符串
      * @return true-有效 false-无效
      */
@@ -243,4 +264,3 @@ public class JwtUtil {
         }
     }
 }
-

@@ -1,6 +1,6 @@
 /**
  * 系统变量状态管理
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
@@ -70,7 +70,7 @@ export const useVariableStore = defineStore('variable', () => {
   const loadAllVariables = async () => {
     const types = [
       'order_status',
-      'dock_status', 
+      'dock_status',
       'user_status',
       'platform_status',
       'card_status',
@@ -78,7 +78,7 @@ export const useVariableStore = defineStore('variable', () => {
       'session_status',
       'message_type'
     ]
-    
+
     await Promise.all(types.map(type => loadVariablesByType(type)))
   }
 
@@ -98,15 +98,37 @@ export const useVariableStore = defineStore('variable', () => {
   const getVariableTagType = (type, value) => {
     const variable = getVariableByTypeAndValue(type, value)
     if (!variable) return 'info'
-    
+
     // 根据颜色或状态判断标签类型
     if (variable.color) {
-      if (variable.color.includes('#67c23a') || variable.color.includes('#5cb85c')) return 'success'
-      if (variable.color.includes('#e6a23c') || variable.color.includes('#f0ad4e')) return 'warning'
-      if (variable.color.includes('#f56c6c') || variable.color.includes('#d9534f')) return 'danger'
-      if (variable.color.includes('#409eff') || variable.color.includes('#5bc0de')) return 'primary'
+      const color = (variable.color || '').toLowerCase()
+      if (
+        color.includes('#63c56e') ||
+        color.includes('#67c23a') ||
+        color.includes('#5cb85c') ||
+        color.includes('var(--color-success)')
+      ) return 'success'
+      if (
+        color.includes('#f7a62f') ||
+        color.includes('#e6a23c') ||
+        color.includes('#f0ad4e') ||
+        color.includes('var(--color-warning)')
+      ) return 'warning'
+      if (
+        color.includes('#f06565') ||
+        color.includes('#f56c6c') ||
+        color.includes('#d9534f') ||
+        color.includes('var(--color-danger)')
+      ) return 'danger'
+      if (
+        color.includes('#4e8cff') ||
+        color.includes('#409eff') ||
+        color.includes('#667eea') ||
+        color.includes('#5bc0de') ||
+        color.includes('var(--color-primary)')
+      ) return 'primary'
     }
-    
+
     return 'info'
   }
 
@@ -139,7 +161,7 @@ export const useVariableStore = defineStore('variable', () => {
     // 状态
     variables,
     loading,
-    
+
     // 计算属性
     orderStatusOptions,
     dockStatusOptions,
@@ -149,7 +171,7 @@ export const useVariableStore = defineStore('variable', () => {
     announcementTypeOptions,
     sessionStatusOptions,
     messageTypeOptions,
-    
+
     // 方法
     loadVariablesByType,
     loadAllVariables,

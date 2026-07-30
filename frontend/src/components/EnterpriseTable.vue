@@ -664,12 +664,17 @@ defineExpose({
 }
 
 .table-actions :deep(.el-button--primary:not(.is-link)) {
-  --el-button-bg-color: var(--el-color-primary);
-  --el-button-border-color: var(--el-color-primary);
-  --el-button-text-color: #ffffff;
-  --el-button-hover-bg-color: var(--el-color-primary-light-3);
-  --el-button-hover-border-color: var(--el-color-primary-light-3);
-  --el-button-hover-text-color: #ffffff;
+  background: var(--primary-gradient) !important;
+  border: none !important;
+  color: #ffffff !important;
+  box-shadow: var(--primary-shadow);
+}
+
+.table-actions :deep(.el-button--primary:not(.is-link):hover),
+.table-actions :deep(.el-button--primary:not(.is-link):focus) {
+  opacity: 0.94;
+  box-shadow: var(--primary-shadow-hover);
+  color: #ffffff !important;
 }
 
 .table-actions :deep(.el-button--success:not(.is-link)) {
@@ -696,6 +701,15 @@ defineExpose({
   --el-button-text-color: #ffffff;
   --el-button-hover-bg-color: var(--el-color-danger-light-3);
   --el-button-hover-border-color: var(--el-color-danger-light-3);
+  --el-button-hover-text-color: #ffffff;
+}
+
+.table-actions :deep(.el-button--info:not(.is-link)) {
+  --el-button-bg-color: var(--el-color-info);
+  --el-button-border-color: var(--el-color-info);
+  --el-button-text-color: #ffffff;
+  --el-button-hover-bg-color: var(--el-color-info-dark-2);
+  --el-button-hover-border-color: var(--el-color-info-dark-2);
   --el-button-hover-text-color: #ffffff;
 }
 

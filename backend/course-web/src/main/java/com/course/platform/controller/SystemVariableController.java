@@ -1,7 +1,10 @@
 package com.course.platform.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.course.platform.common.constant.Constants;
+import com.course.platform.security.SecurityUtils;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.Result;
 import com.course.platform.common.result.ResultCode;
@@ -21,15 +24,16 @@ import java.util.List;
 /**
  * 系统变量管理控制器
  * 提供系统变量的增删改查功能
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  * Source: 基于系统变量管理需求设计
  */
 @Tag(name = "系统变量管理", description = "系统变量配置管理接口")
-@RestController
+@PreAuthorize("hasRole('ADMIN')")
 @RequestMapping("/admin/variables")
 @RequiredArgsConstructor
+@RestController
 public class SystemVariableController {
 
     private final SystemVariableService systemVariableService;
@@ -38,9 +42,7 @@ public class SystemVariableController {
      * 验证管理员权限
      */
     private void checkAdmin(Long userId) {
-        if (!Constants.DEFAULT_ADMIN_ID.equals(userId)) {
-            throw new BusinessException(ResultCode.FORBIDDEN);
-        }
+        SecurityUtils.requireAdmin();
     }
 
     /**

@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 
 /**
  * 第三方API接口实体类
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
@@ -50,27 +50,31 @@ public class ApiProvider implements Serializable {
     private String username;
 
     /**
-     * 密码
+     * 密码（禁止默认序列化）
      */
     @TableField("password")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String password;
 
     /**
-     * Token
+     * Token（禁止默认序列化）
      */
     @TableField("token")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String token;
 
     /**
-     * API Key
+     * API Key（禁止默认序列化）
      */
     @TableField("api_key")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String apiKey;
 
     /**
-     * Cookie
+     * Cookie（禁止默认序列化）
      */
     @TableField("cookie")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String cookie;
 
     /**
@@ -103,4 +107,3 @@ public class ApiProvider implements Serializable {
     @TableField(value = "update_time", fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
 }
-

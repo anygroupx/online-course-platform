@@ -1,5 +1,10 @@
 # CORS问题修复总结
 
+> 更新时间：2026-07-12
+> 后端开发端口 8080 / Docker 端口 **8082**，context-path 均为 `/api`。
+> 若文中示例 IP 为内网调试地址，请替换为当前环境。
+
+
 ## 问题根源
 
 **SecurityConfig.java 第125-131行硬编码了CORS允许的源**，没有读取 `application.yml` 中的配置！

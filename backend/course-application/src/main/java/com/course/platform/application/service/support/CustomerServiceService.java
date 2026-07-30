@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * 客服服务接口
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  * Source: 基于现有系统架构设计
@@ -18,7 +18,7 @@ public interface CustomerServiceService {
 
     /**
      * 创建或获取用户会话
-     * 
+     *
      * @param userId 用户ID
      * @return 会话信息
      */
@@ -26,7 +26,7 @@ public interface CustomerServiceService {
 
     /**
      * 发送消息
-     * 
+     *
      * @param messageDTO 消息DTO
      * @param userId 发送者ID
      * @return 是否成功
@@ -35,15 +35,16 @@ public interface CustomerServiceService {
 
     /**
      * 获取会话消息列表
-     * 
+     *
      * @param sessionId 会话ID
+     * @param userId 当前用户ID
      * @return 消息列表
      */
-    List<CustomerServiceMessageVO> getSessionMessages(String sessionId);
+    List<CustomerServiceMessageVO> getSessionMessages(String sessionId, Long userId);
 
     /**
      * 标记消息为已读
-     * 
+     *
      * @param sessionId 会话ID
      * @param userId 用户ID
      * @return 是否成功
@@ -52,7 +53,7 @@ public interface CustomerServiceService {
 
     /**
      * 获取用户未读消息数量
-     * 
+     *
      * @param userId 用户ID
      * @return 未读消息数量
      */
@@ -60,7 +61,7 @@ public interface CustomerServiceService {
 
     /**
      * 结束会话
-     * 
+     *
      * @param sessionId 会话ID
      * @param userId 用户ID
      * @return 是否成功
@@ -69,7 +70,7 @@ public interface CustomerServiceService {
 
     /**
      * 分配客服
-     * 
+     *
      * @param sessionId 会话ID
      * @param customerServiceId 客服ID
      * @return 是否成功
@@ -78,7 +79,7 @@ public interface CustomerServiceService {
 
     /**
      * 获取所有会话列表（管理端）
-     * 
+     *
      * @param status 会话状态，null表示查询所有
      * @return 会话列表
      */
@@ -86,7 +87,7 @@ public interface CustomerServiceService {
 
     /**
      * 客服接入会话
-     * 
+     *
      * @param sessionId 会话ID
      * @param customerServiceId 客服ID
      * @return 是否成功

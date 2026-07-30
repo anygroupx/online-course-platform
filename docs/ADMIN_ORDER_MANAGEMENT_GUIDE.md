@@ -1,5 +1,11 @@
 # 管理员订单管理功能使用说明
 
+> 更新时间：2026-07-12
+> Base：开发 `http://localhost:8080/api`，Docker `http://localhost:8082/api`
+> 权限：管理员（角色 ADMIN / 历史逻辑可能校验特定用户）
+> 完整 API 索引见 [API_DOCUMENTATION.md](./API_DOCUMENTATION.md)
+
+
 ## 功能概述
 管理员订单管理功能为系统管理员提供了对自营平台订单的完整管理能力，包括订单查询、状态管理、批量操作、统计报表等功能。
 

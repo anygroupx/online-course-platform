@@ -90,3 +90,14 @@ course:
       enabled: true
       interval-minutes: 30
       interval-milliseconds: 1800000
+
+# 敏感字段本地加密与安全任务配置
+app:
+  crypto:
+    # 必须由环境变量注入；生产环境建议改用 KMS。
+    secret: ${APP_CRYPTO_SECRET}
+  security:
+    alert-webhook: ${SECURITY_ALERT_WEBHOOK:}
+    mfa-issuer: ${MFA_ISSUER:OnlineCoursePlatform}
+    reconcile-enabled: ${PAYMENT_RECONCILE_ENABLED:true}
+    reconcile-cron: ${PAYMENT_RECONCILE_CRON:0 15 1 * * ?}

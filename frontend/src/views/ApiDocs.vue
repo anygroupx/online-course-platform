@@ -15,7 +15,7 @@
             <p>
               所有接口均需使用 <code>uid</code> 和 <code>api_key</code> 进行认证
             </p>
-            <!-- 基础url：frp-dad.com:14255 -->
+            <!-- 基础url：tunnel.example.com:14255 -->
             <p>
               基础请求URL：<code>{{ apiBaseUrl }}</code>
             </p>
@@ -155,7 +155,7 @@ print(response.json())</code></pre>
                   <pre><code>// ========================================
 // 29平台查询余额对接示例
 // 文件位置: 您的系统任意位置
-// 平台标识: "YourPlatform" 
+// 平台标识: "YourPlatform"
 // ========================================
 
 // 方式一：独立调用
@@ -630,10 +630,10 @@ print(response.json())</code></pre>
                   <pre><code>// ========================================
 // 29平台下单接口对接示例
 // 文件位置: /Checkorder/xdjk.php 的 addWk() 函数中
-// 平台标识: "erk" 
+// 平台标识: "erk"
 // ========================================
 
-else if ($type == "erk") 
+else if ($type == "erk")
 {
     $data = array(
         "uid" => $a["user"],      // 二开台为您分配的UID
@@ -907,7 +907,7 @@ print(response.json())</code></pre>
                   <pre><code>// ========================================
 // 29平台查询订单进度接口对接示例
 // 文件位置: /Checkorder/jdjk.php 的进度查询函数中
-// 平台标识: "erk" 
+// 平台标识: "erk"
 // ========================================
 
 else if ($type == "erk") {
@@ -915,10 +915,10 @@ else if ($type == "erk") {
     $erk_url = "$erk_rl/api/external/query-progress?uid=".$a["user"].
                 "&key=".$a["pass"].
                 "&orderNo=".$orderNo;
-    
+
     $result = get_url($erk_url, $data);
     $result = json_decode($result, true);
-    
+
     if ($result["code"] == "1") {
         $b[] = array(
             "code" => 1,
@@ -1044,10 +1044,10 @@ print(response.json())</code></pre>
                   <pre><code>// ========================================
 // 29平台补单接口对接示例
 // 文件位置: /Checkorder/bsjk.php 的 budanWk() 函数中
-// 平台标识: "erk" 
+// 平台标识: "erk"
 // ========================================
 
-elseif ($type == "erk") 
+elseif ($type == "erk")
 {
     $data = array(
         "uid" => $a["user"],      // 二开台为您分配的UID
@@ -1149,7 +1149,7 @@ else if ($type == "erk")
               <code>addWk()</code> 函数中
             </p>
             <pre><code>//erk平台下单接口 复制代码放在/Checkorder/xdjk.php 文件
-else if ($type == "erk") 
+else if ($type == "erk")
 {
     $data = array(
         "uid" => $a["user"],      // 二开台为您分配的UID
@@ -1181,10 +1181,10 @@ else if ($type == "erk") {
     $erk_url = "$erk_rl/api/external/query-progress?uid=".$a["user"].
                 "&key=".$a["pass"].
                 "&orderNo=".$orderNo;
-    
+
     $result = get_url($erk_url, $data);
     $result = json_decode($result, true);
-    
+
     if ($result["code"] == "1") {
         $b[] = array(
             "code" => 1,
@@ -1207,7 +1207,7 @@ else if ($type == "erk") {
               <code>budanWk()</code> 函数中
             </p>
             <pre><code>//erk平台补刷接口 复制代码放在/Checkorder/bsjk.php 文件
-elseif ($type == "erk") 
+elseif ($type == "erk")
 {
     $data = array(
         "uid" => $a["user"],      // 二开台为您分配的UID
@@ -1277,7 +1277,7 @@ import * as externalApi from "@/api/external";
 import router from "@/router";
 
 const apiBaseUrl =
-  import.meta.env.VITE_API_BASE_URL || "https://frp-dad.com:14255";
+  import.meta.env.VITE_API_BASE_URL || "/api";
 
 // 凭证信息
 const credentials = reactive({
@@ -1652,7 +1652,7 @@ const testBudan = async () => {
 .title {
   font-size: 18px;
   font-weight: 600;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;

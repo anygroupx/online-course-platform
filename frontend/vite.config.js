@@ -19,7 +19,7 @@ export default defineConfig({
     proxy: {
       "/api": {
         // target: "http://192.0.2.10:8082",
-        // target: "https://frp-dad.com:14255",
+        // target: "https://tunnel.example.com:14255",
         target: "http://localhost:8081",
         changeOrigin: true,
       },

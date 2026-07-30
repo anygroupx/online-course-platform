@@ -2,29 +2,35 @@ package com.course.platform.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.course.platform.infra.cache.SystemVariableCache;
+import com.course.platform.application.service.auth.AuthService;
+import com.course.platform.application.service.security.MfaService;
+import com.course.platform.application.service.security.SecurityAuditService;
+import com.course.platform.application.service.support.OperationLogService;
+import com.course.platform.application.service.system.SystemConfigService;
 import com.course.platform.common.constant.Constants;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
-import com.course.platform.shared.util.JwtUtil;
+import com.course.platform.common.security.SecurityRoles;
+import com.course.platform.common.security.TokenHashUtil;
 import com.course.platform.domain.dto.LoginRequest;
+import com.course.platform.domain.entity.RefreshToken;
 import com.course.platform.domain.entity.User;
 import com.course.platform.domain.vo.LoginResponse;
+import com.course.platform.infra.cache.SystemVariableCache;
+import com.course.platform.infra.persistence.mapper.RefreshTokenMapper;
 import com.course.platform.infra.persistence.mapper.UserMapper;
-import com.course.platform.application.service.auth.AuthService;
-import com.course.platform.application.service.support.OperationLogService;
+import com.course.platform.shared.util.JwtUtil;
+import com.course.platform.shared.util.ServletUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
 /**
- * 认证服务实现类
- * 
- * @author AI Assistant
- * @since 2025-01-17
+ * 认证服务实现类（含 Refresh Token 哈希与强制改密）
  */
 @Slf4j
 @Service
@@ -34,59 +40,92 @@ public class AuthServiceImpl implements AuthService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
-    private final com.course.platform.infra.persistence.mapper.RefreshTokenMapper refreshTokenMapper;
-    private final com.course.platform.application.service.system.SystemConfigService systemConfigService;
+    private final RefreshTokenMapper refreshTokenMapper;
+    private final SystemConfigService systemConfigService;
     private final OperationLogService operationLogService;
+    private final MfaService mfaService;
+    private final SecurityAuditService securityAuditService;
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public LoginResponse login(LoginRequest request) {
-        // 查询用户
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>()
                 .eq(User::getUsername, request.getUsername()));
 
-        // 验证用户是否存在
         if (user == null) {
+            securityAuditService.record("LOGIN_FAIL", "WARN", null, request.getUsername(),
+                    "/auth/login", "POST", "用户名不存在或密码错误", null);
             throw new BusinessException(ResultCode.USERNAME_OR_PASSWORD_ERROR);
         }
 
-        // 验证密码
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            securityAuditService.record("LOGIN_FAIL", "WARN", user.getId(), user.getUsername(),
+                    "/auth/login", "POST", "密码错误", null);
             throw new BusinessException(ResultCode.USERNAME_OR_PASSWORD_ERROR);
         }
 
-        // 验证账号状态
         if (SystemVariableCache.getStatusValue("user_status", "disabled") == user.getStatus()) {
+            securityAuditService.record("LOGIN_FAIL", "WARN", user.getId(), user.getUsername(),
+                    "/auth/login", "POST", "账号已禁用", null);
             throw new BusinessException(ResultCode.ACCOUNT_DISABLED);
         }
 
-        // 更新最后登录时间和IP
+        // 禁用默认弱密码继续使用：admin/123456 或任何匹配默认哈希的首次登录
+        boolean defaultPassword = passwordEncoder.matches("123456", user.getPassword());
+        if (defaultPassword) {
+            user.setMustChangePassword(1);
+        }
+
         user.setLastLoginTime(LocalDateTime.now());
         try {
-            user.setLastLoginIp(com.course.platform.shared.util.ServletUtil.getClientIp());
+            user.setLastLoginIp(ServletUtil.getClientIp());
         } catch (Exception e) {
             user.setLastLoginIp("127.0.0.1");
         }
         userMapper.updateById(user);
 
-        // 生成Token
-        String token = jwtUtil.generateToken(user.getId(), user.getUsername());
+        String role = resolveRole(user);
+        boolean mustChange = user.getMustChangePassword() != null && user.getMustChangePassword() == 1;
+        boolean mfaEnabled = mfaService.isEnabled(user);
 
-        // 生成Refresh Token
+        // 管理员启用 MFA 时，不直接签发 Token，返回 challenge
+        if (mfaEnabled && SecurityRoles.ADMIN.equals(role)) {
+            String challengeId = mfaService.createChallenge(user);
+            securityAuditService.record("MFA_REQUIRED", "INFO", user.getId(), user.getUsername(),
+                    "/auth/login", "POST", "管理员登录需要 MFA", "challengeId=" + challengeId);
+            return LoginResponse.builder()
+                    .token(null)
+                    .refreshToken(null)
+                    .userId(user.getId())
+                    .username(user.getUsername())
+                    .nickname(StrUtil.isNotBlank(user.getNickname()) ? user.getNickname() : user.getUsername())
+                    .balance(null)
+                    .rate(null)
+                    .isAdmin(true)
+                    .role(role)
+                    .mustChangePassword(mustChange)
+                    .mfaRequired(true)
+                    .mfaEnabled(true)
+                    .mfaChallengeId(challengeId)
+                    .build();
+        }
+
+        String token = jwtUtil.generateToken(user.getId(), user.getUsername());
         String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
 
-        // 从数据库读取 Refresh Token 过期时间（天）
         Integer expireDays = systemConfigService.getConfigValueAsInteger("refresh_token_expire_days", 7);
         LocalDateTime expireTime = LocalDateTime.now().plusDays(expireDays);
-        
-        // 保存Refresh Token到数据库
-        com.course.platform.domain.entity.RefreshToken refreshTokenEntity = com.course.platform.domain.entity.RefreshToken.builder()
+
+        RefreshToken refreshTokenEntity = RefreshToken.builder()
                 .userId(user.getId())
-                .token(refreshToken)
+                .token(null) // 不再保存明文
+                .tokenHash(TokenHashUtil.sha256(refreshToken))
+                .tokenFamilyId(TokenHashUtil.randomHex(16))
                 .expireTime(expireTime)
+                .lastUsedIp(user.getLastLoginIp())
                 .build();
         refreshTokenMapper.insert(refreshTokenEntity);
 
-        // 构建响应
         LoginResponse response = LoginResponse.builder()
                 .token(token)
                 .refreshToken(refreshToken)
@@ -95,71 +134,108 @@ public class AuthServiceImpl implements AuthService {
                 .nickname(StrUtil.isNotBlank(user.getNickname()) ? user.getNickname() : user.getUsername())
                 .balance(user.getBalance())
                 .rate(user.getRate())
-                .isAdmin(Constants.DEFAULT_ADMIN_ID.equals(user.getId()))
+                .isAdmin(SecurityRoles.ADMIN.equals(role))
+                .role(role)
+                .mustChangePassword(mustChange)
+                .mfaRequired(false)
+                .mfaEnabled(mfaEnabled)
                 .build();
-        
-        // 记录登录日志
-        operationLogService.log(user.getId(), "登录", 
-                "用户登录成功，IP: " + user.getLastLoginIp(), 
+
+        operationLogService.log(user.getId(), "登录",
+                "用户登录成功，IP: " + user.getLastLoginIp(),
                 null, user.getBalance());
-        
+        securityAuditService.record("LOGIN_SUCCESS", "INFO", user.getId(), user.getUsername(),
+                "/auth/login", "POST", "用户登录成功", "ip=" + user.getLastLoginIp());
+
         return response;
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void logout(Long userId) {
-        // TODO: 如果使用Redis，可以将Token加入黑名单
         log.info("用户登出: userId={}", userId);
-        
-        // 记录登出日志
-        operationLogService.log(userId, "登出", "用户主动登出", null, null);
+        // 撤销该用户全部 refresh token
+        RefreshToken update = new RefreshToken();
+        update.setRevokedAt(LocalDateTime.now());
+        refreshTokenMapper.update(update, new LambdaQueryWrapper<RefreshToken>()
+                .eq(RefreshToken::getUserId, userId)
+                .isNull(RefreshToken::getRevokedAt));
+        operationLogService.log(userId, "登出", "用户主动登出，已撤销Refresh Token", null, null);
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public LoginResponse refresh(String refreshToken) {
-        // 验证Refresh Token格式和签名
         if (!jwtUtil.validateRefreshToken(refreshToken)) {
             throw new BusinessException(ResultCode.TOKEN_EXPIRED);
         }
 
-        // 查询Refresh Token是否存在且未过期
-        com.course.platform.domain.entity.RefreshToken refreshTokenEntity = refreshTokenMapper.selectOne(
-                new LambdaQueryWrapper<com.course.platform.domain.entity.RefreshToken>()
-                        .eq(com.course.platform.domain.entity.RefreshToken::getToken, refreshToken)
-                        .ge(com.course.platform.domain.entity.RefreshToken::getExpireTime, LocalDateTime.now())
+        String hash = TokenHashUtil.sha256(refreshToken);
+        RefreshToken refreshTokenEntity = refreshTokenMapper.selectOne(
+                new LambdaQueryWrapper<RefreshToken>()
+                        .eq(RefreshToken::getTokenHash, hash)
+                        .isNull(RefreshToken::getRevokedAt)
+                        .ge(RefreshToken::getExpireTime, LocalDateTime.now())
         );
 
+        // 兼容旧明文 token
         if (refreshTokenEntity == null) {
+            refreshTokenEntity = refreshTokenMapper.selectOne(
+                    new LambdaQueryWrapper<RefreshToken>()
+                            .eq(RefreshToken::getToken, refreshToken)
+                            .isNull(RefreshToken::getRevokedAt)
+                            .ge(RefreshToken::getExpireTime, LocalDateTime.now())
+            );
+        }
+
+        if (refreshTokenEntity == null) {
+            // 可能是重放：若 hash 命中已撤销记录，则撤销整个 family
+            RefreshToken reused = refreshTokenMapper.selectOne(new LambdaQueryWrapper<RefreshToken>()
+                    .eq(RefreshToken::getTokenHash, hash)
+                    .isNotNull(RefreshToken::getRevokedAt)
+                    .last("LIMIT 1"));
+            if (reused != null && reused.getTokenFamilyId() != null) {
+                RefreshToken revoke = new RefreshToken();
+                revoke.setRevokedAt(LocalDateTime.now());
+                refreshTokenMapper.update(revoke, new LambdaQueryWrapper<RefreshToken>()
+                        .eq(RefreshToken::getTokenFamilyId, reused.getTokenFamilyId())
+                        .isNull(RefreshToken::getRevokedAt));
+                log.warn("检测到 Refresh Token 重放，已撤销 family={}", reused.getTokenFamilyId());
+            }
             throw new BusinessException(ResultCode.TOKEN_EXPIRED);
         }
 
-        // 获取用户信息
         User user = userMapper.selectById(refreshTokenEntity.getUserId());
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
-
-        // 验证账号状态
         if (SystemVariableCache.getStatusValue("user_status", "disabled") == user.getStatus()) {
             throw new BusinessException(ResultCode.ACCOUNT_DISABLED);
         }
 
-        // 生成新的Access Token
         String newToken = jwtUtil.generateToken(user.getId(), user.getUsername());
-
-        // 生成新的Refresh Token（滚动刷新）
         String newRefreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
-
-        // 从数据库读取 Refresh Token 过期时间（天）
         Integer expireDays = systemConfigService.getConfigValueAsInteger("refresh_token_expire_days", 7);
         LocalDateTime newExpireTime = LocalDateTime.now().plusDays(expireDays);
-        
-        // 更新Refresh Token
-        refreshTokenEntity.setToken(newRefreshToken);
-        refreshTokenEntity.setExpireTime(newExpireTime);
+
+        // 滚动刷新：撤销旧 token，写入新 hash
+        refreshTokenEntity.setRevokedAt(LocalDateTime.now());
+        refreshTokenEntity.setReplacedBy(TokenHashUtil.sha256(newRefreshToken));
         refreshTokenMapper.updateById(refreshTokenEntity);
 
-        // 构建响应
+        RefreshToken newEntity = RefreshToken.builder()
+                .userId(user.getId())
+                .token(null)
+                .tokenHash(TokenHashUtil.sha256(newRefreshToken))
+                .tokenFamilyId(refreshTokenEntity.getTokenFamilyId() != null
+                        ? refreshTokenEntity.getTokenFamilyId()
+                        : TokenHashUtil.randomHex(16))
+                .expireTime(newExpireTime)
+                .lastUsedIp(safeIp())
+                .build();
+        refreshTokenMapper.insert(newEntity);
+
+        String role = resolveRole(user);
         return LoginResponse.builder()
                 .token(newToken)
                 .refreshToken(newRefreshToken)
@@ -168,8 +244,29 @@ public class AuthServiceImpl implements AuthService {
                 .nickname(StrUtil.isNotBlank(user.getNickname()) ? user.getNickname() : user.getUsername())
                 .balance(user.getBalance())
                 .rate(user.getRate())
-                .isAdmin(Constants.DEFAULT_ADMIN_ID.equals(user.getId()))
+                .isAdmin(SecurityRoles.ADMIN.equals(role))
+                .role(role)
+                .mustChangePassword(user.getMustChangePassword() != null && user.getMustChangePassword() == 1)
+                .mfaRequired(false)
+                .mfaEnabled(mfaService.isEnabled(user))
                 .build();
     }
-}
 
+    private String resolveRole(User user) {
+        if (StrUtil.isNotBlank(user.getRole())) {
+            return user.getRole().trim().toUpperCase();
+        }
+        if (Constants.DEFAULT_ADMIN_ID.equals(user.getId())) {
+            return SecurityRoles.ADMIN;
+        }
+        return SecurityRoles.USER;
+    }
+
+    private String safeIp() {
+        try {
+            return ServletUtil.getClientIp();
+        } catch (Exception e) {
+            return "127.0.0.1";
+        }
+    }
+}

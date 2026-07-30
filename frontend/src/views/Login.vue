@@ -7,9 +7,11 @@
           <i class="el-icon-reading"></i>
         </div>
         <h2>二开台</h2>
+        <p v-if="mfaStep" class="mfa-hint">管理员账号已启用 MFA，请输入动态验证码</p>
       </div>
 
       <el-form
+        v-if="!mfaStep"
         ref="loginFormRef"
         :model="loginForm"
         :rules="rules"
@@ -59,6 +61,41 @@
           </div>
         </div>
       </el-form>
+
+      <el-form
+        v-else
+        ref="mfaFormRef"
+        :model="mfaForm"
+        :rules="mfaRules"
+        class="login-form"
+        @submit.prevent="handleMfaVerify"
+      >
+        <el-form-item prop="code">
+          <el-input
+            v-model="mfaForm.code"
+            placeholder="请输入 6 位 TOTP 或备用恢复码"
+            size="large"
+            maxlength="16"
+            clearable
+            @keyup.enter="handleMfaVerify"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button
+            type="primary"
+            size="large"
+            :loading="loading"
+            @click="handleMfaVerify"
+            class="login-button"
+          >
+            <span v-if="!loading">验证并登录</span>
+            <span v-else>验证中...</span>
+          </el-button>
+        </el-form-item>
+        <div class="login-footer">
+          <el-link type="info" :underline="false" @click="backToPassword">返回账号密码登录</el-link>
+        </div>
+      </el-form>
     </div>
 
     <div class="decorative-elements">
@@ -79,11 +116,18 @@ const router = useRouter();
 const userStore = useUserStore();
 
 const loginFormRef = ref(null);
+const mfaFormRef = ref(null);
 const loading = ref(false);
+const mfaStep = ref(false);
+const mfaChallengeId = ref("");
 
 const loginForm = reactive({
   username: "",
   password: "",
+});
+
+const mfaForm = reactive({
+  code: "",
 });
 
 const rules = {
@@ -97,6 +141,13 @@ const rules = {
   ],
 };
 
+const mfaRules = {
+  code: [
+    { required: true, message: "请输入验证码", trigger: "blur" },
+    { min: 6, message: "验证码至少6位", trigger: "blur" },
+  ],
+};
+
 const handleLogin = async () => {
   if (!loginFormRef.value) return;
 
@@ -104,7 +155,12 @@ const handleLogin = async () => {
     if (valid) {
       loading.value = true;
       try {
-        await userStore.login(loginForm);
+        const result = await userStore.login(loginForm);
+        if (result?.mfaRequired) {
+          mfaStep.value = true;
+          mfaChallengeId.value = result.mfaChallengeId;
+          mfaForm.code = "";
+        }
       } catch (error) {
         console.error("登录失败：", error);
       } finally {
@@ -114,7 +170,30 @@ const handleLogin = async () => {
   });
 };
 
-// 跳转到注册页面
+const handleMfaVerify = async () => {
+  if (!mfaFormRef.value) return;
+  await mfaFormRef.value.validate(async (valid) => {
+    if (!valid) return;
+    loading.value = true;
+    try {
+      await userStore.verifyMfaLogin({
+        challengeId: mfaChallengeId.value,
+        code: mfaForm.code,
+      });
+    } catch (error) {
+      console.error("MFA 验证失败：", error);
+    } finally {
+      loading.value = false;
+    }
+  });
+};
+
+const backToPassword = () => {
+  mfaStep.value = false;
+  mfaChallengeId.value = "";
+  mfaForm.code = "";
+};
+
 const goToRegister = () => {
   router.push("/register");
 };
@@ -216,166 +295,48 @@ const goToRegister = () => {
   box-shadow: 0 25px 70px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.2);
   position: relative;
   z-index: 1;
-  animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-html.dark .login-box {
-  background: rgba(30, 41, 59, 0.95);
-  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(50px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
 }
 
 .login-header {
   text-align: center;
-  margin-bottom: 35px;
+  margin-bottom: 36px;
 }
 
 .logo-icon {
-  width: 70px;
-  height: 70px;
-  margin: 0 auto 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 36px;
-  color: white;
-  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    transform: scale(1);
-    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
-  }
-  50% {
-    transform: scale(1.05);
-    box-shadow: 0 15px 40px rgba(102, 126, 234, 0.6);
-  }
+  font-size: 42px;
+  color: #409eff;
+  margin-bottom: 10px;
 }
 
 .login-header h2 {
-  font-size: 34px;
-  font-weight: 700;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin-bottom: 12px;
-  letter-spacing: 1px;
+  margin: 0;
+  font-size: 28px;
+  color: #1f2937;
 }
 
-.login-header p {
-  font-size: 14px;
-  color: var(--text-regular);
-  font-weight: 400;
-  line-height: 1.6;
+.mfa-hint {
+  margin-top: 10px;
+  color: #6b7280;
+  font-size: 13px;
 }
 
-.login-form {
-  margin-top: 30px;
-}
-
-.login-form :deep(.el-form-item) {
-  margin-bottom: 24px;
+.login-form :deep(.el-input__wrapper) {
+  border-radius: 10px;
 }
 
 .login-button {
   width: 100%;
-  height: 48px;
-  font-size: 16px;
-  font-weight: 600;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
   border-radius: 10px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  letter-spacing: 2px;
-}
-
-.login-button:hover:not(:disabled) {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
-}
-
-.login-button:active:not(:disabled) {
-  transform: translateY(-1px);
+  font-weight: 600;
 }
 
 .login-footer {
   text-align: center;
-  margin-top: 20px;
-  padding-top: 15px;
-  border-top: 1px solid var(--border-color-light);
+  margin-top: 8px;
 }
 
 .footer-text {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin-right: 8px;
-}
-
-:deep(.el-input__wrapper) {
-  border-radius: 10px;
-  padding: 12px 15px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid transparent;
-}
-
-html.dark :deep(.el-input__wrapper) {
-  background-color: rgba(255, 255, 255, 0.05);
-  box-shadow: none;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-:deep(.el-input__wrapper):hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  border-color: rgba(102, 126, 234, 0.2);
-}
-
-:deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
-  border-color: #667eea;
-}
-
-:deep(.el-input__inner) {
-  font-size: 15px;
-}
-
-:deep(.el-form-item__error) {
-  font-size: 12px;
-  padding-top: 4px;
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .login-box {
-    width: 90%;
-    max-width: 400px;
-    padding: 40px 30px;
-  }
-
-  .login-header h2 {
-    font-size: 28px;
-  }
-
-  .logo-icon {
-    width: 60px;
-    height: 60px;
-    font-size: 30px;
-  }
+  color: #6b7280;
+  margin-right: 6px;
 }
 </style>

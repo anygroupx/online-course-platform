@@ -1,195 +1,108 @@
 # 快速开始指南
 
-## 🎯 一分钟部署
+> 更新时间：2026-07-12
+> 适用：Docker Compose 一键部署
 
-### Windows 用户
+## 一分钟部署
 
-1. **确保 Docker Desktop 正在运行**
+### Windows
 
-2. **双击运行部署脚本**
-   ```
-   deploy.bat
-   ```
+1. 启动 Docker Desktop
+2. 双击或执行 `deploy.bat`
+3. 等待构建完成（首次 5–15 分钟）
+4. 访问：
+   - 本地：http://localhost:8888
+   - 域名：https://course.example.com
 
-3. **等待部署完成**（约5-10分钟）
-
-4. **访问应用**
-   - 本地访问: http://localhost:8888
-   - 通过域名: https://course.example.com
-
-### Linux/Mac 用户
+### Linux / macOS
 
 ```bash
-# 1. 赋予执行权限
 chmod +x deploy.sh
-
-# 2. 运行部署
 ./deploy.sh
-
-# 3. 等待完成，访问应用
 ```
 
----
+## 部署前检查
 
-## 📋 部署前检查清单
+- [ ] Docker / Docker Compose 可用
+- [ ] 已执行：`docker network create local_net`
+- [ ] 已复制并编辑：`cp .env.example .env`
+- [ ] 端口空闲：`8082`、`8888`（MySQL/Redis/ES 仅容器内网，不占宿主机端口）
+- [ ] （跨机访问）WireGuard 已连通，本机服务 IP 规划为 `192.0.2.11`
 
-- [ ] Docker 已安装并运行
-- [ ] Docker Compose 已安装
-- [ ] WireGuard VPN 已连接（本机 IP: 10.0.0.2）
-- [ ] 端口 8082, 8888, 13306, 6379 未被占用
-- [ ] 已复制 `.env.example` 为 `.env` 并配置密码
-
----
-
-## 🔧 首次配置
-
-### 1. 环境变量配置
+## 环境变量
 
 ```bash
-# 复制示例文件
 cp .env.example .env
-
-# 编辑配置（Windows用记事本，Linux用nano/vim）
-notepad .env   # Windows
-nano .env      # Linux/Mac
 ```
 
-**必须修改的项**:
+必改（无弱默认，未设置将导致 compose 启动失败）：
+
 ```env
-MYSQL_ROOT_PASSWORD=你的MySQL密码
-MYSQL_PASSWORD=应用数据库密码
-JWT_SECRET=至少32位的随机字符串
+MYSQL_ROOT_PASSWORD=强密码
+MYSQL_PASSWORD=应用库密码
+JWT_SECRET=至少32字节随机串
+REDIS_PASSWORD=Redis密码
+APP_CRYPTO_SECRET=本地AES主密钥
 ```
 
-### 2. 创建 Docker 网络
+可选：
 
-```bash
-docker network create local_net
+```env
+API_DOC_ENABLED=false
 ```
 
-### 3. 部署
+## 服务地址
 
-运行对应的部署脚本即可。
+| 服务 | 地址 |
+|------|------|
+| 前端 | http://localhost:8888 |
+| 后端健康检查 | http://localhost:8082/api/health |
+| 后端 API | http://localhost:8082/api |
+| MySQL / Redis / ES | 仅 `local_net` 容器网络（无宿主机端口映射） |
 
----
+默认管理员：`admin` / `123456`（登录后立刻修改）。
 
-## 🌐 VPS Nginx 配置（首次部署需要）
-
-### 在VPS上执行以下命令：
-
-```bash
-# 1. 上传配置文件（在本地执行）
-scp deploy/vps-nginx-course.conf root@192.0.2.10:/tmp/
-
-# 2. SSH登录VPS
-ssh root@192.0.2.10
-
-# 3. 移动配置文件
-sudo mv /tmp/vps-nginx-course.conf /etc/nginx/sites-available/course.example.com.conf
-
-# 4. 创建软链接
-sudo ln -s /etc/nginx/sites-available/course.example.com.conf /etc/nginx/sites-enabled/
-
-# 5. 申请SSL证书
-sudo certbot certonly --nginx -d course.example.com
-
-# 6. 测试配置
-sudo nginx -t
-
-# 7. 重载Nginx
-sudo systemctl reload nginx
-```
-
----
-
-## ✅ 验证部署
-
-### 1. 检查容器状态
+## 常用命令
 
 ```bash
 docker compose ps
+docker compose logs -f backend
+docker compose restart backend
+docker compose down          # 停服务，保留数据卷
+docker compose down -v       # 危险：删除数据卷
 ```
 
-所有服务状态应为 `Up (healthy)`
-
-### 2. 测试服务
+重建：
 
 ```bash
-# 测试前端
-curl http://localhost:8888
-
-# 测试后端健康检查
-curl http://localhost:8082/api/health
-
-# 应该返回: {"code":200,"message":"操作成功","data":{"status":"UP",...}}
+./rebuild-docker.sh
+# 或 Windows: rebuild-docker.bat
 ```
 
-### 3. 浏览器访问
+## VPS Nginx（首次）
 
-- 本地: http://localhost:8888
-- 公网: https://course.example.com
+1. 使用 `deploy/vps-nginx-course.conf`
+2. 反代前端 `192.0.2.11:8888`，API `192.0.2.11:8082`
+3. `certbot` 申请 `course.example.com` 证书
+4. 监控项配置见 `deploy/UPTIME_KUMA_SETUP.md`
 
-项目不提供默认管理员账号；请在部署后通过受控流程创建。
+## 本地开发（非 Docker）
 
----
+见 [docs/QUICK_START.md](./docs/QUICK_START.md)。
 
-## 📝 常用命令
+关键命令：
 
 ```bash
-# 查看日志
-docker compose logs -f
+# 后端
+cd backend && mvn -pl course-web -am spring-boot:run   # :8080
 
-# 重启服务
-docker compose restart
-
-# 停止服务
-docker compose down
-
-# 完全清理（包括数据）
-docker compose down -v
-
-# 更新应用
-git pull
-./deploy.sh
+# 前端
+cd frontend && npm install && npm run dev              # :5173
 ```
 
----
+## 更多文档
 
-## 🆘 遇到问题？
-
-1. **容器启动失败**
-   ```bash
-   docker compose logs [service_name]
-   ```
-
-2. **端口被占用**
-   ```bash
-   # Windows
-   netstat -ano | findstr "8082"
-   
-   # Linux/Mac
-   lsof -i :8082
-   ```
-
-3. **数据库连接失败**
-   - 检查 `.env` 中的数据库密码
-   - 等待 MySQL 容器完全启动（约30秒）
-
-4. **前端404错误**
-   - 重新构建前端: `docker compose build --no-cache frontend`
-
-5. **502 网关错误（VPS）**
-   - 检查VPN连接: `ping 10.0.0.2`
-   - 检查本地服务: `curl http://10.0.0.2:8888`
-
----
-
-## 📚 详细文档
-
-- [完整部署文档](DOCKER_DEPLOY.md)
-- [监控配置指南](deploy/UPTIME_KUMA_SETUP.md)
-- [API文档](http://localhost:8082/api/doc.html)
-
----
-
-祝您部署顺利！🎉
+- [DOCKER_DEPLOY.md](./DOCKER_DEPLOY.md)
+- [docs/DEPLOYMENT_GUIDE.md](./docs/DEPLOYMENT_GUIDE.md)
+- [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)
+- [docs/README.md](./docs/README.md)

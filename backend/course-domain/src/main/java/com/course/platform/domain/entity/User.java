@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 
 /**
  * 用户实体类
- * 
+ *
  * @author AI Assistant
  * @since 2025-01-17
  */
@@ -41,6 +41,7 @@ public class User implements Serializable {
      * 密码（加密）
      */
     @TableField("password")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String password;
 
     /**
@@ -53,6 +54,7 @@ public class User implements Serializable {
      * QQ OpenID
      */
     @TableField("qq_openid")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String qqOpenid;
 
     /**
@@ -80,10 +82,36 @@ public class User implements Serializable {
     private BigDecimal rate;
 
     /**
-     * API密钥
+     * API密钥（兼容旧明文，逐步废弃，接口层禁止返回）
      */
     @TableField("api_key")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String apiKey;
+
+    /**
+     * API Key 哈希
+     */
+    @TableField("api_key_hash")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String apiKeyHash;
+
+    /**
+     * API Key 前缀（可展示）
+     */
+    @TableField("api_key_prefix")
+    private String apiKeyPrefix;
+
+    /**
+     * API Key 作用域
+     */
+    @TableField("api_key_scopes")
+    private String apiKeyScopes;
+
+    /**
+     * API Key 过期时间
+     */
+    @TableField("api_key_expire_time")
+    private java.time.LocalDateTime apiKeyExpireTime;
 
     /**
      * 邀请码
@@ -110,6 +138,50 @@ public class User implements Serializable {
     private Integer status;
 
     /**
+     * 角色：ADMIN / CS / USER
+     */
+    @TableField("role")
+    private String role;
+
+    /**
+     * 是否必须修改密码：0-否 1-是
+     */
+    @TableField("must_change_password")
+    private Integer mustChangePassword;
+
+    /**
+     * 密码最后修改时间
+     */
+    @TableField("password_changed_at")
+    private java.time.LocalDateTime passwordChangedAt;
+
+    /**
+     * 是否启用 MFA：0-否 1-是
+     */
+    @TableField("mfa_enabled")
+    private Integer mfaEnabled;
+
+    /**
+     * TOTP 密钥（加密存储）
+     */
+    @TableField("mfa_secret")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String mfaSecret;
+
+    /**
+     * MFA 启用时间
+     */
+    @TableField("mfa_enabled_at")
+    private java.time.LocalDateTime mfaEnabledAt;
+
+    /**
+     * 备用恢复码哈希，逗号分隔
+     */
+    @TableField("mfa_backup_codes_hash")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String mfaBackupCodesHash;
+
+    /**
      * 创建时间
      */
     @TableField(value = "create_time", fill = FieldFill.INSERT)
@@ -133,4 +205,3 @@ public class User implements Serializable {
     @TableField("last_login_ip")
     private String lastLoginIp;
 }
-

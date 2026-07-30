@@ -193,7 +193,7 @@
                 <el-icon><VideoPause /></el-icon>
                 <span class="btn-text">停止</span>
               </el-button>
-              
+
               <!-- 次要操作按钮（大屏显示） -->
               <el-button
                 type="primary"
@@ -359,7 +359,7 @@
           currentOrderDetail.updateTime
         }}</el-descriptions-item>
         <el-descriptions-item label="订单金额" v-if="currentOrderDetail.amount">
-          <span style="color: #f56c6c; font-weight: bold"
+          <span style="color: var(--color-danger); font-weight: bold"
             >￥{{ currentOrderDetail.amount }}</span
           >
         </el-descriptions-item>
@@ -515,7 +515,7 @@ const checkStudyStatus = async () => {
     if (orders.value.length > 0) {
       const orderIds = orders.value.map(order => order.id);
       const batchRes = await batchCheckRunningStatus(orderIds);
-      
+
       if (batchRes.code === 1 && batchRes.data) {
         // 更新每个订单的运行状态
         orders.value.forEach(order => {
@@ -543,12 +543,12 @@ const handleStartStudy = async (row) => {
       ElMessage.success("自动刷课已启动");
       row.isStudyRunning = true;
       statistics.value.runningCount++;
-      
+
       // 如果订单状态是待处理(0)，更新为进行中(1)
       if (row.orderStatus === 0) {
         row.orderStatus = 1;
       }
-      
+
       // 刷新一次列表以同步最新状态
       await checkStudyStatus();
     } else {
@@ -899,7 +899,7 @@ const handleMobileAction = async (command, row) => {
 const handleCheckExam = async (row) => {
   try {
     ElMessage.info(`正在检查订单 ${row.orderNo} 的考试状态...`);
-    
+
     const res = await checkExamStatus(row.id);
     if (res.code === 1 && res.data) {
       const examInfo = res.data;
@@ -908,7 +908,7 @@ const handleCheckExam = async (row) => {
         message: `考试检查完成：分数 ${examInfo.score}, ${passed}`,
         duration: 5000
       });
-      
+
       // 刷新订单列表
       await loadOrders();
     } else {
@@ -927,16 +927,16 @@ const handleSyncExamStatus = async () => {
       "同步考试状态",
       { type: "info" }
     );
-    
+
     syncLoading.value = true;
     const res = await syncExamStatus();
-    
+
     if (res.code === 1 && res.data) {
       const { total, success, failed } = res.data;
       ElMessage.success(
         `同步完成：总计 ${total} 个，成功 ${success} 个，失败 ${failed} 个`
       );
-      
+
       // 刷新订单列表和统计
       await loadOrders();
     } else {
@@ -1462,7 +1462,7 @@ html.dark {
   /* 批量操作卡片在暗色模式下的渐变 */
   .batch-actions-card {
     border-color: var(--primary-gradient-end);
-    background: rgba(102, 126, 234, 0.05);
+    background: rgba(78, 140, 255, 0.05);
   }
 
   /* 表格在暗色模式下的边框 */
@@ -1472,7 +1472,7 @@ html.dark {
 
   /* 悬停效果增强 */
   .stat-card:hover {
-    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 8px 24px rgba(78, 140, 255, 0.3);
   }
 }
 

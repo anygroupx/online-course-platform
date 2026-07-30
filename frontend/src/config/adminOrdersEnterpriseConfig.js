@@ -15,7 +15,7 @@ export const statisticsConfig = [
     value: 0,
     icon: Document,
     iconClass: "primary",
-    color: "#409eff",
+    color: "#4e8cff",
   },
   {
     key: "completed",
@@ -23,7 +23,7 @@ export const statisticsConfig = [
     value: 0,
     icon: Check,
     iconClass: "success",
-    color: "#67c23a",
+    color: "#63c56e",
   },
   {
     key: "totalAmount",
@@ -31,7 +31,7 @@ export const statisticsConfig = [
     value: 0,
     icon: Money,
     iconClass: "warning",
-    color: "#e6a23c",
+    color: "#f7a62f",
     extra: "元",
   },
   {
@@ -40,7 +40,7 @@ export const statisticsConfig = [
     value: 0,
     icon: Calendar,
     iconClass: "info",
-    color: "#909399",
+    color: "#8b95a7",
   },
 ];
 

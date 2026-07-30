@@ -152,7 +152,7 @@
             <el-card class="stat-card">
               <el-statistic title="总订单数" :value="stats.totalOrders">
                 <template #prefix>
-                  <el-icon color="#409EFF"><Document /></el-icon>
+                  <el-icon color="#4e8cff"><Document /></el-icon>
                 </template>
               </el-statistic>
             </el-card>
@@ -166,7 +166,7 @@
                 prefix="¥"
               >
                 <template #prefix>
-                  <el-icon color="#67C23A"><Money /></el-icon>
+                  <el-icon color="#63c56e"><Money /></el-icon>
                 </template>
               </el-statistic>
             </el-card>
@@ -436,7 +436,7 @@ const handleEnableApiKey = async () => {
 
     enablingApiKey.value = true;
     const res = await enableApiKey(1, null); // type=1 表示为自己开通
-    
+
     // 检查响应码
     if (res.code === 1) {
       ElMessage.success("API密钥开通成功");
@@ -532,7 +532,7 @@ onMounted(() => {
 
 .avatar {
   margin-bottom: 15px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   font-size: 36px;
 }
 
@@ -609,7 +609,7 @@ html.dark .key-value {
 .stat-item .stat-value {
   font-size: 32px;
   font-weight: 600;
-  color: #409eff;
+  color: var(--color-primary);
   margin-bottom: 8px;
 }
 
