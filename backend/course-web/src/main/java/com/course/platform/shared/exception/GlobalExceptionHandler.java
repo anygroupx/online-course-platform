@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.servlet.NoHandlerFoundException;
 
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -41,6 +43,30 @@ public class GlobalExceptionHandler {
         Result<?> body = Result.error(e.getCode(), e.getMessage());
         body.setErrorId(errorId);
         return ResponseEntity.status(mapStatus(e.getCode())).body(body);
+    }
+
+    /**
+     * 将不存在的路由映射为 404，避免进入通用 500 兜底。
+     */
+    @ExceptionHandler(NoHandlerFoundException.class)
+    public ResponseEntity<Result<?>> handleNoHandlerFoundException(NoHandlerFoundException e) {
+        String errorId = newErrorId();
+        log.warn("请求路径不存在 errorId={} msg={}", errorId, e.getMessage());
+        Result<?> body = Result.error(ResultCode.NOT_FOUND);
+        body.setErrorId(errorId);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
+    }
+
+    /**
+     * 将无法解析的请求体映射为 400，明确区分客户端格式错误与服务端异常。
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Result<?>> handleHttpMessageNotReadableException(HttpMessageNotReadableException e) {
+        String errorId = newErrorId();
+        log.warn("请求体格式错误 errorId={} msg={}", errorId, e.getMessage());
+        Result<?> body = Result.error(ResultCode.PARAM_ERROR.getCode(), "请求体格式错误");
+        body.setErrorId(errorId);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
     @ExceptionHandler({MethodArgumentNotValidException.class})
