@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 强制首次/重置后修改密码：除改密与登出外拦截业务接口
@@ -26,7 +27,7 @@ import java.io.IOException;
 public class MustChangePasswordFilter extends OncePerRequestFilter {
 
     private final UserMapper userMapper;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -54,10 +55,12 @@ public class MustChangePasswordFilter extends OncePerRequestFilter {
 
         User user = userMapper.selectById(userId);
         if (user != null && user.getMustChangePassword() != null && user.getMustChangePassword() == 1) {
-            response.setStatus(403);
-            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            // 明确响应编码与业务错误码，确保前端能可靠进入强制改密流程。
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE + ";charset=UTF-8");
             response.getWriter().write(objectMapper.writeValueAsString(
-                    Result.error(ResultCode.FORBIDDEN.getCode(), "必须先修改默认/重置密码后才能继续操作")));
+                    Result.error(ResultCode.MUST_CHANGE_PASSWORD)));
             return;
         }
         filterChain.doFilter(request, response);

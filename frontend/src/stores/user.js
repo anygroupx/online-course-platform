@@ -35,6 +35,11 @@ export const useUserStore = defineStore("user", () => {
       localStorage.setItem("refreshTokenTime", currentTime);
     }
 
+    // 强制改密期间后端只允许改密相关接口，暂不加载业务配置。
+    if (data.mustChangePassword) {
+      return;
+    }
+
     try {
       const settingsRes = await import("@/api/setting").then((m) =>
         m.getSettings()
@@ -55,6 +60,18 @@ export const useUserStore = defineStore("user", () => {
     } catch (error) {
       console.log("加载系统配置失败，使用默认值");
     }
+  };
+
+  // 同步服务端强制改密状态，供布局控制业务页面是否挂载。
+  const setMustChangePassword = (required) => {
+    if (!userInfo.value) {
+      return;
+    }
+    userInfo.value = {
+      ...userInfo.value,
+      mustChangePassword: required,
+    };
+    localStorage.setItem("userInfo", JSON.stringify(userInfo.value));
   };
 
   // 登录（支持管理员 MFA 二次验证）
@@ -138,6 +155,7 @@ export const useUserStore = defineStore("user", () => {
     isAdmin,
     login,
     verifyMfaLogin,
+    setMustChangePassword,
     logout,
   };
 });
