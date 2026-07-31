@@ -99,7 +99,7 @@ const renderWidget = async () => {
       action: props.action,
       theme: "auto",
       size: "flexible",
-      language: "zh-CN",
+      language: "zh-cn",
       retry: "auto",
       "refresh-expired": "auto",
       "response-field": false,
