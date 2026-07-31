@@ -23,7 +23,12 @@ services:
     networks:
       - local_net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p$$MYSQL_ROOT_PASSWORD"]
+      # 使用真实查询验证认证与数据库可用性，避免 mysqladmin ping 在认证失败时仍返回成功。
+      test:
+        [
+          "CMD-SHELL",
+          'MYSQL_PWD="$${MYSQL_ROOT_PASSWORD}" mysql --protocol=TCP -h 127.0.0.1 -uroot --silent --skip-column-names -e "SELECT 1" >/dev/null',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
