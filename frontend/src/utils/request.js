@@ -131,6 +131,23 @@ const clearTokenAndRedirect = () => {
   }
 };
 
+// 通知当前布局进入强制改密状态，同时持久化标记以覆盖刷新场景。
+const notifyMustChangePassword = () => {
+  const storedUserInfo = localStorage.getItem("userInfo");
+  if (storedUserInfo) {
+    try {
+      const userInfo = JSON.parse(storedUserInfo);
+      localStorage.setItem(
+        "userInfo",
+        JSON.stringify({ ...userInfo, mustChangePassword: true })
+      );
+    } catch (error) {
+      console.warn("同步强制改密状态失败：", error);
+    }
+  }
+  window.dispatchEvent(new CustomEvent("must-change-password"));
+};
+
 // 请求拦截器
 // Source: AURA-X-KYS 安全加固 - 自动token刷新
 request.interceptors.request.use(
@@ -299,7 +316,14 @@ request.interceptors.response.use(
           }
           break;
         case 403:
-          ElMessage.error("拒绝访问");
+          if (error.response.data?.code === -107) {
+            notifyMustChangePassword();
+            ElMessage.warning(
+              error.response.data.message || "首次登录必须修改密码"
+            );
+          } else {
+            ElMessage.error(error.response.data?.message || "拒绝访问");
+          }
           break;
         case 404:
           ElMessage.error("请求资源不存在");

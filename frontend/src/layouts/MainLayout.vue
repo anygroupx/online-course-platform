@@ -179,7 +179,11 @@
         <router-view v-slot="{ Component, route }">
           <transition name="fade-transform" mode="out-in">
             <keep-alive :include="cachedViews">
-              <component :is="Component" :key="route.path" />
+              <component
+                :is="Component"
+                v-if="!mustChangePassword"
+                :key="route.path"
+              />
             </keep-alive>
           </transition>
         </router-view>
@@ -189,9 +193,11 @@
     <!-- 修改密码对话框 -->
     <el-dialog
       v-model="passwordDialogVisible"
-      title="修改密码"
+      :title="mustChangePassword ? '首次登录必须修改密码' : '修改密码'"
       width="400px"
       :close-on-click-modal="false"
+      :close-on-press-escape="!mustChangePassword"
+      :show-close="!mustChangePassword"
       append-to-body
     >
       <el-form :model="passwordForm" label-width="100px">
@@ -224,7 +230,12 @@
       </el-form>
 
       <template #footer>
-        <el-button @click="passwordDialogVisible = false">取消</el-button>
+        <el-button
+          v-if="!mustChangePassword"
+          @click="passwordDialogVisible = false"
+        >
+          取消
+        </el-button>
         <el-button
           type="primary"
           @click="handleChangePassword"
@@ -274,7 +285,7 @@
     ></div>
 
     <!-- 在线客服组件 -->
-    <CustomerService />
+    <CustomerService v-if="!mustChangePassword" />
   </el-container>
 </template>
 
@@ -351,6 +362,9 @@ const handleResize = () => {
 // 修改密码相关状态
 const passwordDialogVisible = ref(false);
 const changingPassword = ref(false);
+const mustChangePassword = computed(
+  () => userStore.userInfo?.mustChangePassword === true
+);
 const passwordForm = ref({
   oldPassword: "",
   newPassword: "",
@@ -540,8 +554,11 @@ const handleChangePassword = async () => {
       newPassword: passwordForm.value.newPassword,
     });
     ElMessage.success("密码修改成功");
+    userStore.setMustChangePassword(false);
     passwordDialogVisible.value = false;
     resetPasswordForm();
+    // 改密限制解除后再加载此前被保护的业务配置。
+    await Promise.all([loadSystemAnnouncement(), loadSettings()]);
   } catch (error) {
     console.error("修改密码失败：", error);
     ElMessage.error(error.message || "修改密码失败");
@@ -667,18 +684,29 @@ watch(
 );
 
 // 组件挂载时加载系统公告
+const handleMustChangePassword = () => {
+  userStore.setMustChangePassword(true);
+  passwordDialogVisible.value = true;
+};
+
 onMounted(() => {
-  loadSystemAnnouncement();
-  loadSettings();
+  if (mustChangePassword.value) {
+    passwordDialogVisible.value = true;
+  } else {
+    loadSystemAnnouncement();
+    loadSettings();
+  }
   // 初始化屏幕尺寸检测
   checkScreenSize();
   // 添加窗口大小变化监听
   window.addEventListener("resize", handleResize);
+  window.addEventListener("must-change-password", handleMustChangePassword);
 });
 
 // 组件卸载时清理事件监听
 onUnmounted(() => {
   window.removeEventListener("resize", handleResize);
+  window.removeEventListener("must-change-password", handleMustChangePassword);
 });
 </script>
 
