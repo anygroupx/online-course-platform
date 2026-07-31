@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 订单响应白名单 VO（默认不返回学生明文密码）
+ * 订单响应白名单 VO（仅供已通过订单权限校验的接口返回）
  */
 @Data
 @Builder
@@ -20,6 +20,8 @@ public class CourseOrderVO {
     private String schoolName;
     private String studentName;
     private String studentAccount;
+    /** 学生密码仅通过受保护的 HTTPS 订单接口传输。 */
+    private String studentPassword;
     private Boolean hasStudentPassword;
     private String studentPhoneMasked;
     private String courseId;
