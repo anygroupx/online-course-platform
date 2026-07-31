@@ -20,7 +20,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 课程订单控制器（响应仅返回 CourseOrderVO，禁止学生明文密码出站）
+ * 课程订单控制器（响应仅返回经过字段白名单控制的 CourseOrderVO）
  */
 @Tag(name = "订单管理", description = "订单创建、查询、取消、补单等接口")
 @RestController

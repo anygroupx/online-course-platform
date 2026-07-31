@@ -58,6 +58,8 @@ public final class SensitiveDataMasker {
                 .schoolName(order.getSchoolName())
                 .studentName(order.getStudentName())
                 .studentAccount(order.getStudentAccount())
+                // 订单控制器已完成归属或管理员校验，允许前端通过 HTTPS 展示学生密码。
+                .studentPassword(order.getStudentPassword())
                 .hasStudentPassword(StringUtils.hasText(order.getStudentPassword()))
                 .studentPhoneMasked(maskPhone(order.getStudentPhone()))
                 .courseId(order.getCourseId())

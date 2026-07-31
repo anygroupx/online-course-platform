@@ -82,7 +82,7 @@ public class CourseOrder implements Serializable {
     private String studentAccount;
 
     /**
-     * 学生密码（禁止默认序列化到 API 响应）
+     * 学生密码（实体禁止直接序列化，由授权后的订单 VO 显式返回）
      */
     @TableField("student_password")
     @com.fasterxml.jackson.annotation.JsonIgnore

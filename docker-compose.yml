@@ -133,7 +133,8 @@ services:
       # 模板本身不含秘密，实际敏感值由上方环境变量注入。
       - ./backend/config/application-prod.example.yml:/app/config/application-prod.yml:ro
     ports:
-      - "8082:8082"  # 映射到宿主机 8082
+      # 仅允许宿主机反向代理访问，防止绕过 HTTPS 入口直接请求明文 HTTP。
+      - "127.0.0.1:8082:8082"
     networks:
       - local_net
     healthcheck:
