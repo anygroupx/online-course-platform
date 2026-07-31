@@ -39,6 +39,8 @@ public enum ResultCode {
     MFA_CODE_INVALID(-112, "MFA验证码无效"),
     MFA_CHALLENGE_INVALID(-113, "MFA挑战无效或已过期"),
     MFA_NOT_ENABLED(-114, "账号未启用MFA"),
+    HUMAN_VERIFICATION_FAILED(-115, "人机验证失败，请重试"),
+    HUMAN_VERIFICATION_UNAVAILABLE(-116, "人机验证服务暂不可用，请稍后重试"),
 
     // 业务错误 (-200 ~ -299)
     BALANCE_INSUFFICIENT(-200, "余额不足"),
