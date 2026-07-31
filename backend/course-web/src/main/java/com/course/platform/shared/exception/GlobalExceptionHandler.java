@@ -184,8 +184,12 @@ public class GlobalExceptionHandler {
                 || code.equals(ResultCode.MFA_CODE_INVALID.getCode())
                 || code.equals(ResultCode.MFA_CHALLENGE_INVALID.getCode())
                 || code.equals(ResultCode.MFA_NOT_ENABLED.getCode())
+                || code.equals(ResultCode.HUMAN_VERIFICATION_FAILED.getCode())
                 || code.equals(ResultCode.MUST_CHANGE_PASSWORD.getCode())) {
             return HttpStatus.FORBIDDEN;
+        }
+        if (code.equals(ResultCode.HUMAN_VERIFICATION_UNAVAILABLE.getCode())) {
+            return HttpStatus.SERVICE_UNAVAILABLE;
         }
         if (code.equals(ResultCode.NOT_FOUND.getCode()) || code.equals(ResultCode.USER_NOT_FOUND.getCode())
                 || code.equals(ResultCode.COURSE_NOT_FOUND.getCode())) {

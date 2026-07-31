@@ -4,6 +4,7 @@ import com.course.platform.common.result.Result;
 import com.course.platform.domain.dto.LoginRequest;
 import com.course.platform.domain.vo.LoginResponse;
 import com.course.platform.application.service.auth.AuthService;
+import com.course.platform.security.TurnstileVerifier;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final TurnstileVerifier turnstileVerifier;
 
     /**
      * 用户登录
@@ -31,6 +33,8 @@ public class AuthController {
     @Operation(summary = "用户登录", description = "用户名密码登录，返回JWT Token")
     @PostMapping("/login")
     public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+        // 必须在校验账号密码之前消费 Turnstile 单次令牌，阻断自动化撞库。
+        turnstileVerifier.verify(request.getTurnstileToken(), "login");
         LoginResponse response = authService.login(request);
         return Result.success("登录成功", response);
     }
@@ -63,4 +67,3 @@ public class AuthController {
         return Result.success("Token刷新成功", response);
     }
 }
-

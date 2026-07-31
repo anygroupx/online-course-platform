@@ -15,6 +15,11 @@ RUN npm install --legacy-peer-deps
 # 复制源代码
 COPY . .
 
+# Vite 在构建期注入公开的 Turnstile Site Key；禁止生产镜像回退到测试 Key。
+ARG VITE_TURNSTILE_SITE_KEY
+ENV VITE_TURNSTILE_SITE_KEY=${VITE_TURNSTILE_SITE_KEY}
+RUN test -n "$VITE_TURNSTILE_SITE_KEY"
+
 # 构建生产版本
 RUN npm run build
 

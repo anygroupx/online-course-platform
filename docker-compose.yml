@@ -126,6 +126,10 @@ services:
       # 跨域来源必须由部署环境显式指定
       - COURSE_SECURITY_ALLOWED_ORIGINS=${COURSE_SECURITY_ALLOWED_ORIGINS:?COURSE_SECURITY_ALLOWED_ORIGINS is required}
       - API_DOC_ENABLED=${API_DOC_ENABLED:-false}
+      # Cloudflare Turnstile：生产默认启用，私钥仅从未纳入版本控制的 .env 注入。
+      - TURNSTILE_ENABLED=${TURNSTILE_ENABLED:-true}
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:?TURNSTILE_SECRET_KEY is required}
+      - TURNSTILE_EXPECTED_HOSTNAME=${TURNSTILE_EXPECTED_HOSTNAME:-course.csuft.tech}
       # Elasticsearch 配置
       - SPRING_ELASTICSEARCH_URIS=http://elasticsearch:9200
     volumes:
@@ -149,6 +153,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # Site Key 是公开标识，但仍由部署环境注入以隔离测试与生产 Widget。
+        - VITE_TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:?TURNSTILE_SITE_KEY is required}
     image: course-platform-frontend:latest
     container_name: course-frontend
     restart: unless-stopped

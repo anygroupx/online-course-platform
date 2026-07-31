@@ -76,6 +76,14 @@ jwt:
   token-prefix: Bearer
   header-name: Authorization
 
+cloudflare:
+  turnstile:
+    # 开发环境默认关闭；需要联调时使用 Cloudflare 官方测试密钥显式开启。
+    enabled: ${TURNSTILE_ENABLED:false}
+    secret-key: ${TURNSTILE_SECRET_KEY:}
+    expected-hostname: ${TURNSTILE_EXPECTED_HOSTNAME:}
+    verify-url: https://challenges.cloudflare.com/turnstile/v0/siteverify
+
 knife4j:
   enable: ${API_DOC_ENABLED:true}
   setting:

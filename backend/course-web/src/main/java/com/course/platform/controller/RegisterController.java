@@ -4,6 +4,7 @@ import com.course.platform.common.result.Result;
 import com.course.platform.domain.dto.InviteCodeRequest;
 import com.course.platform.domain.dto.RegisterRequest;
 import com.course.platform.application.service.auth.RegisterService;
+import com.course.platform.security.TurnstileVerifier;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 public class RegisterController {
 
     private final RegisterService registerService;
+    private final TurnstileVerifier turnstileVerifier;
 
     /**
      * 用户注册
@@ -31,6 +33,8 @@ public class RegisterController {
     @Operation(summary = "用户注册", description = "通过邀请码注册新用户")
     @PostMapping
     public Result<Long> register(@Valid @RequestBody RegisterRequest request) {
+        // 注册入库前强制完成服务端验证，前端组件本身不能作为安全判据。
+        turnstileVerifier.verify(request.getTurnstileToken(), "register");
         Long userId = registerService.register(request);
         return Result.success("注册成功", userId);
     }
@@ -57,4 +61,3 @@ public class RegisterController {
         return Result.success(valid);
     }
 }
-

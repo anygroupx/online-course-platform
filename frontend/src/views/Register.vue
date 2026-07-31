@@ -99,11 +99,20 @@
           />
         </el-form-item>
 
+        <el-form-item class="turnstile-form-item">
+          <CloudflareTurnstile
+            ref="turnstileRef"
+            v-model="registerForm.turnstileToken"
+            action="register"
+          />
+        </el-form-item>
+
         <el-form-item>
           <el-button
             type="primary"
             size="large"
             :loading="loading"
+            :disabled="!registerForm.turnstileToken"
             @click="handleRegister"
             class="register-button"
           >
@@ -136,11 +145,13 @@ import { useRouter, useRoute } from "vue-router";
 import { User, Lock, Key, UserFilled } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { register, validateInviteCode as validateInviteCodeApi } from "@/api/user";
+import CloudflareTurnstile from "@/components/CloudflareTurnstile.vue";
 
 const router = useRouter();
 const route = useRoute();
 
 const registerFormRef = ref(null);
+const turnstileRef = ref(null);
 const loading = ref(false);
 const inviteCodeStatus = ref(null);
 
@@ -150,6 +161,7 @@ const registerForm = reactive({
   confirmPassword: "",
   inviteCode: "",
   nickname: "",
+  turnstileToken: "",
 });
 
 const rules = {
@@ -200,6 +212,11 @@ const validateInviteCode = async () => {
 const handleRegister = async () => {
   if (!registerFormRef.value) return;
 
+  if (!registerForm.turnstileToken) {
+    ElMessage.warning("请先完成人机验证");
+    return;
+  }
+
   await registerFormRef.value.validate(async (valid) => {
     if (valid) {
       // 再次验证邀请码
@@ -217,6 +234,8 @@ const handleRegister = async () => {
       } catch (error) {
         console.error("注册失败：", error);
         ElMessage.error(error.response?.data?.message || "注册失败，请重试");
+        // 注册失败后重置单次令牌，避免用户重复提交已消费的验证结果。
+        turnstileRef.value?.reset();
       } finally {
         loading.value = false;
       }

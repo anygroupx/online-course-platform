@@ -60,11 +60,20 @@
           />
         </el-form-item>
 
+        <el-form-item class="turnstile-form-item">
+          <CloudflareTurnstile
+            ref="turnstileRef"
+            v-model="loginForm.turnstileToken"
+            action="login"
+          />
+        </el-form-item>
+
         <el-form-item>
           <el-button
             type="primary"
             size="large"
             :loading="loading"
+            :disabled="!loginForm.turnstileToken"
             @click="handleLogin"
             class="login-button"
           >
@@ -131,15 +140,18 @@
 </template>
 
 <script setup>
-import { ref, reactive } from "vue";
+import { nextTick, ref, reactive } from "vue";
 import { useRouter } from "vue-router";
 import { User, Lock } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import { useUserStore } from "@/stores/user";
+import CloudflareTurnstile from "@/components/CloudflareTurnstile.vue";
 
 const router = useRouter();
 const userStore = useUserStore();
 
 const loginFormRef = ref(null);
+const turnstileRef = ref(null);
 const mfaFormRef = ref(null);
 const loading = ref(false);
 const mfaStep = ref(false);
@@ -148,6 +160,7 @@ const mfaChallengeId = ref("");
 const loginForm = reactive({
   username: "",
   password: "",
+  turnstileToken: "",
 });
 
 const mfaForm = reactive({
@@ -214,6 +227,11 @@ const mfaRules = {
 const handleLogin = async () => {
   if (!loginFormRef.value) return;
 
+  if (!loginForm.turnstileToken) {
+    ElMessage.warning("请先完成人机验证");
+    return;
+  }
+
   await loginFormRef.value.validate(async (valid) => {
     if (valid) {
       loading.value = true;
@@ -223,9 +241,12 @@ const handleLogin = async () => {
           mfaStep.value = true;
           mfaChallengeId.value = result.mfaChallengeId;
           mfaForm.code = "";
+          loginForm.turnstileToken = "";
         }
       } catch (error) {
         console.error("登录失败：", error);
+        // Turnstile 令牌只能使用一次，任何失败都必须重新获取。
+        turnstileRef.value?.reset();
       } finally {
         loading.value = false;
       }
@@ -253,10 +274,12 @@ const handleMfaVerify = async () => {
   });
 };
 
-const backToPassword = () => {
+const backToPassword = async () => {
   mfaStep.value = false;
   mfaChallengeId.value = "";
   mfaForm.code = "";
+  await nextTick();
+  turnstileRef.value?.reset();
 };
 
 // 跳转到注册页面
