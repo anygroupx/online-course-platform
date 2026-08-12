@@ -1255,6 +1255,7 @@ import {
   CircleCheck,
 } from "@element-plus/icons-vue";
 import Sortable from "sortablejs";
+import { useResponsive } from "@/composables/useResponsive";
 import {
   getActiveCountdownOrders,
   getRemainingCountdown,
@@ -2768,24 +2769,14 @@ const loadOrderStatusOptions = () => {
   orderStatusOptions.value = variableStore.getStatusOptions("order_status");
 };
 
-// 移动端检测
-const isMobile = ref(false);
-
-// 检测屏幕尺寸
-const checkScreenSize = () => {
-  isMobile.value = window.innerWidth <= 768;
-};
-
-// 监听窗口大小变化
-const handleResize = () => {
-  checkScreenSize();
-};
+// 倒计时表格沿用全局断点，页面只保留业务定时器的生命周期管理。
+const { isMobile, screenWidth } = useResponsive();
 
 // 获取操作列宽度
 const getOperationColumnWidth = () => {
   if (isMobile.value) {
     return 150; // 移动端使用较小宽度
-  } else if (window.innerWidth <= 1200) {
+  } else if (screenWidth.value < 1200) {
     return 200; // 中等屏幕
   } else {
     return 250; // 大屏幕
@@ -2794,10 +2785,6 @@ const getOperationColumnWidth = () => {
 
 // 页面初始化
 onMounted(async () => {
-  // 初始化屏幕尺寸检测
-  checkScreenSize();
-  // 添加窗口大小变化监听
-  window.addEventListener("resize", handleResize);
   await variableStore.loadAllVariables();
   loadOrderStatusOptions();
   loadColumnConfigData(); // 加载列配置
@@ -2808,8 +2795,6 @@ onMounted(async () => {
 
 // 页面销毁
 onUnmounted(() => {
-  // 清理事件监听
-  window.removeEventListener("resize", handleResize);
   if (refreshTimer.value) {
     clearInterval(refreshTimer.value);
   }
@@ -2948,7 +2933,7 @@ onUnmounted(() => {
 }
 
 /* 平板端样式 */
-@media (min-width: 769px) and (max-width: 1200px) {
+@media (min-width: 768px) and (max-width: 1199px) {
   .operation-bar {
     flex-direction: column;
     align-items: stretch;
@@ -2970,7 +2955,7 @@ onUnmounted(() => {
 }
 
 /* 移动端样式 */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .operation-card {
     margin-bottom: 15px;
   }
@@ -3153,7 +3138,7 @@ onUnmounted(() => {
 }
 
 /* 移动端操作列优化 */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .operation-buttons {
     gap: 2px;
   }
@@ -3175,7 +3160,7 @@ onUnmounted(() => {
 }
 
 /* 中等屏幕优化 */
-@media (max-width: 1200px) and (min-width: 769px) {
+@media (min-width: 768px) and (max-width: 1199px) {
   .operation-buttons .el-button {
     padding: 3px 6px;
     font-size: 11px;
@@ -3192,13 +3177,13 @@ onUnmounted(() => {
   min-width: 150px;
 }
 
-@media (min-width: 769px) {
+@media (min-width: 768px) {
   .operation-column {
     min-width: 200px;
   }
 }
 
-@media (min-width: 1201px) {
+@media (min-width: 1200px) {
   .operation-column {
     min-width: 250px;
   }

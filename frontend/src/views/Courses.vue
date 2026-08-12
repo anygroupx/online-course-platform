@@ -1040,7 +1040,7 @@ onMounted(() => {
 }
 
 /* 响应式设计 */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .courses-page {
     padding: 12px;
   }
@@ -1113,7 +1113,7 @@ onMounted(() => {
 }
 
 /* 平板适配 */
-@media (min-width: 769px) and (max-width: 1200px) {
+@media (min-width: 768px) and (max-width: 1199px) {
   .courses-page {
     padding: 16px;
   }
@@ -1222,7 +1222,7 @@ html.dark .platform-desc {
 }
 
 /* 移动端优化 */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .platform-select.is-mobile :deep(.el-input__inner) {
     font-size: 14px;
   }
@@ -1291,7 +1291,7 @@ html.dark .error-card :deep(.el-card__header) {
   gap: 12px;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .batch-actions {
     flex-direction: column;
     align-items: stretch;

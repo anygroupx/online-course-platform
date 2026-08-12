@@ -293,7 +293,8 @@ const goToRegister = () => {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
   background-image: url("https://acg.yaohud.cn/dm/acg.php?return=img");
   background-size: cover;
   background-position: center;
@@ -529,7 +530,7 @@ html.dark :deep(.el-input__wrapper) {
 }
 
 /* 响应式设计 */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .login-box {
     width: 90%;
     max-width: 400px;
@@ -744,6 +745,29 @@ html.dark :deep(.el-input__wrapper) {
   .login-chip--right {
     right: 5%;
     bottom: 8%;
+  }
+}
+
+@media (max-width: 560px) {
+  .auth-scene--random .login-box {
+    transform: none;
+  }
+
+  .auth-scene--random .login-box:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(220, 240, 255, 0.22),
+      0 24px 56px rgba(0, 0, 0, 0.44);
+  }
+}
+
+@media (max-height: 700px) and (max-width: 1060px) {
+  .auth-scene--random {
+    align-items: flex-start;
+  }
+
+  .auth-story--visual-only .story-module,
+  .login-orbit {
+    opacity: 0.44;
   }
 }
 

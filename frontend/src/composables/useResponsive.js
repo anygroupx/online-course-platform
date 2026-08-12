@@ -3,15 +3,48 @@
  * 统一管理屏幕尺寸检测和断点判断
  * 遵循 KISS 原则：简单实用，避免过度设计
  */
-import { ref, onMounted, onUnmounted, computed } from "vue";
+import { ref, onMounted, onUnmounted, computed, readonly } from "vue";
 
-// 标准断点定义（与 Element Plus 对齐）
+// 断点与 Element Plus 2.x 保持一致，避免组件网格与业务判断在边界处错位。
 export const BREAKPOINTS = {
-  xs: 480, // 小屏手机
-  sm: 768, // 平板/大屏手机
-  md: 992, // 小屏笔记本
-  lg: 1200, // 桌面显示器
-  xl: 1600, // 大屏显示器
+  xs: 0,
+  sm: 768,
+  md: 992,
+  lg: 1200,
+  xl: 1920,
+};
+
+// 所有调用方共享同一个视口状态与监听器，避免页面内重复注册 resize 事件。
+const screenWidth = ref(
+  typeof window !== "undefined" ? window.innerWidth : BREAKPOINTS.lg
+);
+let consumerCount = 0;
+let resizeTimer = null;
+
+const updateScreenSize = () => {
+  if (typeof window !== "undefined") {
+    screenWidth.value = window.innerWidth;
+  }
+};
+
+const handleResize = () => {
+  if (resizeTimer) clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(updateScreenSize, 100);
+};
+
+const startListening = () => {
+  if (typeof window === "undefined" || consumerCount > 0) return;
+  updateScreenSize();
+  window.addEventListener("resize", handleResize, { passive: true });
+};
+
+const stopListening = () => {
+  if (typeof window === "undefined" || consumerCount > 0) return;
+  window.removeEventListener("resize", handleResize);
+  if (resizeTimer) {
+    clearTimeout(resizeTimer);
+    resizeTimer = null;
+  }
 };
 
 /**
@@ -19,34 +52,30 @@ export const BREAKPOINTS = {
  * @returns {Object} 响应式状态和工具方法
  */
 export function useResponsive() {
-  const screenWidth = ref(
-    typeof window !== "undefined" ? window.innerWidth : 1920
-  );
-
-  // 基础断点判断
-  const isMobile = computed(() => screenWidth.value <= BREAKPOINTS.sm);
+  // 基础断点判断：移动端严格对应 Element Plus 的 xs 区间。
+  const isMobile = computed(() => screenWidth.value < BREAKPOINTS.sm);
   const isTablet = computed(
     () =>
-      screenWidth.value > BREAKPOINTS.sm && screenWidth.value <= BREAKPOINTS.md
+      screenWidth.value >= BREAKPOINTS.sm && screenWidth.value < BREAKPOINTS.md
   );
-  const isDesktop = computed(() => screenWidth.value > BREAKPOINTS.md);
+  const isDesktop = computed(() => screenWidth.value >= BREAKPOINTS.md);
   const isLargeScreen = computed(() => screenWidth.value >= BREAKPOINTS.xl);
 
-  // 具体断点判断
-  const isXs = computed(() => screenWidth.value <= BREAKPOINTS.xs);
+  // 精确断点判断采用互斥区间，便于组件按当前档位渲染。
+  const isXs = computed(() => screenWidth.value < BREAKPOINTS.sm);
   const isSm = computed(
     () =>
-      screenWidth.value > BREAKPOINTS.xs && screenWidth.value <= BREAKPOINTS.sm
+      screenWidth.value >= BREAKPOINTS.sm && screenWidth.value < BREAKPOINTS.md
   );
   const isMd = computed(
     () =>
-      screenWidth.value > BREAKPOINTS.sm && screenWidth.value <= BREAKPOINTS.md
+      screenWidth.value >= BREAKPOINTS.md && screenWidth.value < BREAKPOINTS.lg
   );
   const isLg = computed(
     () =>
-      screenWidth.value > BREAKPOINTS.md && screenWidth.value <= BREAKPOINTS.lg
+      screenWidth.value >= BREAKPOINTS.lg && screenWidth.value < BREAKPOINTS.xl
   );
-  const isXl = computed(() => screenWidth.value > BREAKPOINTS.lg);
+  const isXl = computed(() => screenWidth.value >= BREAKPOINTS.xl);
 
   // 屏幕类型（用于日志或分析）
   const screenType = computed(() => {
@@ -57,47 +86,20 @@ export function useResponsive() {
     return "xl";
   });
 
-  // 更新屏幕尺寸
-  const updateScreenSize = () => {
-    if (typeof window !== "undefined") {
-      screenWidth.value = window.innerWidth;
-    }
-  };
-
-  // 防抖处理（避免频繁触发，提升性能）
-  let resizeTimer = null;
-  const handleResize = () => {
-    if (resizeTimer) {
-      clearTimeout(resizeTimer);
-    }
-    resizeTimer = setTimeout(() => {
-      updateScreenSize();
-    }, 100);
-  };
-
-  // 生命周期挂载
   onMounted(() => {
-    if (typeof window !== "undefined") {
-      updateScreenSize();
-      window.addEventListener("resize", handleResize, { passive: true });
-    }
+    startListening();
+    consumerCount += 1;
+    updateScreenSize();
   });
 
-  // 生命周期卸载 - 关键：确保清理所有资源
   onUnmounted(() => {
-    if (typeof window !== "undefined") {
-      window.removeEventListener("resize", handleResize);
-    }
-    // 清理定时器，防止内存泄漏
-    if (resizeTimer) {
-      clearTimeout(resizeTimer);
-      resizeTimer = null;
-    }
+    consumerCount = Math.max(0, consumerCount - 1);
+    stopListening();
   });
 
   return {
     // 屏幕宽度
-    screenWidth,
+    screenWidth: readonly(screenWidth),
 
     // 常用断点（推荐使用）
     isMobile,

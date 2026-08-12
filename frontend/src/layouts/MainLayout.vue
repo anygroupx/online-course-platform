@@ -116,6 +116,8 @@
             @click="toggleMobileMenu"
             class="mobile-menu-btn"
             :icon="Menu"
+            aria-label="打开主导航"
+            :aria-expanded="isMobileMenuVisible"
           />
           <!-- 桌面端折叠按钮 -->
           <el-button
@@ -146,7 +148,7 @@
           <el-dropdown @command="handleCommand">
             <span class="user-info">
               <el-icon><UserFilled /></el-icon>
-              {{ userStore.userInfo?.nickname || "用户" }}
+              <span class="user-name">{{ userStore.userInfo?.nickname || "用户" }}</span>
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
@@ -278,11 +280,13 @@
     </el-dialog>
 
     <!-- 移动端遮罩层 -->
-    <div
+    <button
       v-if="isMobile && isMobileMenuVisible"
+      type="button"
       class="mobile-overlay"
+      aria-label="关闭主导航"
       @click="closeMobileMenu"
-    ></div>
+    ></button>
 
     <!-- 在线客服组件 -->
     <CustomerService v-if="!mustChangePassword" />
@@ -294,6 +298,7 @@ import { computed, ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useUserStore } from "@/stores/user";
 import { useTagsViewStore } from "@/stores/tagsView";
+import { useResponsive } from "@/composables/useResponsive";
 import { ElMessage } from "element-plus";
 import { changePassword } from "@/api/user";
 import { getSystemAnnouncement } from "@/api/announcement";
@@ -342,22 +347,12 @@ const isCollapse = ref(false);
 // 移动端菜单显示状态
 const isMobileMenuVisible = ref(false);
 
-// 移动端检测
-const isMobile = ref(false);
+// 主壳层与业务组件共享同一断点源，避免 768px 边界和监听器数量漂移。
+const { isMobile } = useResponsive();
 
-// 检测屏幕尺寸
-const checkScreenSize = () => {
-  isMobile.value = window.innerWidth <= 768;
-};
-
-// 监听窗口大小变化
-const handleResize = () => {
-  checkScreenSize();
-  // 如果切换到桌面端，关闭移动端菜单
-  if (!isMobile.value) {
-    isMobileMenuVisible.value = false;
-  }
-};
+watch(isMobile, (mobile) => {
+  if (!mobile) isMobileMenuVisible.value = false;
+});
 
 // 修改密码相关状态
 const passwordDialogVisible = ref(false);
@@ -696,23 +691,18 @@ onMounted(() => {
     loadSystemAnnouncement();
     loadSettings();
   }
-  // 初始化屏幕尺寸检测
-  checkScreenSize();
-  // 添加窗口大小变化监听
-  window.addEventListener("resize", handleResize);
   window.addEventListener("must-change-password", handleMustChangePassword);
 });
 
 // 组件卸载时清理事件监听
 onUnmounted(() => {
-  window.removeEventListener("resize", handleResize);
   window.removeEventListener("must-change-password", handleMustChangePassword);
 });
 </script>
 
 <style scoped>
 .main-container {
-  height: 100vh;
+  height: 100dvh;
 }
 
 .sidebar {
@@ -1220,7 +1210,7 @@ html.dark .menu .el-menu-item.is-active {
   padding: 24px;
   overflow-y: auto;
   min-height: calc(
-    100vh - 144px
+    100dvh - 144px
   ); /* 调整高度：header(60px) + tags(44px) + 额外空间(40px) */
   position: relative;
 }
@@ -1258,15 +1248,19 @@ html.dark .menu .el-menu-item.is-active {
   z-index: 999;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
 }
 
 /* 响应式设计 */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .sidebar {
     position: fixed;
     left: 0;
     top: 0;
-    height: 100vh;
+    height: 100dvh;
     z-index: 1000;
     /* 移动端默认隐藏在左侧 - 使用 translate3d 同时支持硬件加速 */
     transform: translate3d(-100%, 0, 0);
@@ -1323,7 +1317,7 @@ html.dark .menu .el-menu-item.is-active {
     );
     /* 移动端调整高度计算 */
     min-height: calc(
-      100vh - 140px
+      100dvh - 140px
     ); /* header(60px) + tags(40px) + 额外空间(40px) */
   }
 
@@ -1495,13 +1489,19 @@ html.dark .user-info:hover {
 .main-container {
   position: relative;
   isolation: isolate;
-  min-height: 100vh;
+  width: 100%;
+  height: 100dvh;
+  min-height: 100svh;
   overflow: hidden;
   color: var(--text-regular);
   background:
     radial-gradient(circle at 82% -10%, rgba(0, 183, 195, 0.16), transparent 31%),
     radial-gradient(circle at 18% 16%, rgba(15, 108, 189, 0.16), transparent 28%),
     linear-gradient(145deg, var(--bg-body), color-mix(in srgb, var(--bg-body) 90%, #d8edff));
+}
+
+.main-container > :deep(.el-container) {
+  min-width: 0;
 }
 
 .spatial-backdrop {
@@ -1552,7 +1552,7 @@ html.dark .user-info:hover {
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
-  height: calc(100vh - 20px);
+  height: calc(100dvh - 20px);
   margin: 10px 0 10px 10px;
   overflow: hidden;
   border: 1px solid var(--border-color-light);
@@ -1689,6 +1689,26 @@ html.dark .user-info:hover {
   backdrop-filter: blur(24px) saturate(1.18);
 }
 
+.header-left,
+.header-right,
+.breadcrumb,
+.user-info,
+.user-name {
+  min-width: 0;
+}
+
+.header-left {
+  flex: 1;
+  overflow: hidden;
+}
+
+.user-name {
+  max-width: clamp(72px, 12vw, 180px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .collapse-btn,
 .mobile-menu-btn {
   width: 36px;
@@ -1745,8 +1765,19 @@ html.dark .user-info:hover {
   z-index: 2;
   padding: 18px 20px 26px;
   overflow-x: hidden;
+  min-width: 0;
+  min-height: 0;
+  padding-right: max(20px, var(--safe-area-right));
+  padding-bottom: max(26px, var(--safe-area-bottom));
   perspective: 1300px;
   transform-style: preserve-3d;
+}
+
+/* 业务页面共享同一内容宽度与收缩边界，超宽屏不再无限拉伸数据密度。 */
+.main-content > * {
+  width: min(100%, var(--content-max-width));
+  min-width: 0;
+  margin-inline: auto;
 }
 
 :global(html.dark) .main-container {
@@ -1763,19 +1794,58 @@ html.dark .user-info:hover {
     linear-gradient(90deg, rgba(71, 158, 245, 0.075) 1px, transparent 1px);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .sidebar {
-    height: 100vh;
+    width: min(84vw, 300px) !important;
+    height: 100dvh;
+    padding-bottom: var(--safe-area-bottom);
     margin: 0;
     border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
   }
 
   .header {
-    margin: 8px 8px 0;
+    height: 60px;
+    margin: max(8px, var(--safe-area-top)) max(8px, var(--safe-area-right)) 0
+      max(8px, var(--safe-area-left));
+    padding: 0 10px;
   }
 
   .main-content {
-    padding: 14px 12px 22px;
+    padding: 14px max(12px, var(--safe-area-right))
+      max(22px, var(--safe-area-bottom)) max(12px, var(--safe-area-left));
+  }
+
+  .header-left {
+    gap: 8px;
+  }
+
+  .header-right {
+    gap: 4px;
+  }
+
+  .mobile-menu-btn,
+  .user-info {
+    min-width: var(--touch-target-min);
+    min-height: var(--touch-target-min);
+  }
+
+  .user-info {
+    height: 44px;
+    padding: 0 8px;
+  }
+
+  .user-name {
+    max-width: 26vw;
+  }
+}
+
+@media (max-width: 420px) {
+  .user-name {
+    display: none;
+  }
+
+  .user-info {
+    padding: 0 6px;
   }
 }
 

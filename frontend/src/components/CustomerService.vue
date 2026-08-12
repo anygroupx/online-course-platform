@@ -592,26 +592,43 @@ onUnmounted(() => {
 }
 
 /* 响应式设计 */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .chat-window {
-    width: calc(100vw - 40px);
-    height: calc(100vh - 40px);
-    bottom: 20px;
-    right: 20px;
+    width: calc(
+      100vw - var(--safe-area-left) - var(--safe-area-right) - 20px
+    );
+    height: calc(
+      100dvh - var(--safe-area-top) - var(--safe-area-bottom) - 20px
+    );
+    max-height: 640px;
+    bottom: max(10px, var(--safe-area-bottom));
+    right: max(10px, var(--safe-area-right));
+    border-radius: var(--radius-lg);
   }
 
   .service-button {
-    bottom: 15px;
-    right: 15px;
-    width: 50px;
-    height: 50px;
+    bottom: max(15px, var(--safe-area-bottom));
+    right: max(15px, var(--safe-area-right));
+    width: 52px;
+    height: 52px;
   }
 
   .minimized-chat {
-    bottom: 15px;
-    right: 15px;
-    width: 45px;
-    height: 45px;
+    bottom: max(15px, var(--safe-area-bottom));
+    right: max(15px, var(--safe-area-right));
+    width: 48px;
+    height: 48px;
+  }
+
+  .message-list,
+  .input-area {
+    padding: 12px;
+  }
+}
+
+@media (max-height: 520px) and (max-width: 900px) {
+  .chat-window {
+    max-height: none;
   }
 }
 

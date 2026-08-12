@@ -815,7 +815,7 @@ defineExpose({
   margin-top: 20px;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .table-pagination {
     margin-top: 16px;
   }
@@ -827,6 +827,36 @@ defineExpose({
   .table-pagination :deep(.el-pagination__total),
   .table-pagination :deep(.el-pagination__jump) {
     display: none;
+  }
+}
+
+@container (max-width: 420px) {
+  .mobile-card {
+    padding: 14px 12px;
+  }
+
+  .card-header {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .card-field {
+    display: grid;
+    grid-template-columns: minmax(72px, 0.36fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .field-label {
+    min-width: 0;
+  }
+
+  .card-actions,
+  .card-actions :deep(.action-buttons) {
+    justify-content: stretch;
+  }
+
+  .card-actions :deep(.el-button) {
+    flex: 1 1 auto;
   }
 }
 </style>
@@ -928,7 +958,7 @@ defineExpose({
   border-top: 1px solid var(--border-color-light);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .enterprise-table {
     padding: 0;
     border: 0;

@@ -1169,7 +1169,7 @@ button.content-panel:hover,
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .dashboard {
     gap: 16px;
   }
@@ -1751,7 +1751,7 @@ button.content-panel:hover,
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .hero-panel {
     padding: 26px 20px;
     border-radius: var(--radius-lg);

@@ -1,0 +1,135 @@
+/*
+ * 统一响应式基础层
+ * 视口查询只处理页面壳层与设备能力；组件内部优先根据可用容器宽度自适应。
+ */
+html,
+body,
+#app {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+body {
+  min-block-size: 100svh;
+  overflow-x: hidden;
+}
+
+@supports (overflow: clip) {
+  body {
+    overflow-x: clip;
+  }
+}
+
+img,
+video,
+canvas,
+svg {
+  max-inline-size: 100%;
+}
+
+.responsive-container,
+.enterprise-filter,
+.enterprise-table,
+.table-statistics,
+.table-batch-actions {
+  min-inline-size: 0;
+  container-type: inline-size;
+}
+
+/* 公共浮层必须受动态视口约束，防止地址栏或横屏状态裁切操作区。 */
+.el-dialog {
+  max-inline-size: calc(
+    100vw - var(--safe-area-left) - var(--safe-area-right) - 24px
+  );
+  max-block-size: calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom) - 24px);
+  display: flex;
+  flex-direction: column;
+}
+
+.el-dialog__body {
+  min-block-size: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.el-drawer__body {
+  min-block-size: 0;
+  overflow: auto;
+}
+
+@media (max-width: 767px) {
+  :root {
+    --page-gutter: clamp(10px, 3.8vw, 16px);
+    --section-gap: 12px;
+  }
+
+  .el-button:not(.is-link),
+  .el-input__wrapper,
+  .el-select__wrapper,
+  .el-date-editor.el-input__wrapper {
+    min-block-size: var(--touch-target-min);
+  }
+
+  .el-form--inline .el-form-item {
+    inline-size: 100%;
+    margin-inline-end: 0;
+  }
+
+  .el-form--inline :where(.el-input, .el-select, .el-date-editor, .el-input-number),
+  .el-drawer :where(.el-input, .el-select, .el-date-editor, .el-input-number) {
+    inline-size: 100% !important;
+    max-inline-size: 100%;
+  }
+
+  .el-dialog {
+    inline-size: calc(
+      100vw - var(--safe-area-left) - var(--safe-area-right) - 20px
+    ) !important;
+    margin-block: max(10px, var(--safe-area-top)) max(10px, var(--safe-area-bottom));
+    border-radius: var(--radius-lg);
+  }
+
+  .el-dialog__header,
+  .el-dialog__body,
+  .el-dialog__footer {
+    padding-inline: 16px;
+  }
+
+  .el-drawer {
+    inline-size: min(88vw, 360px) !important;
+    max-inline-size: calc(100vw - var(--safe-area-left));
+  }
+
+  .el-drawer__header,
+  .el-drawer__body,
+  .el-drawer__footer {
+    padding-inline-end: max(16px, var(--safe-area-right));
+  }
+
+  .el-message,
+  .el-notification {
+    max-inline-size: calc(100vw - 24px);
+  }
+
+  .el-pagination {
+    max-inline-size: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 479px) {
+  .el-pagination__total,
+  .el-pagination__sizes,
+  .el-pagination__jump {
+    display: none;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .el-button:not(.is-link):not(.is-text),
+  button,
+  [role="button"] {
+    min-block-size: var(--touch-target-min);
+  }
+}

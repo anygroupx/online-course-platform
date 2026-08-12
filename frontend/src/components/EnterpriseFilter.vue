@@ -55,7 +55,7 @@
           <slot v-else name="filters" :is-mobile="true"></slot>
         </el-form>
         <template #footer>
-          <div style="display: flex; gap: 10px">
+          <div class="drawer-actions">
             <el-button
               type="primary"
               @click="handleDrawerSearch"
@@ -499,6 +499,33 @@ defineExpose({
   display: flex;
   gap: 10px;
   margin-bottom: 16px;
+}
+
+.drawer-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.drawer-actions .el-button {
+  flex: 1;
+  margin: 0;
+}
+
+@container (max-width: 520px) {
+  .desktop-filter-wrapper {
+    padding: 12px;
+  }
+
+  .common-filter-form :deep(.el-form-item) {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .common-filter-form :deep(.el-input),
+  .common-filter-form :deep(.el-select),
+  .common-filter-form :deep(.el-date-editor) {
+    width: 100% !important;
+  }
 }
 
 .mobile-filter-trigger .el-button {
