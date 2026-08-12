@@ -26,7 +26,8 @@ public class MyBatisPlusConfig {
         
         // 分页插件
         PaginationInnerInterceptor paginationInterceptor = new PaginationInnerInterceptor(DbType.MYSQL);
-        paginationInterceptor.setMaxLimit(500L); // 单页最大数量
+        // 与分页请求 DTO 保持同一上限，避免绕过接口层时出现超大分页查询。
+        paginationInterceptor.setMaxLimit(100L);
         paginationInterceptor.setOverflow(false); // 溢出总页数后是否处理
         
         interceptor.addInnerInterceptor(paginationInterceptor);
@@ -44,4 +45,3 @@ public class MyBatisPlusConfig {
         return new MyMetaObjectHandler();
     }
 }
-

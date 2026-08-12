@@ -45,6 +45,7 @@
           currentPage,
           pageSize,
           total,
+          pageSizes: paginationConfig.pageSizes,
         }"
         :default-sort="defaultSort"
         :selectable="true"
@@ -298,7 +299,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { Plus, Download } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useTableComposition } from "@/composables/useTableComposition";
@@ -314,6 +315,7 @@ import {
   batchActionsConfig,
   mobileColumns,
   defaultSort,
+  paginationConfig,
 } from "@/config/ordersConfig";
 import {
   queryOrders,
@@ -340,7 +342,7 @@ const {
   loading,
   tableData,
   handleSelectionChange,
-  handlePageChange,
+  handlePageChange: updatePagination,
   handleFilterChange,
   handleResetFilters,
   loadData,
@@ -354,6 +356,7 @@ const {
     orderStatus: null,
   },
   pageSize: 10,
+  pageSizes: paginationConfig.pageSizes,
   columns: columnsConfig,
 });
 
@@ -429,6 +432,11 @@ const loadPlatforms = async () => {
 };
 
 // 事件处理
+const handlePageChange = (pagination) => {
+  updatePagination(pagination);
+  loadOrders();
+};
+
 const handleSearch = () => {
   currentPage.value = 1;
   loadOrders();
@@ -736,21 +744,6 @@ const getDockStatusType = (status) => {
 const getDockStatusText = (status) => {
   return variableStore.getVariableName("dock_status", status);
 };
-
-// 企业方案：监听分页变化自动加载数据
-// Source: AURA-X-KYS 响应式数据加载模式
-watch(
-  [currentPage, pageSize],
-  () => {
-    loadOrders();
-  },
-  { immediate: false } // 避免初始化时重复加载
-);
-
-// 企业方案：监听分页变化自动加载数据
-watch([currentPage, pageSize], () => {
-  loadOrders();
-});
 
 // 生命周期
 onMounted(async () => {
