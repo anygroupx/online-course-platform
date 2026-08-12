@@ -407,6 +407,11 @@
       max(24px, var(--safe-area-left));
   }
 
+  /* 窄屏取消背景网格的放大透视，避免纯装饰伪元素扩大滚动范围。 */
+  .auth-scene::before {
+    transform: none;
+  }
+
   .auth-story {
     display: none;
   }
