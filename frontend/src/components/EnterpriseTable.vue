@@ -121,7 +121,7 @@
                   <component
                     v-if="getBadgeColumn()?.component"
                     :is="getBadgeColumn().component"
-                    v-bind="getColumnProps(getBadgeColumn(), row)"
+                    v-bind="getCardBadgeProps(row)"
                   />
                   <el-tag v-else-if="getCardBadge(row)" size="small">
                     {{
@@ -543,6 +543,12 @@ const getBadgeColumn = () => {
   if (!props.cardBadgeKey) return null;
   return props.columns.find((col) => col.key === props.cardBadgeKey);
 };
+
+// 卡片头部徽章需要与标题保持同一视觉层级，不沿用表格内的小号状态样式。
+const getCardBadgeProps = (row) => ({
+  ...getColumnProps(getBadgeColumn(), row),
+  size: "default",
+});
 
 // 事件处理
 const handleSelectionChange = (selection) => {
