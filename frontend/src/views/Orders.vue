@@ -226,7 +226,7 @@
       width="700px"
       append-to-body
     >
-      <el-descriptions :column="2" border v-if="currentOrder">
+      <el-descriptions :column="isMobile ? 1 : 2" border v-if="currentOrder">
         <el-descriptions-item label="订单编号">{{
           currentOrder.orderNo
         }}</el-descriptions-item>
@@ -302,6 +302,7 @@ import { ref, computed, onMounted, watch } from "vue";
 import { Plus, Download } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useTableComposition } from "@/composables/useTableComposition";
+import { useResponsive } from "@/composables/useResponsive";
 import EnterpriseFilter from "@/components/EnterpriseFilter.vue";
 import TableBatchActions from "@/components/TableBatchActions.vue";
 import EnterpriseTable from "@/components/EnterpriseTable.vue";
@@ -327,6 +328,7 @@ import { useVariableStore } from "@/stores/variableStore";
 
 // 变量store
 const variableStore = useVariableStore();
+const { isMobile } = useResponsive();
 
 // 使用表格组合式函数统一管理状态
 const {

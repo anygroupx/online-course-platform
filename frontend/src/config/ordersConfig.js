@@ -202,5 +202,4 @@ export const mobileColumns = [
   "platformName",
   "courseName",
   "amount",
-  "orderStatus",
 ];
