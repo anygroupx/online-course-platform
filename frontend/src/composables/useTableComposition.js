@@ -9,6 +9,7 @@ import { ref, computed, watch, nextTick } from "vue";
  * @param {Object} options.initialFilters 初始筛选条件
  * @param {Object} options.initialSort 初始排序配置
  * @param {Number} options.pageSize 初始每页条数
+ * @param {Array<Number>} options.pageSizes 允许选择的每页条数
  * @param {Array} options.columns 列配置
  */
 export function useTableComposition(options = {}) {
@@ -17,8 +18,20 @@ export function useTableComposition(options = {}) {
     initialFilters = {},
     initialSort = { prop: null, order: null },
     pageSize: defaultPageSize = 10,
+    pageSizes: allowedPageSizes = [10, 20, 50, 100],
     columns = [],
   } = options;
+
+  // 分页大小只接受页面声明的白名单，避免过期或篡改的本地配置突破接口约束。
+  const pageSizeOptions = Array.from(
+    new Set([...allowedPageSizes, defaultPageSize].map(Number))
+  ).filter((size) => Number.isInteger(size) && size > 0);
+  const normalizePageSize = (size) => {
+    const normalizedSize = Number(size);
+    return pageSizeOptions.includes(normalizedSize)
+      ? normalizedSize
+      : defaultPageSize;
+  };
 
   // ========== 分页状态 ==========
   const currentPage = ref(1);
@@ -65,7 +78,9 @@ export function useTableComposition(options = {}) {
         if (config.columnVisible) columnVisible.value = config.columnVisible;
         if (config.columnWidths) columnWidths.value = config.columnWidths;
         if (config.sortConfig) sortConfig.value = config.sortConfig;
-        if (config.pageSize) pageSize.value = config.pageSize;
+        if (config.pageSize) {
+          pageSize.value = normalizePageSize(config.pageSize);
+        }
       }
     } catch (error) {
       console.error("加载表格配置失败:", error);
@@ -163,13 +178,17 @@ export function useTableComposition(options = {}) {
   };
 
   const handlePageChange = ({ page, size }) => {
-    currentPage.value = page;
-    pageSize.value = size;
+    const normalizedPage = Number(page);
+    currentPage.value =
+      Number.isInteger(normalizedPage) && normalizedPage > 0
+        ? normalizedPage
+        : 1;
+    pageSize.value = normalizePageSize(size);
     saveConfig();
   };
 
   const handleSizeChange = (size) => {
-    pageSize.value = size;
+    pageSize.value = normalizePageSize(size);
     currentPage.value = 1;
     saveConfig();
   };

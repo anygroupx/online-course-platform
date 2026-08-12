@@ -44,7 +44,7 @@ public class CourseOrderController {
 
     @Operation(summary = "查询订单列表", description = "分页查询订单列表")
     @PostMapping("/query")
-    public Result<IPage<CourseOrderVO>> queryOrders(@RequestBody OrderQueryRequest request,
+    public Result<IPage<CourseOrderVO>> queryOrders(@Valid @RequestBody OrderQueryRequest request,
                                                     Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         IPage<CourseOrder> page = courseOrderService.queryOrders(request, userId);

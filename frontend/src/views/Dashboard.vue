@@ -7,7 +7,6 @@
           LEARNING OPERATIONS · LIVE
         </div>
         <h1>学习业务，尽在掌控</h1>
-        <p>把课程、订单与账户状态汇聚到同一座 Fluent 空间控制台。</p>
         <div class="hero-actions">
           <button type="button" class="hero-action hero-action--primary" @click="router.push('/orders')">
             创建新订单

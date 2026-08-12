@@ -214,8 +214,11 @@
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
         :page-sizes="pagination.pageSizes || [10, 20, 50, 100]"
-        :total="pagination.total || 0"
+        :total="pagination.total ?? 0"
         :layout="paginationLayout"
+        :pager-count="isMobile ? 5 : 7"
+        :size="isMobile ? 'small' : 'default'"
+        background
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
       />
@@ -383,7 +386,7 @@ const initializeColumnConfig = () => {
     }
   });
 
-  // 加载持久化配置（会覆盖 pageSize）
+  // 分页由父级统一管理；这里仅加载列配置。
   if (props.enableStorage && props.storageKey) {
     loadTableConfig();
   }
@@ -406,9 +409,6 @@ const loadTableConfig = () => {
       if (config.columnOrder) {
         columnOrder.value = config.columnOrder;
       }
-      if (config.pageSize) {
-        pageSize.value = config.pageSize;
-      }
     }
   } catch (error) {
     console.error("加载表格配置失败:", error);
@@ -422,7 +422,6 @@ const saveTableConfig = () => {
     const config = {
       columnVisible: columnVisible.value,
       columnOrder: columnOrder.value,
-      pageSize: pageSize.value,
       timestamp: Date.now(),
     };
     localStorage.setItem(`table_${props.storageKey}`, JSON.stringify(config));
@@ -490,7 +489,7 @@ const hasActions = computed(() => {
 // 分页布局
 const paginationLayout = computed(() => {
   return isMobile.value
-    ? "total, prev, pager, next"
+    ? "sizes, prev, pager, next"
     : "total, sizes, prev, pager, next, jumper";
 });
 
@@ -564,12 +563,10 @@ const handleAction = (actionKey, row, index) => {
 };
 
 const handleSizeChange = (size) => {
-  // 企业方案：pageSize变化时重置到第一页，避免数据越界
+  // 每页条数由父级统一持久化；组件只负责重置页码并派发一次变更。
   pageSize.value = size;
   currentPage.value = 1;
-  saveTableConfig();
   emit("size-change", size);
-  // 先触发 size-change，再触发 page-change 确保父组件正确处理
   emit("page-change", { page: 1, size });
 };
 
@@ -827,7 +824,10 @@ defineExpose({
   }
 
   .table-pagination :deep(.el-pagination) {
+    max-width: 100%;
+    flex-wrap: wrap;
     justify-content: center;
+    row-gap: 8px;
   }
 
   .table-pagination :deep(.el-pagination__total),
