@@ -156,7 +156,7 @@ const formatValue = (value) => {
 }
 
 /* 移动端优化 */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .stat-card {
     min-height: 90px;
   }
@@ -175,6 +175,17 @@ const formatValue = (value) => {
 
   .stat-icon :deep(.el-icon) {
     font-size: 32px;
+  }
+}
+
+@container (max-width: 420px) {
+  .table-statistics :deep(.el-col) {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+
+  .stat-card {
+    min-height: 84px;
   }
 }
 </style>

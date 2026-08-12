@@ -237,7 +237,7 @@ const handleClearSelection = () => {
 }
 
 /* 移动端优化 */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .batch-content {
     flex-direction: column;
     align-items: stretch;
@@ -263,6 +263,22 @@ const handleClearSelection = () => {
 
   .info-text strong {
     font-size: 15px;
+  }
+}
+
+@container (max-width: 520px) {
+  .batch-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .batch-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .batch-actions .el-button {
+    width: 100%;
   }
 }
 </style>

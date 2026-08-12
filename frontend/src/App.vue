@@ -21,7 +21,8 @@ onMounted(() => {
 }
 
 #app {
-  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
   font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI",
     "PingFang SC", sans-serif;
   -webkit-font-smoothing: antialiased;

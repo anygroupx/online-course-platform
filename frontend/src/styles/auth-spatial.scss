@@ -5,9 +5,16 @@
   grid-template-columns: minmax(420px, 1.15fr) minmax(380px, 0.85fr);
   align-items: center;
   gap: clamp(42px, 7vw, 110px);
-  min-height: 100vh;
-  padding: clamp(34px, 6vw, 88px);
-  overflow: hidden;
+  width: 100%;
+  min-height: 100svh;
+  min-height: 100dvh;
+  padding: max(clamp(34px, 6vw, 88px), var(--safe-area-top))
+    max(clamp(34px, 6vw, 88px), var(--safe-area-right))
+    max(clamp(34px, 6vw, 88px), var(--safe-area-bottom))
+    max(clamp(34px, 6vw, 88px), var(--safe-area-left));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background:
     radial-gradient(circle at 12% 18%, rgba(71, 158, 245, 0.24), transparent 28%),
     radial-gradient(circle at 78% 76%, rgba(56, 213, 222, 0.16), transparent 28%),
@@ -187,6 +194,7 @@
   position: relative;
   z-index: 4;
   width: min(100%, 470px);
+  min-width: 0;
   margin: 0;
   padding: 34px;
   border: 1px solid rgba(189, 216, 244, 0.22);
@@ -388,7 +396,9 @@
   .auth-scene {
     grid-template-columns: 1fr;
     place-items: center;
-    padding: 38px 24px;
+    padding: max(38px, var(--safe-area-top))
+      max(24px, var(--safe-area-right)) max(38px, var(--safe-area-bottom))
+      max(24px, var(--safe-area-left));
   }
 
   .auth-story {
@@ -403,18 +413,62 @@
 
 @media (max-width: 560px) {
   .auth-scene {
-    padding: 18px 12px;
+    padding: max(12px, var(--safe-area-top))
+      max(10px, var(--safe-area-right)) max(12px, var(--safe-area-bottom))
+      max(10px, var(--safe-area-left));
   }
 
   .login-box,
   .register-box {
-    padding: 26px 20px;
+    width: 100%;
+    padding: clamp(18px, 6vw, 26px) clamp(16px, 5vw, 20px);
     border-radius: 20px;
+    transform: none;
   }
 
   .login-header,
   .register-header {
     margin-bottom: 24px;
+  }
+}
+
+/* 短屏和手机横屏优先保证表单完整可滚动，装饰元素退居背景。 */
+@media (max-height: 700px) and (max-width: 1060px) {
+  .auth-scene {
+    place-items: start center;
+    padding-top: max(10px, var(--safe-area-top));
+    padding-bottom: max(10px, var(--safe-area-bottom));
+  }
+
+  .login-box,
+  .register-box {
+    padding-block: 18px;
+  }
+
+  .login-header,
+  .register-header {
+    margin-bottom: 16px;
+  }
+
+  .login-form :deep(.el-form-item),
+  .register-form :deep(.el-form-item) {
+    margin-bottom: 13px;
+  }
+
+  .login-form :deep(.el-input__wrapper),
+  .register-form :deep(.el-input__wrapper) {
+    min-height: 42px;
+  }
+
+  .login-footer,
+  .register-footer {
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+
+  .decorative-elements,
+  .auth-story--visual-only {
+    opacity: 0.58;
   }
 }
 

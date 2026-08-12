@@ -156,7 +156,13 @@ onBeforeUnmount(() => {
 
 .turnstile-widget {
   width: 100%;
+  max-width: 100%;
   min-height: 65px;
+  overflow: hidden;
+}
+
+.turnstile-widget :deep(iframe) {
+  max-width: 100%;
 }
 
 .turnstile-status {

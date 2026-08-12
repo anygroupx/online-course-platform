@@ -3222,7 +3222,7 @@ const getFormatText = (format) => {
   color: #606266;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .admin-orders-page {
     padding: 12px;
   }
@@ -3318,7 +3318,7 @@ const getFormatText = (format) => {
 }
 
 /* 中等屏幕优化 */
-@media (max-width: 1200px) and (min-width: 769px) {
+@media (min-width: 768px) and (max-width: 1199px) {
   .operation-buttons .el-button {
     padding: 3px 6px;
     font-size: 11px;
@@ -3331,7 +3331,7 @@ const getFormatText = (format) => {
 }
 
 /* 大屏幕优化 */
-@media (max-width: 1600px) and (min-width: 1201px) {
+@media (min-width: 1200px) and (max-width: 1600px) {
   .operation-buttons .el-button {
     padding: 4px 8px;
     font-size: 12px;
@@ -3343,13 +3343,13 @@ const getFormatText = (format) => {
   min-width: 200px;
 }
 
-@media (min-width: 769px) {
+@media (min-width: 768px) {
   .operation-column {
     min-width: 320px;
   }
 }
 
-@media (min-width: 1201px) {
+@media (min-width: 1200px) {
   .operation-column {
     min-width: 400px;
   }

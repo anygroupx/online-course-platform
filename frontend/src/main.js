@@ -7,6 +7,7 @@ import './styles/variables.scss'
 import './styles/element-overrides.scss'
 import './styles/global.css'
 import './styles/fluent-spatial.scss'
+import './styles/responsive.scss'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 

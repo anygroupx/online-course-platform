@@ -213,7 +213,7 @@ const emit = defineEmits([
 }
 
 /* 响应式设计 */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .tag-item {
     height: 32px; /* 移动端保持合适高度 */
     padding: 0 8px;

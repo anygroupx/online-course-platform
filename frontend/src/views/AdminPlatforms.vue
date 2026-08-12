@@ -487,7 +487,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted } from "vue";
 import {
   Plus,
   Download,
@@ -508,6 +508,7 @@ import {
   deletePlatform,
 } from "@/api/course";
 import axios from "@/utils/request";
+import { useResponsive } from "@/composables/useResponsive";
 import router from "../router";
 
 const tableData = ref([]);
@@ -954,17 +955,12 @@ const submitImport = async () => {
   }
 };
 
-const isMobile = ref(false);
-const checkScreenSize = () => {
-  isMobile.value = window.innerWidth <= 768;
-};
-const handleResize = () => {
-  checkScreenSize();
-};
+// 共享断点状态取代页面级 resize 监听，避免同页重复订阅窗口事件。
+const { isMobile, screenWidth } = useResponsive();
 const getOperationColumnWidth = () => {
   if (isMobile.value) {
     return 120;
-  } else if (window.innerWidth <= 1200) {
+  } else if (screenWidth.value < 1200) {
     return 150;
   } else {
     return 180;
@@ -972,16 +968,11 @@ const getOperationColumnWidth = () => {
 };
 
 onMounted(() => {
-  checkScreenSize();
-  window.addEventListener("resize", handleResize);
   loadData();
   loadApiProviders();
   loadCategories();
 });
 
-onUnmounted(() => {
-  window.removeEventListener("resize", handleResize);
-});
 </script>
 
 <style scoped>
@@ -1065,7 +1056,7 @@ onUnmounted(() => {
 }
 
 /* 移动端操作列优化 */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .operation-buttons {
     gap: 2px;
   }
@@ -1082,7 +1073,7 @@ onUnmounted(() => {
 }
 
 /* 中等屏幕优化 */
-@media (max-width: 1200px) and (min-width: 769px) {
+@media (min-width: 768px) and (max-width: 1199px) {
   .operation-buttons .el-button {
     padding: 3px 6px;
     font-size: 11px;
@@ -1094,13 +1085,13 @@ onUnmounted(() => {
   min-width: 120px;
 }
 
-@media (min-width: 769px) {
+@media (min-width: 768px) {
   .operation-column {
     min-width: 150px;
   }
 }
 
-@media (min-width: 1201px) {
+@media (min-width: 1200px) {
   .operation-column {
     min-width: 180px;
   }

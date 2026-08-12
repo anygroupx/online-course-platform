@@ -150,6 +150,7 @@ const tagsViewStore = useTagsViewStore()
 // 引用
 const scrollContainer = ref(null)
 const tagsContainer = ref(null)
+let tagsResizeObserver = null
 const contextMenuRef = ref(null)
 
 // 状态
@@ -407,12 +408,16 @@ onMounted(() => {
   // 初始化时添加当前路由
   tagsViewStore.addView(route)
 
-  // 监听窗口大小变化
-  window.addEventListener('resize', adjustScrollPosition)
+  // 标签栏只关心自身可用宽度，容器观察比全局窗口监听更准确。
+  if (typeof ResizeObserver !== 'undefined' && scrollContainer.value) {
+    tagsResizeObserver = new ResizeObserver(adjustScrollPosition)
+    tagsResizeObserver.observe(scrollContainer.value)
+  }
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', adjustScrollPosition)
+  tagsResizeObserver?.disconnect()
+  tagsResizeObserver = null
 })
 </script>
 
@@ -486,7 +491,7 @@ html.dark .more-btn:hover {
 }
 
 /* 响应式设计 */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .tags-view-container {
     height: 40px;
     padding: 0 8px;
@@ -590,12 +595,24 @@ html.dark .more-btn:hover {
   background: color-mix(in srgb, var(--brand-primary) 9%, transparent);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .tags-view-container {
-    height: 42px !important;
-    min-height: 42px !important;
-    margin: 6px 8px 0;
+    height: 50px !important;
+    min-height: 50px !important;
+    margin: 6px max(8px, var(--safe-area-right)) 0
+      max(8px, var(--safe-area-left));
     border-radius: 12px;
+  }
+
+  .tags-view-wrapper,
+  .tags-container {
+    height: 40px;
+  }
+
+  .scroll-btn,
+  .more-btn {
+    width: 40px;
+    height: 40px;
   }
 }
 </style>
