@@ -1796,6 +1796,9 @@ html.dark .user-info:hover {
 
 @media (max-width: 767px) {
   .sidebar {
+    /* 后置主题层必须再次声明 fixed，避免基础层的 relative 让侧栏占据 flex 宽度。 */
+    position: fixed;
+    inset: 0 auto 0 0;
     width: min(84vw, 300px) !important;
     height: 100dvh;
     padding-bottom: var(--safe-area-bottom);
