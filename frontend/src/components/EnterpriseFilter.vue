@@ -13,11 +13,13 @@
         </el-button>
       </div>
 
+      <!-- 挂载到 body，避免页面 transform 让 fixed 抽屉按长页面计算高度。 -->
       <el-drawer
         v-model="drawerVisible"
         title="筛选条件"
         direction="rtl"
         size="80%"
+        append-to-body
       >
         <el-form :model="localModel" label-position="top" ref="mobileFormRef">
           <!-- 配置驱动的筛选项（移动端全部显示） -->
