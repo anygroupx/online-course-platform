@@ -25,9 +25,11 @@
   --el-border-radius-small: var(--radius-xs);
   --el-box-shadow-light: var(--shadow-md);
   --el-box-shadow: var(--shadow-lg);
+  --el-overlay-color-lighter: rgba(23, 32, 43, 0.34);
 }
 
 html.dark {
+  --el-overlay-color-lighter: rgba(1, 8, 18, 0.58);
   --el-mask-color: rgba(1, 8, 18, 0.68);
   --el-mask-color-extra-light: rgba(1, 8, 18, 0.40);
 }
@@ -258,6 +260,16 @@ html.dark {
 .el-message-box {
   border: 1px solid var(--border-color-light);
   border-radius: var(--radius-xl);
+}
+
+html:not(.dark) .el-dialog,
+html:not(.dark) .el-message-box {
+  /* 浅色数据浮层使用实色提升表面，避免遮罩颜色透入内容区。 */
+  background: var(--el-dialog-bg-color, var(--surface-solid)) !important;
+}
+
+html:not(.dark) .el-drawer {
+  background: var(--el-drawer-bg-color, var(--surface-solid)) !important;
 }
 
 .el-dialog__header {

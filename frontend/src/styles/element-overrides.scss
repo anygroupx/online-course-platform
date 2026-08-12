@@ -3,7 +3,8 @@
  * 主题、材质与控件主样式位于 fluent-spatial.scss，本文件只补齐组件库的特殊结构。
  */
 .el-overlay {
-  background: color-mix(in srgb, #020817 58%, transparent);
+  /* 遮罩跟随主题，避免浅色弹窗被固定深色遮罩混成灰蓝色。 */
+  background: var(--el-overlay-color-lighter);
   backdrop-filter: blur(5px);
 }
 
