@@ -6,6 +6,8 @@
   align-items: center;
   gap: clamp(42px, 7vw, 110px);
   width: 100%;
+  /* 固定为动态可视高度，由认证场景承担唯一滚动，避免横屏出现双滚动条。 */
+  height: 100dvh;
   min-height: 100svh;
   min-height: 100dvh;
   padding: max(clamp(34px, 6vw, 88px), var(--safe-area-top))
