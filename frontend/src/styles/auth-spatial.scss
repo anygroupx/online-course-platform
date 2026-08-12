@@ -384,6 +384,10 @@
 }
 
 .decorative-elements {
+  inset: 0;
+  width: auto;
+  height: auto;
+  overflow: hidden;
   z-index: -1;
   pointer-events: none;
 }
