@@ -10,6 +10,10 @@ import com.course.platform.common.result.ResultCode;
 import com.course.platform.application.service.auth.AuthService;
 import com.course.platform.security.TurnstileVerifier;
 import com.course.platform.security.AuthCookieService;
+import com.course.platform.security.LoginProtectionDecision;
+import com.course.platform.security.LoginProtectionService;
+import com.course.platform.security.RateLimitExceededException;
+import com.course.platform.shared.util.ServletUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -35,6 +39,7 @@ public class AuthController {
     private final TurnstileVerifier turnstileVerifier;
     private final UserMapper userMapper;
     private final AuthCookieService authCookieService;
+    private final LoginProtectionService loginProtectionService;
 
     /**
      * 用户登录
@@ -43,9 +48,23 @@ public class AuthController {
     @PostMapping("/login")
     public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request,
                                        HttpServletResponse httpResponse) {
-        // 必须在校验账号密码之前消费 Turnstile 单次令牌，阻断自动化撞库。
-        turnstileVerifier.verify(request.getTurnstileToken(), "login");
-        LoginResponse response = authService.login(request);
+        String clientIp = ServletUtil.getClientIp();
+        LoginProtectionDecision protection = loginProtectionService.check(request.getUsername(), clientIp);
+        if (!protection.allowed()) {
+            throw new RateLimitExceededException(protection.retryAfterSeconds());
+        }
+        // 在校验账号密码之前消费 Turnstile 单次令牌，阻断自动化撞库。
+        turnstileVerifier.verify(request.getTurnstileToken(), "login", protection.challengeRequired());
+        LoginResponse response;
+        try {
+            response = authService.login(request);
+            loginProtectionService.recordSuccess(request.getUsername());
+        } catch (BusinessException ex) {
+            if (ResultCode.USERNAME_OR_PASSWORD_ERROR.getCode().equals(ex.getCode())) {
+                loginProtectionService.recordFailure(request.getUsername(), clientIp);
+            }
+            throw ex;
+        }
         if (!Boolean.TRUE.equals(response.getMfaRequired())) {
             authCookieService.issue(httpResponse, response.getRefreshToken());
         } else {

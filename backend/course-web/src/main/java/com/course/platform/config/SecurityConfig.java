@@ -5,6 +5,7 @@ import com.course.platform.security.MustChangePasswordFilter;
 import com.course.platform.security.JwtAuthenticationEntryPoint;
 import com.course.platform.security.RateLimitFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -121,12 +122,34 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
 
-                // 添加限流与JWT过滤器
-                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
+                // JWT first; business/user rate limits then see the trusted SecurityContext.
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(mustChangePasswordFilter, JwtAuthenticationFilter.class);
+                .addFilterAfter(rateLimitFilter, JwtAuthenticationFilter.class)
+                .addFilterAfter(mustChangePasswordFilter, RateLimitFilter.class);
 
         return http.build();
+    }
+
+    /** Prevent Spring Boot from registering security filters a second time outside the chain. */
+    @Bean
+    public FilterRegistrationBean<JwtAuthenticationFilter> jwtFilterRegistration(JwtAuthenticationFilter filter) {
+        return disabledRegistration(filter);
+    }
+
+    @Bean
+    public FilterRegistrationBean<RateLimitFilter> rateLimitFilterRegistration(RateLimitFilter filter) {
+        return disabledRegistration(filter);
+    }
+
+    @Bean
+    public FilterRegistrationBean<MustChangePasswordFilter> passwordFilterRegistration(MustChangePasswordFilter filter) {
+        return disabledRegistration(filter);
+    }
+
+    private <T extends jakarta.servlet.Filter> FilterRegistrationBean<T> disabledRegistration(T filter) {
+        FilterRegistrationBean<T> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     /**

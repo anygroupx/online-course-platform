@@ -4,9 +4,11 @@ import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.Result;
 import com.course.platform.common.result.ResultCode;
+import com.course.platform.security.RateLimitExceededException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -35,6 +37,16 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     private final SecurityAuditService securityAuditService;
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<Result<?>> handleRateLimitExceeded(RateLimitExceededException e) {
+        Result<?> body = Result.error(ResultCode.RATE_LIMITED);
+        body.setErrorId(newErrorId());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(e.getRetryAfterSeconds()))
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .body(body);
+    }
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<Result<?>> handleBusinessException(BusinessException e) {
@@ -189,7 +201,8 @@ public class GlobalExceptionHandler {
                 || code.equals(ResultCode.MUST_CHANGE_PASSWORD.getCode())) {
             return HttpStatus.FORBIDDEN;
         }
-        if (code.equals(ResultCode.HUMAN_VERIFICATION_UNAVAILABLE.getCode())) {
+        if (code.equals(ResultCode.HUMAN_VERIFICATION_UNAVAILABLE.getCode())
+                || code.equals(ResultCode.RATE_LIMIT_UNAVAILABLE.getCode())) {
             return HttpStatus.SERVICE_UNAVAILABLE;
         }
         if (code.equals(ResultCode.NOT_FOUND.getCode()) || code.equals(ResultCode.USER_NOT_FOUND.getCode())

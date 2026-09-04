@@ -37,6 +37,7 @@ class AuthSessionHttpContractTest {
     private AuthService authService;
     private TurnstileVerifier turnstileVerifier;
     private AuthCookieService cookieService;
+    private LoginProtectionService loginProtectionService;
     private AuthController controller;
     private ObjectMapper objectMapper;
 
@@ -50,7 +51,11 @@ class AuthSessionHttpContractTest {
         properties.setSecure(true);
         properties.setSameSite("Strict");
         cookieService = new AuthCookieService(properties, configService);
-        controller = new AuthController(authService, turnstileVerifier, mock(UserMapper.class), cookieService);
+        loginProtectionService = mock(LoginProtectionService.class);
+        when(loginProtectionService.check(anyString(), anyString()))
+                .thenReturn(new LoginProtectionDecision(true, false, 0, false, 0));
+        controller = new AuthController(authService, turnstileVerifier, mock(UserMapper.class),
+                cookieService, loginProtectionService);
         objectMapper = new ObjectMapper();
     }
 
@@ -82,7 +87,40 @@ class AuthSessionHttpContractTest {
         assertTrue(csrfCookie.contains("Secure"));
         assertTrue(csrfCookie.contains("SameSite=Strict"));
         assertEquals("no-store, no-cache, must-revalidate", http.getHeader(HttpHeaders.CACHE_CONTROL));
-        verify(turnstileVerifier).verify("human-proof", "login");
+        verify(turnstileVerifier).verify("human-proof", "login", false);
+        verify(loginProtectionService).recordSuccess("alice");
+    }
+
+    @Test
+    void invalidCredentialsIncrementLoginProtectionWithoutAccountEnumeration() {
+        when(authService.login(any(LoginRequest.class)))
+                .thenThrow(new BusinessException(ResultCode.USERNAME_OR_PASSWORD_ERROR));
+        LoginRequest request = new LoginRequest();
+        request.setUsername("unknown-or-wrong");
+        request.setPassword("wrong-password");
+        MockHttpServletResponse http = new MockHttpServletResponse();
+
+        BusinessException error = assertThrows(BusinessException.class, () -> controller.login(request, http));
+
+        assertEquals(ResultCode.USERNAME_OR_PASSWORD_ERROR.getCode(), error.getCode());
+        verify(loginProtectionService).recordFailure(eq("unknown-or-wrong"), anyString());
+        verify(loginProtectionService, never()).recordSuccess(anyString());
+    }
+
+    @Test
+    void blockedLoginStopsBeforeTurnstileAndPasswordVerification() {
+        when(loginProtectionService.check(eq("attacked"), anyString()))
+                .thenReturn(new LoginProtectionDecision(false, true, 20, false, 45));
+        LoginRequest request = new LoginRequest();
+        request.setUsername("attacked");
+        request.setPassword("not-used");
+
+        RateLimitExceededException error = assertThrows(RateLimitExceededException.class,
+                () -> controller.login(request, new MockHttpServletResponse()));
+
+        assertEquals(45, error.getRetryAfterSeconds());
+        verifyNoInteractions(authService);
+        verifyNoInteractions(turnstileVerifier);
     }
 
     @Test

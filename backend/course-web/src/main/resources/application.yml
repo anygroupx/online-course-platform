@@ -82,6 +82,7 @@ cloudflare:
     enabled: ${TURNSTILE_ENABLED:false}
     secret-key: ${TURNSTILE_SECRET_KEY:}
     expected-hostname: ${TURNSTILE_EXPECTED_HOSTNAME:}
+    always-required: ${TURNSTILE_ALWAYS_REQUIRED:false}
     verify-url: https://challenges.cloudflare.com/turnstile/v0/siteverify
 
 knife4j:
@@ -150,6 +151,31 @@ app:
     auth-cookie:
       secure: ${AUTH_COOKIE_SECURE:false}
       same-site: Strict
+    rate-limit:
+      enabled: ${RATE_LIMIT_ENABLED:true}
+      fail-closed: ${RATE_LIMIT_FAIL_CLOSED:true}
+      login-ip: { limit: 30, window-seconds: 60 }
+      register-ip: { limit: 5, window-seconds: 600 }
+      invite-ip: { limit: 30, window-seconds: 60 }
+      refresh-ip: { limit: 60, window-seconds: 60 }
+      refresh-credential: { limit: 20, window-seconds: 60 }
+      mfa-ip: { limit: 10, window-seconds: 300 }
+      payment-notify-ip: { limit: 300, window-seconds: 60 }
+      password-ip: { limit: 20, window-seconds: 900 }
+      password-user: { limit: 5, window-seconds: 900 }
+      external-ip: { limit: 180, window-seconds: 60 }
+      external-key: { limit: 120, window-seconds: 60 }
+      order-user: { limit: 30, window-seconds: 60 }
+      payment-user: { limit: 15, window-seconds: 60 }
+      refund-user: { limit: 5, window-seconds: 900 }
+      export-user: { limit: 5, window-seconds: 600 }
+    login-protection:
+      enabled: ${LOGIN_PROTECTION_ENABLED:true}
+      challenge-threshold: ${LOGIN_CHALLENGE_THRESHOLD:5}
+      throttle-threshold: ${LOGIN_THROTTLE_THRESHOLD:10}
+      block-threshold: ${LOGIN_BLOCK_THRESHOLD:20}
+      failure-window-seconds: ${LOGIN_FAILURE_WINDOW_SECONDS:900}
+      throttle-window-seconds: ${LOGIN_THROTTLE_WINDOW_SECONDS:30}
     alert-webhook: ${SECURITY_ALERT_WEBHOOK:}
     mfa-issuer: ${MFA_ISSUER:OnlineCoursePlatform}
     reconcile-enabled: ${PAYMENT_RECONCILE_ENABLED:true}
