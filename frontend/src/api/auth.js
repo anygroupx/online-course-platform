@@ -5,6 +5,7 @@
  * @since 2025-01-17
  */
 import request from "@/utils/request";
+import { csrfToken } from "@/utils/authSession";
 
 /**
  * 用户登录
@@ -45,9 +46,8 @@ export function refreshToken() {
   return request({
     url: "/auth/refresh",
     method: "post",
-    data: {
-      refreshToken: localStorage.getItem("refreshToken"),
-    },
+    data: {},
+    headers: { "X-CSRF-Token": csrfToken() },
   });
 }
 

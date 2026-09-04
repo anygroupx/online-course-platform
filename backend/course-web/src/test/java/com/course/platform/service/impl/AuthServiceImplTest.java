@@ -4,17 +4,14 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.course.platform.application.service.security.MfaService;
 import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.application.service.support.OperationLogService;
-import com.course.platform.application.service.system.SystemConfigService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
 import com.course.platform.common.security.SecurityRoles;
 import com.course.platform.domain.dto.LoginRequest;
-import com.course.platform.domain.entity.RefreshToken;
 import com.course.platform.domain.entity.User;
 import com.course.platform.domain.vo.LoginResponse;
-import com.course.platform.infra.persistence.mapper.RefreshTokenMapper;
 import com.course.platform.infra.persistence.mapper.UserMapper;
-import com.course.platform.shared.util.JwtUtil;
+import com.course.platform.security.RefreshSessionService;
 import com.course.platform.security.UserAuthorityService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,11 +41,7 @@ class AuthServiceImplTest {
     @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
-    private JwtUtil jwtUtil;
-    @Mock
-    private RefreshTokenMapper refreshTokenMapper;
-    @Mock
-    private SystemConfigService systemConfigService;
+    private RefreshSessionService refreshSessionService;
     @Mock
     private OperationLogService operationLogService;
     @Mock
@@ -84,11 +77,11 @@ class AuthServiceImplTest {
         when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(user);
         when(passwordEncoder.matches("123456", "encoded")).thenReturn(true);
         when(mfaService.isEnabled(user)).thenReturn(false);
-        when(jwtUtil.generateToken(USER_UID, "admin")).thenReturn("access-token");
-        when(jwtUtil.generateRefreshToken(USER_UID, "admin")).thenReturn("refresh-token");
-        when(systemConfigService.getConfigValueAsInteger("refresh_token_expire_days", 7)).thenReturn(7);
         when(userMapper.updateLoginMetadata(anyLong(), any(LocalDateTime.class), anyString(), anyInt())).thenReturn(1);
-        when(refreshTokenMapper.insert(any(RefreshToken.class))).thenReturn(1);
+        when(refreshSessionService.issue(user)).thenReturn(
+                new RefreshSessionService.SessionTokens(
+                        "access-token", "rt_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                        "0123456789abcdef0123456789abcdef", user));
 
         LoginRequest request = new LoginRequest();
         request.setUsername("admin");
@@ -97,12 +90,12 @@ class AuthServiceImplTest {
         LoginResponse response = authService.login(request);
 
         assertEquals("access-token", response.getToken());
-        assertEquals("refresh-token", response.getRefreshToken());
+        assertTrue(response.getRefreshToken().matches("rt_[a-f0-9]{64}"));
         assertEquals(USER_UID, response.getUid());
         assertTrue(response.getIsAdmin());
         assertFalse(Boolean.TRUE.equals(response.getMfaRequired()));
         verify(operationLogService).log(eq(1L), eq("登录"), anyString(), isNull(), eq(user.getBalance()));
-        verify(refreshTokenMapper).insert(any(RefreshToken.class));
+        verify(refreshSessionService).issue(user);
         verify(securityAuditService).record(eq("LOGIN_SUCCESS"), anyString(), eq(1L), eq("admin"), any(), any(), any(), any());
     }
 
@@ -126,8 +119,7 @@ class AuthServiceImplTest {
         assertEquals("challenge-abc", response.getMfaChallengeId());
         assertNull(response.getToken());
         assertNull(response.getRefreshToken());
-        verify(jwtUtil, never()).generateToken(anyString(), anyString());
-        verify(refreshTokenMapper, never()).insert(any(RefreshToken.class));
+        verify(refreshSessionService, never()).issue(any(User.class));
     }
 
     @Test
@@ -157,7 +149,7 @@ class AuthServiceImplTest {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> authService.login(request));
         assertEquals(ResultCode.USERNAME_OR_PASSWORD_ERROR.getCode(), ex.getCode());
-        verify(jwtUtil, never()).generateToken(anyString(), anyString());
+        verify(refreshSessionService, never()).issue(any(User.class));
     }
 
     @Test
@@ -174,6 +166,6 @@ class AuthServiceImplTest {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> authService.login(request));
         assertEquals(ResultCode.ACCOUNT_DISABLED.getCode(), ex.getCode());
-        verify(jwtUtil, never()).generateToken(anyString(), anyString());
+        verify(refreshSessionService, never()).issue(any(User.class));
     }
 }

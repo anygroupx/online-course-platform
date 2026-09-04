@@ -6,19 +6,15 @@ import com.course.platform.application.service.auth.AuthService;
 import com.course.platform.application.service.security.MfaService;
 import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.application.service.support.OperationLogService;
-import com.course.platform.application.service.system.SystemConfigService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
-import com.course.platform.common.security.TokenHashUtil;
 import com.course.platform.security.UserAuthorityService;
+import com.course.platform.security.RefreshSessionService;
 import com.course.platform.domain.dto.LoginRequest;
-import com.course.platform.domain.entity.RefreshToken;
 import com.course.platform.domain.entity.User;
 import com.course.platform.domain.vo.LoginResponse;
 import com.course.platform.infra.cache.SystemVariableCache;
-import com.course.platform.infra.persistence.mapper.RefreshTokenMapper;
 import com.course.platform.infra.persistence.mapper.UserMapper;
-import com.course.platform.shared.util.JwtUtil;
 import com.course.platform.shared.util.ServletUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,9 +34,7 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
-    private final JwtUtil jwtUtil;
-    private final RefreshTokenMapper refreshTokenMapper;
-    private final SystemConfigService systemConfigService;
+    private final RefreshSessionService refreshSessionService;
     private final OperationLogService operationLogService;
     private final MfaService mfaService;
     private final SecurityAuditService securityAuditService;
@@ -113,25 +107,11 @@ public class AuthServiceImpl implements AuthService {
                     .build();
         }
 
-        String token = jwtUtil.generateToken(user.getUid(), user.getUsername());
-        String refreshToken = jwtUtil.generateRefreshToken(user.getUid(), user.getUsername());
-
-        Integer expireDays = systemConfigService.getConfigValueAsInteger("refresh_token_expire_days", 7);
-        LocalDateTime expireTime = LocalDateTime.now().plusDays(expireDays);
-
-        RefreshToken refreshTokenEntity = RefreshToken.builder()
-                .userId(user.getId())
-                .token(null) // 不再保存明文
-                .tokenHash(TokenHashUtil.sha256(refreshToken))
-                .tokenFamilyId(TokenHashUtil.randomHex(16))
-                .expireTime(expireTime)
-                .lastUsedIp(user.getLastLoginIp())
-                .build();
-        refreshTokenMapper.insert(refreshTokenEntity);
+        RefreshSessionService.SessionTokens session = refreshSessionService.issue(user);
 
         LoginResponse response = LoginResponse.builder()
-                .token(token)
-                .refreshToken(refreshToken)
+                .token(session.accessToken())
+                .refreshToken(session.refreshToken())
                 .uid(user.getUid())
                 .username(user.getUsername())
                 .nickname(StrUtil.isNotBlank(user.getNickname()) ? user.getNickname() : user.getUsername())
@@ -156,92 +136,23 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void logout(Long userId) {
-        log.info("用户登出: userId={}", userId);
-        // 撤销该用户全部 refresh token
-        RefreshToken update = new RefreshToken();
-        update.setRevokedAt(LocalDateTime.now());
-        refreshTokenMapper.update(update, new LambdaQueryWrapper<RefreshToken>()
-                .eq(RefreshToken::getUserId, userId)
-                .isNull(RefreshToken::getRevokedAt));
-        operationLogService.log(userId, "登出", "用户主动登出，已撤销Refresh Token", null, null);
+        int revoked = refreshSessionService.revokeAll(userId, "LOGOUT");
+        log.info("用户登出并撤销服务端会话: userId={}, revoked={}", userId, revoked);
+        operationLogService.log(userId, "登出", "用户主动登出，已撤销服务端会话", null, null);
+        securityAuditService.record("LOGOUT", "INFO", userId, null,
+                "/auth/logout", "POST", "用户主动登出", "revokedSessions=" + revoked);
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public LoginResponse refresh(String refreshToken) {
-        if (!jwtUtil.validateRefreshToken(refreshToken)) {
-            throw new BusinessException(ResultCode.TOKEN_EXPIRED);
-        }
-
-        String hash = TokenHashUtil.sha256(refreshToken);
-        RefreshToken refreshTokenEntity = refreshTokenMapper.selectOne(
-                new LambdaQueryWrapper<RefreshToken>()
-                        .eq(RefreshToken::getTokenHash, hash)
-                        .isNull(RefreshToken::getRevokedAt)
-                        .ge(RefreshToken::getExpireTime, LocalDateTime.now())
-        );
-
-        // 兼容旧明文 token
-        if (refreshTokenEntity == null) {
-            refreshTokenEntity = refreshTokenMapper.selectOne(
-                    new LambdaQueryWrapper<RefreshToken>()
-                            .eq(RefreshToken::getToken, refreshToken)
-                            .isNull(RefreshToken::getRevokedAt)
-                            .ge(RefreshToken::getExpireTime, LocalDateTime.now())
-            );
-        }
-
-        if (refreshTokenEntity == null) {
-            // 可能是重放：若 hash 命中已撤销记录，则撤销整个 family
-            RefreshToken reused = refreshTokenMapper.selectOne(new LambdaQueryWrapper<RefreshToken>()
-                    .eq(RefreshToken::getTokenHash, hash)
-                    .isNotNull(RefreshToken::getRevokedAt)
-                    .last("LIMIT 1"));
-            if (reused != null && reused.getTokenFamilyId() != null) {
-                RefreshToken revoke = new RefreshToken();
-                revoke.setRevokedAt(LocalDateTime.now());
-                refreshTokenMapper.update(revoke, new LambdaQueryWrapper<RefreshToken>()
-                        .eq(RefreshToken::getTokenFamilyId, reused.getTokenFamilyId())
-                        .isNull(RefreshToken::getRevokedAt));
-                log.warn("检测到 Refresh Token 重放，已撤销 family={}", reused.getTokenFamilyId());
-            }
-            throw new BusinessException(ResultCode.TOKEN_EXPIRED);
-        }
-
-        User user = userMapper.selectById(refreshTokenEntity.getUserId());
-        if (user == null) {
-            throw new BusinessException(ResultCode.USER_NOT_FOUND);
-        }
-        if (SystemVariableCache.getStatusValue("user_status", "disabled") == user.getStatus()) {
-            throw new BusinessException(ResultCode.ACCOUNT_DISABLED);
-        }
-
-        String newToken = jwtUtil.generateToken(user.getUid(), user.getUsername());
-        String newRefreshToken = jwtUtil.generateRefreshToken(user.getUid(), user.getUsername());
-        Integer expireDays = systemConfigService.getConfigValueAsInteger("refresh_token_expire_days", 7);
-        LocalDateTime newExpireTime = LocalDateTime.now().plusDays(expireDays);
-
-        // 滚动刷新：撤销旧 token，写入新 hash
-        refreshTokenEntity.setRevokedAt(LocalDateTime.now());
-        refreshTokenEntity.setReplacedBy(TokenHashUtil.sha256(newRefreshToken));
-        refreshTokenMapper.updateById(refreshTokenEntity);
-
-        RefreshToken newEntity = RefreshToken.builder()
-                .userId(user.getId())
-                .token(null)
-                .tokenHash(TokenHashUtil.sha256(newRefreshToken))
-                .tokenFamilyId(refreshTokenEntity.getTokenFamilyId() != null
-                        ? refreshTokenEntity.getTokenFamilyId()
-                        : TokenHashUtil.randomHex(16))
-                .expireTime(newExpireTime)
-                .lastUsedIp(safeIp())
-                .build();
-        refreshTokenMapper.insert(newEntity);
-
+        RefreshSessionService.SessionTokens session = refreshSessionService.rotate(refreshToken);
+        User user = session.user();
         String role = resolveRole(user);
+        securityAuditService.record("REFRESH_SUCCESS", "INFO", user.getId(), user.getUsername(),
+                "/auth/refresh", "POST", "Refresh Token 轮换成功", null);
         return LoginResponse.builder()
-                .token(newToken)
-                .refreshToken(newRefreshToken)
+                .token(session.accessToken())
+                .refreshToken(session.refreshToken())
                 .uid(user.getUid())
                 .username(user.getUsername())
                 .nickname(StrUtil.isNotBlank(user.getNickname()) ? user.getNickname() : user.getUsername())
@@ -263,13 +174,5 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ResultCode.FORBIDDEN);
         }
         return role;
-    }
-
-    private String safeIp() {
-        try {
-            return ServletUtil.getClientIp();
-        } catch (Exception e) {
-            return "127.0.0.1";
-        }
     }
 }

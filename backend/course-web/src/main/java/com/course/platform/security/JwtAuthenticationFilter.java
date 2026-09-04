@@ -32,6 +32,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
     private final UserMapper userMapper;
     private final UserAuthorityService userAuthorityService;
+    private final RefreshSessionService refreshSessionService;
 
     @Override
     protected void doFilterInternal(
@@ -44,12 +45,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (StringUtils.hasText(token) && jwtUtil.validateToken(token)) {
                 String uid = jwtUtil.getUserUidFromToken(token);
                 String username = jwtUtil.getUsernameFromToken(token);
+                String sessionId = jwtUtil.getSessionIdFromToken(token);
                 User user = userMapper.selectOne(new LambdaQueryWrapper<User>()
                         .eq(User::getUid, uid)
                         .last("LIMIT 1"));
 
                 if (user != null) {
                     if (user.getStatus() != null && user.getStatus() == Constants.USER_STATUS_DISABLED) {
+                        SecurityContextHolder.clearContext();
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
+                    if (!refreshSessionService.isSessionActive(user.getId(), sessionId)) {
+                        log.info("拒绝已撤销或过期的服务端会话，uid={}", uid);
                         SecurityContextHolder.clearContext();
                         filterChain.doFilter(request, response);
                         return;

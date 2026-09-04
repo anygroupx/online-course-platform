@@ -30,7 +30,9 @@ class JwtAuthenticationFilterTest {
         JwtUtil jwtUtil = mock(JwtUtil.class);
         UserMapper userMapper = mock(UserMapper.class);
         UserAuthorityService authorityService = mock(UserAuthorityService.class);
-        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtUtil, userMapper, authorityService);
+        RefreshSessionService refreshSessionService = mock(RefreshSessionService.class);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                jwtUtil, userMapper, authorityService, refreshSessionService);
 
         User user = new User();
         user.setId(42L);
@@ -39,7 +41,10 @@ class JwtAuthenticationFilterTest {
         when(jwtUtil.validateToken("signed-token")).thenReturn(true);
         when(jwtUtil.getUserUidFromToken("signed-token")).thenReturn(user.getUid());
         when(jwtUtil.getUsernameFromToken("signed-token")).thenReturn("alice");
+        when(jwtUtil.getSessionIdFromToken("signed-token")).thenReturn("0123456789abcdef0123456789abcdef");
         when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(user);
+        when(refreshSessionService.isSessionActive(42L, "0123456789abcdef0123456789abcdef"))
+                .thenReturn(true);
         when(authorityService.loadAuthorities(42L)).thenReturn(List.of(
                 new SimpleGrantedAuthority("ROLE_FINANCE"),
                 new SimpleGrantedAuthority("payment:refund")));
@@ -61,7 +66,9 @@ class JwtAuthenticationFilterTest {
         JwtUtil jwtUtil = mock(JwtUtil.class);
         UserMapper userMapper = mock(UserMapper.class);
         UserAuthorityService authorityService = mock(UserAuthorityService.class);
-        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(jwtUtil, userMapper, authorityService);
+        RefreshSessionService refreshSessionService = mock(RefreshSessionService.class);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                jwtUtil, userMapper, authorityService, refreshSessionService);
 
         User user = new User();
         user.setId(7L);
@@ -69,7 +76,10 @@ class JwtAuthenticationFilterTest {
         user.setStatus(1);
         when(jwtUtil.validateToken("signed-token")).thenReturn(true);
         when(jwtUtil.getUserUidFromToken("signed-token")).thenReturn(user.getUid());
+        when(jwtUtil.getSessionIdFromToken("signed-token")).thenReturn("0123456789abcdef0123456789abcdef");
         when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(user);
+        when(refreshSessionService.isSessionActive(7L, "0123456789abcdef0123456789abcdef"))
+                .thenReturn(true);
         when(authorityService.loadAuthorities(7L)).thenReturn(List.of());
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/orders/query");
@@ -78,4 +88,33 @@ class JwtAuthenticationFilterTest {
 
         assertNull(SecurityContextHolder.getContext().getAuthentication());
     }
+
+    @Test
+    void revokedServerSideSessionIsNotAuthenticated() throws Exception {
+        JwtUtil jwtUtil = mock(JwtUtil.class);
+        UserMapper userMapper = mock(UserMapper.class);
+        UserAuthorityService authorityService = mock(UserAuthorityService.class);
+        RefreshSessionService refreshSessionService = mock(RefreshSessionService.class);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                jwtUtil, userMapper, authorityService, refreshSessionService);
+
+        User user = new User();
+        user.setId(42L);
+        user.setUid("550e8400-e29b-41d4-a716-446655440000");
+        user.setStatus(1);
+        when(jwtUtil.validateToken("signed-token")).thenReturn(true);
+        when(jwtUtil.getUserUidFromToken("signed-token")).thenReturn(user.getUid());
+        when(jwtUtil.getSessionIdFromToken("signed-token")).thenReturn("0123456789abcdef0123456789abcdef");
+        when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(user);
+        when(refreshSessionService.isSessionActive(42L, "0123456789abcdef0123456789abcdef"))
+                .thenReturn(false);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/orders/query");
+        request.addHeader("Authorization", "Bearer signed-token");
+        filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        verifyNoInteractions(authorityService);
+    }
+
 }

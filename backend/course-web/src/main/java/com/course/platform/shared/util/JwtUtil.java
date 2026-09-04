@@ -1,6 +1,7 @@
 package com.course.platform.shared.util;
 
 import com.course.platform.common.constant.Constants;
+import com.course.platform.common.security.TokenHashUtil;
 import com.course.platform.common.util.PublicUidUtil;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -12,7 +13,6 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
-import java.util.Map;
 
 /**
  * JWT工具类
@@ -63,18 +63,15 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    /**
-     * 生成Token
-     *
-     * @param uid 对外用户 UUID
-     * @param username 用户名
-     * @return Token字符串
-     */
-    public String generateToken(String uid, String username) {
+    /** Generate an access JWT bound to an existing server-side refresh family. */
+    public String generateTokenForSession(String uid, String username, String sessionId) {
         String normalizedUid = requireValidUid(uid);
+        if (sessionId == null || !sessionId.matches("[a-f0-9]{32}")) {
+            throw new IllegalArgumentException("sessionId must be a 128-bit lowercase hex value");
+        }
         Date now = new Date();
-        // 从数据库读取 Access Token 过期时间（分钟）
-        Integer expireMinutes = systemConfigService.getConfigValueAsInteger("token_expire_minutes", 15);
+        int expireMinutes = Math.max(1, Math.min(60,
+                systemConfigService.getConfigValueAsInteger("token_expire_minutes", 15)));
         Date expiryDate = new Date(now.getTime() + expireMinutes * 60 * 1000L);
 
         return Jwts.builder()
@@ -82,37 +79,8 @@ public class JwtUtil {
                 .claim(Constants.USER_UID_KEY, normalizedUid)
                 .claim(Constants.USERNAME_KEY, username)
                 .claim("type", "access")
-                .issuedAt(now)
-                .expiration(expiryDate)
-                .signWith(getSecretKey())
-                .compact();
-    }
-
-    /**
-     * 生成Token（带额外信息）
-     *
-     * @param uid 对外用户 UUID
-     * @param username 用户名
-     * @param claims 额外信息
-     * @return Token字符串
-     */
-    public String generateToken(String uid, String username, Map<String, Object> claims) {
-        String normalizedUid = requireValidUid(uid);
-        Date now = new Date();
-        // 从数据库读取 Access Token 过期时间（分钟）
-        Integer expireMinutes = systemConfigService.getConfigValueAsInteger("token_expire_minutes", 15);
-        Date expiryDate = new Date(now.getTime() + expireMinutes * 60 * 1000L);
-
-        var builder = Jwts.builder();
-        if (claims != null && !claims.isEmpty()) {
-            builder.claims(claims);
-        }
-        return builder
-                // 保留字段最后写入，防止额外 claims 覆盖公开 UID 或 subject。
-                .subject(normalizedUid)
-                .claim(Constants.USER_UID_KEY, normalizedUid)
-                .claim(Constants.USERNAME_KEY, username)
-                .claim("type", "access")
+                .claim("sid", sessionId)
+                .id(TokenHashUtil.randomHex(16))
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSecretKey())
@@ -166,6 +134,11 @@ public class JwtUtil {
         return claims.get(Constants.USERNAME_KEY, String.class);
     }
 
+    public String getSessionIdFromToken(String token) {
+        Claims claims = getClaimsFromToken(token);
+        return claims == null ? null : claims.get("sid", String.class);
+    }
+
     /**
      * 验证Token是否有效
      *
@@ -179,9 +152,12 @@ public class JwtUtil {
                 return false;
             }
             String type = claims.get("type", String.class);
+            String sessionId = claims.get("sid", String.class);
             Date expiration = claims.getExpiration();
             return "access".equals(type)
                     && hasMatchingPublicUid(claims)
+                    && claims.getId() != null && !claims.getId().isBlank()
+                    && sessionId != null && sessionId.matches("[a-f0-9]{32}")
                     && expiration != null
                     && !expiration.before(new Date());
         } catch (Exception e) {
@@ -206,74 +182,6 @@ public class JwtUtil {
             return expiration != null && expiration.before(new Date());
         } catch (Exception e) {
             return true;
-        }
-    }
-
-    /**
-     * 刷新Token
-     *
-     * @param token 旧Token
-     * @return 新Token
-     */
-    public String refreshToken(String token) {
-        Claims claims = getClaimsFromToken(token);
-        if (claims == null || !validateToken(token)) {
-            return null;
-        }
-
-        String uid = claims.get(Constants.USER_UID_KEY, String.class);
-        String username = claims.get(Constants.USERNAME_KEY, String.class);
-
-        return PublicUidUtil.isValid(uid) ? generateToken(PublicUidUtil.normalize(uid), username) : null;
-    }
-
-    /**
-     * 生成Refresh Token
-     *
-     * @param uid 对外用户 UUID
-     * @param username 用户名
-     * @return Refresh Token字符串
-     */
-    public String generateRefreshToken(String uid, String username) {
-        String normalizedUid = requireValidUid(uid);
-        Date now = new Date();
-        // 从数据库读取 Refresh Token 过期时间（天）
-        Integer expireDays = systemConfigService.getConfigValueAsInteger("refresh_token_expire_days", 7);
-        Date expiryDate = new Date(now.getTime() + expireDays * 24 * 60 * 60 * 1000L);
-
-        return Jwts.builder()
-                .subject(normalizedUid)
-                .claim(Constants.USER_UID_KEY, normalizedUid)
-                .claim(Constants.USERNAME_KEY, username)
-                .claim("type", "refresh")
-                .issuedAt(now)
-                .expiration(expiryDate)
-                .signWith(getSecretKey())
-                .compact();
-    }
-
-    /**
-     * 验证Refresh Token是否有效
-     *
-     * @param refreshToken Refresh Token字符串
-     * @return true-有效 false-无效
-     */
-    public boolean validateRefreshToken(String refreshToken) {
-        try {
-            Claims claims = getClaimsFromToken(refreshToken);
-            if (claims == null) {
-                return false;
-            }
-            // 验证是否是refresh token类型
-            String type = claims.get("type", String.class);
-            if (!"refresh".equals(type)) {
-                return false;
-            }
-            Date expiration = claims.getExpiration();
-            return hasMatchingPublicUid(claims) && expiration != null && !expiration.before(new Date());
-        } catch (Exception e) {
-            log.error("验证Refresh Token失败: {}", e.getMessage());
-            return false;
         }
     }
 

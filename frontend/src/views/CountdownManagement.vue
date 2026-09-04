@@ -1240,6 +1240,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, computed, nextTick } from "vue";
+import { getAccessToken } from "@/utils/authSession";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   Clock,
@@ -2213,7 +2214,7 @@ const submitRestartCountdown = async () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${getAccessToken()}`,
         },
         body: JSON.stringify({
           duration: restartForm.duration,
@@ -2414,7 +2415,7 @@ const submitStatusSwitch = async () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${getAccessToken()}`,
         },
         body: JSON.stringify({
           newStatus: statusSwitchForm.newStatus,

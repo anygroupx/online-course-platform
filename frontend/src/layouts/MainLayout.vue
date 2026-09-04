@@ -556,12 +556,10 @@ const handleChangePassword = async () => {
       oldPassword: passwordForm.value.oldPassword,
       newPassword: passwordForm.value.newPassword,
     });
-    ElMessage.success("密码修改成功");
-    userStore.setMustChangePassword(false);
+    ElMessage.success("密码修改成功，请重新登录");
     passwordDialogVisible.value = false;
     resetPasswordForm();
-    // 改密限制解除后再加载此前被保护的业务配置。
-    await Promise.all([loadSystemAnnouncement(), loadSettings()]);
+    userStore.clearSession();
   } catch (error) {
     console.error("修改密码失败：", error);
     ElMessage.error(error.message || "修改密码失败");

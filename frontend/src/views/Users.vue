@@ -314,6 +314,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
+import { getAccessToken } from "@/utils/authSession";
 import { useRouter } from "vue-router";
 import { Plus, Key } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -545,7 +546,7 @@ const handleInviteCodeSubmit = async () => {
 // 处理我的邀请码
 const handleMyInviteCode = async () => {
   // 检查用户是否已登录
-  const token = localStorage.getItem("token");
+  const token = getAccessToken();
   if (!token) {
     ElMessage.error("请先登录");
     router.push("/login");

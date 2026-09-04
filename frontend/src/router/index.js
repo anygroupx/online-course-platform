@@ -5,6 +5,13 @@
  * @since 2025-01-17
  */
 import { createRouter, createWebHistory } from "vue-router";
+import {
+  getAccessToken,
+  isAccessTokenExpired,
+  refreshAccessSession,
+  clearAuthSession,
+  sessionUserInfo,
+} from "@/utils/authSession";
 
 const routes = [
   {
@@ -196,60 +203,37 @@ const router = createRouter({
   routes,
 });
 
-// 检查Token是否过期的辅助函数
-// Source: AURA-X-KYS 安全加固 - 路由守卫Token过期检查
-const isTokenExpiredInRouter = () => {
-  const tokenTime = localStorage.getItem("tokenTime");
-  if (!tokenTime) return true;
-
-  const minutes = parseInt(
-    localStorage.getItem("token_expire_minutes") || "15"
-  );
-  const expireTime = minutes * 60 * 1000;
-  const elapsed = Date.now() - parseInt(tokenTime);
-
-  return elapsed > expireTime;
-};
-
-// 路由守卫
-router.beforeEach((to, from, next) => {
-  // 设置页面标题
+// Route bootstrap: after a reload, recover a short-lived access JWT using the
+// HttpOnly refresh cookie. The access token itself is never persisted.
+router.beforeEach(async (to, _from, next) => {
   document.title = to.meta.title ? `${to.meta.title} - 二开台` : "在线网课平台";
-
-  // 检查是否需要登录
-  if (to.meta.requiresAuth) {
-    const token = localStorage.getItem("token");
-    const autoRefreshEnabled =
-      localStorage.getItem("auto_refresh_token_enabled") !== "0";
-
-    if (!token) {
-      next("/login");
-      return;
-    }
-
-    // 检查Token是否过期（如果启用了自动刷新，则允许过期Token通过，由请求拦截器处理）
-    // 如果未启用自动刷新且Token过期，直接跳转登录
-    if (!autoRefreshEnabled && isTokenExpiredInRouter()) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("tokenTime");
-      localStorage.removeItem("userInfo");
-      next("/login");
-      return;
-    }
-
-    // 检查是否需要管理员权限
-    if (to.meta.adminOnly) {
-      const userInfo = JSON.parse(localStorage.getItem("userInfo") || "null");
-      if (!userInfo || !userInfo.isAdmin) {
-        next("/dashboard");
-        return;
-      }
-    }
-
+  if (!to.meta.requiresAuth) {
     next();
-  } else {
-    next();
+    return;
   }
+
+  let token = getAccessToken();
+  const autoRefresh = localStorage.getItem("auto_refresh_token_enabled") !== "0";
+  if (!token || isAccessTokenExpired()) {
+    if (!autoRefresh) {
+      clearAuthSession();
+      next("/login");
+      return;
+    }
+    try {
+      token = await refreshAccessSession();
+    } catch {
+      clearAuthSession();
+      next("/login");
+      return;
+    }
+  }
+
+  if (to.meta.adminOnly && !sessionUserInfo.value?.isAdmin) {
+    next("/dashboard");
+    return;
+  }
+  next();
 });
 
 export default router;

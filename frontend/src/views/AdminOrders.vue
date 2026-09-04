@@ -1242,6 +1242,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed, nextTick } from "vue";
+import { getAccessToken } from "@/utils/authSession";
 import {
   Document,
   Check,
@@ -1828,7 +1829,7 @@ const loadOrders = async () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
+        Authorization: `Bearer ${getAccessToken()}`,
       },
       body: JSON.stringify(params),
     });
@@ -1906,7 +1907,7 @@ const loadAgentList = async () => {
     const res = await fetch("/api/admin/orders/agent-accounts", {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
+        Authorization: `Bearer ${getAccessToken()}`,
       },
     });
     const data = await res.json();
@@ -1940,7 +1941,7 @@ const loadStatistics = async () => {
     const res = await fetch("/api/admin/orders/statistics", {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
+        Authorization: `Bearer ${getAccessToken()}`,
       },
     });
     const data = await res.json();
@@ -2079,7 +2080,7 @@ const handleStatusSubmit = async () => {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${getAccessToken()}`,
         },
         body: `newStatus=${
           statusForm.value.newStatus
@@ -2109,7 +2110,7 @@ const handleDockStatusSubmit = async () => {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${getAccessToken()}`,
         },
         body: `newStatus=${
           dockStatusForm.value.newStatus
@@ -2138,7 +2139,7 @@ const handleRemarkSubmit = async () => {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${getAccessToken()}`,
         },
         body: `remark=${encodeURIComponent(remarkForm.value.remark)}`,
       }
@@ -2250,7 +2251,7 @@ const handleBatchSubmit = async () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
+        Authorization: `Bearer ${getAccessToken()}`,
       },
       body: JSON.stringify(requestBody),
     });
@@ -2313,7 +2314,7 @@ const handleStatusChange = async (row) => {
           method: "POST",
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            Authorization: `Bearer ${getAccessToken()}`,
           },
           body: `newStatus=${row.orderStatus}&reason=管理员直接修改`,
         }
@@ -2356,7 +2357,7 @@ const handleDockStatusChange = async (row) => {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${getAccessToken()}`,
         },
         body: `newStatus=${row.dockStatus}&reason=管理员直接修改`,
       }
@@ -2400,7 +2401,7 @@ const handleQuickComplete = async () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
+        Authorization: `Bearer ${getAccessToken()}`,
       },
       body: JSON.stringify({
         orderIds: orderIds,
@@ -2442,7 +2443,7 @@ const handleQuickCancel = async () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
+        Authorization: `Bearer ${getAccessToken()}`,
       },
       body: JSON.stringify({
         orderIds: orderIds,
