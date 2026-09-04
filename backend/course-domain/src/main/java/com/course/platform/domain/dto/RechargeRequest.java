@@ -1,6 +1,7 @@
 package com.course.platform.domain.dto;
 
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -16,10 +17,10 @@ import java.math.BigDecimal;
 public class RechargeRequest {
 
     /**
-     * 目标用户ID
+     * 目标用户 UUID
      */
-    @NotNull(message = "用户ID不能为空")
-    private Long targetUserId;
+    @NotBlank(message = "用户 UUID 不能为空")
+    private String targetUserUid;
 
     /**
      * 充值金额

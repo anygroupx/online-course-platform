@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
  * 用户信息响应VO（用于首页）
@@ -20,9 +21,9 @@ import java.math.BigDecimal;
 public class UserInfoResponse {
 
     /**
-     * 用户ID
+     * 对外用户 UUID
      */
-    private Long userId;
+    private String uid;
 
     /**
      * 用户名
@@ -49,10 +50,10 @@ public class UserInfoResponse {
      */
     private BigDecimal rate;
 
-    /**
-     * API密钥
-     */
-    private String apiKey;
+    /** API Key plaintext is never returned after one-time issuance. */
+    private Boolean apiEnabled;
+    private String apiKeyPrefix;
+    private LocalDateTime apiKeyExpiresAt;
 
     /**
      * 邀请码

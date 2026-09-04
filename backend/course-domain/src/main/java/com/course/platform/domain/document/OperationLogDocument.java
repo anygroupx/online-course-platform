@@ -1,5 +1,6 @@
 package com.course.platform.domain.document;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -38,6 +39,7 @@ public class OperationLogDocument {
      * 用户ID
      */
     @Field(type = FieldType.Long)
+    @JsonIgnore
     private Long userId;
 
     /**

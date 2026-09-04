@@ -2,7 +2,7 @@ package com.course.platform.security;
 
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
-import com.course.platform.common.security.SecurityRoles;
+import com.course.platform.common.security.SecurityAuthorities;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -29,37 +29,46 @@ public final class SecurityUtils {
         }
     }
 
-    public static boolean hasRole(String role) {
+    public static boolean hasAuthority(String authorityName) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null) {
+        if (authentication == null || authorityName == null) {
             return false;
         }
-        String expected = SecurityRoles.toSpringRole(role);
         for (GrantedAuthority authority : authentication.getAuthorities()) {
-            if (expected.equals(authority.getAuthority())) {
+            if (authorityName.equals(authority.getAuthority())) {
                 return true;
             }
         }
         return false;
     }
 
+    public static boolean hasRole(String role) {
+        if (role == null || role.isBlank()) {
+            return false;
+        }
+        String normalized = role.trim().toUpperCase();
+        return hasAuthority(normalized.startsWith("ROLE_") ? normalized : "ROLE_" + normalized);
+    }
+
     public static boolean isAdmin() {
-        return hasRole(SecurityRoles.ADMIN);
+        return hasAuthority(SecurityAuthorities.ROLE_SUPER_ADMIN);
     }
 
     public static boolean isCustomerService() {
-        return hasRole(SecurityRoles.CS) || isAdmin();
+        return hasAuthority(SecurityAuthorities.CUSTOMER_SERVICE_READ);
+    }
+
+    public static void requireAuthority(String authorityName) {
+        if (!hasAuthority(authorityName)) {
+            throw new BusinessException(ResultCode.FORBIDDEN);
+        }
     }
 
     public static void requireAdmin() {
-        if (!isAdmin()) {
-            throw new BusinessException(ResultCode.FORBIDDEN);
-        }
+        requireAuthority(SecurityAuthorities.ROLE_SUPER_ADMIN);
     }
 
     public static void requireCustomerService() {
-        if (!isCustomerService()) {
-            throw new BusinessException(ResultCode.FORBIDDEN);
-        }
+        requireAuthority(SecurityAuthorities.CUSTOMER_SERVICE_READ);
     }
 }

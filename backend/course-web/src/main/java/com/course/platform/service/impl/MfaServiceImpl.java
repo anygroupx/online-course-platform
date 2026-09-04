@@ -7,7 +7,7 @@ import com.course.platform.application.service.system.SystemConfigService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
 import com.course.platform.common.security.SecretCrypto;
-import com.course.platform.common.security.SecurityRoles;
+import com.course.platform.common.security.SecurityAuthorities;
 import com.course.platform.common.security.TokenHashUtil;
 import com.course.platform.common.security.TotpUtil;
 import com.course.platform.domain.dto.MfaCodeRequest;
@@ -24,6 +24,8 @@ import com.course.platform.infra.persistence.mapper.RefreshTokenMapper;
 import com.course.platform.infra.persistence.mapper.UserMapper;
 import com.course.platform.shared.util.JwtUtil;
 import com.course.platform.shared.util.ServletUtil;
+import com.course.platform.security.SecurityUtils;
+import com.course.platform.security.UserAuthorityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -51,6 +53,7 @@ public class MfaServiceImpl implements MfaService {
     private final JwtUtil jwtUtil;
     private final SystemConfigService systemConfigService;
     private final SecurityAuditService securityAuditService;
+    private final UserAuthorityService userAuthorityService;
 
     @Value("${app.crypto.secret:}")
     private String cryptoSecret;
@@ -182,8 +185,8 @@ public class MfaServiceImpl implements MfaService {
         challenge.setConsumed(1);
         mfaChallengeMapper.updateById(challenge);
 
-        String token = jwtUtil.generateToken(user.getId(), user.getUsername());
-        String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
+        String token = jwtUtil.generateToken(user.getUid(), user.getUsername());
+        String refreshToken = jwtUtil.generateRefreshToken(user.getUid(), user.getUsername());
         Integer expireDays = systemConfigService.getConfigValueAsInteger("refresh_token_expire_days", 7);
         RefreshToken refreshTokenEntity = RefreshToken.builder()
                 .userId(user.getId())
@@ -201,12 +204,12 @@ public class MfaServiceImpl implements MfaService {
         return LoginResponse.builder()
                 .token(token)
                 .refreshToken(refreshToken)
-                .userId(user.getId())
+                .uid(user.getUid())
                 .username(user.getUsername())
                 .nickname(StringUtils.hasText(user.getNickname()) ? user.getNickname() : user.getUsername())
                 .balance(user.getBalance())
                 .rate(user.getRate())
-                .isAdmin(SecurityRoles.ADMIN.equals(role))
+                .isAdmin("SUPER_ADMIN".equals(role))
                 .role(role)
                 .mustChangePassword(user.getMustChangePassword() != null && user.getMustChangePassword() == 1)
                 .mfaRequired(false)
@@ -268,17 +271,18 @@ public class MfaServiceImpl implements MfaService {
     }
 
     private void requireAdmin(User user) {
-        String role = resolveRole(user);
-        if (!SecurityRoles.ADMIN.equals(role)) {
-            throw new BusinessException(ResultCode.FORBIDDEN.getCode(), "仅管理员可配置 MFA");
+        if (user == null || !user.getId().equals(SecurityUtils.getCurrentUserId())) {
+            throw new BusinessException(ResultCode.FORBIDDEN);
         }
+        SecurityUtils.requireAuthority(SecurityAuthorities.MFA_MANAGE);
     }
 
     private String resolveRole(User user) {
-        if (StringUtils.hasText(user.getRole())) {
-            return user.getRole().trim().toUpperCase();
+        String role = userAuthorityService.getPrimaryRole(user.getId());
+        if (!StringUtils.hasText(role)) {
+            throw new BusinessException(ResultCode.FORBIDDEN);
         }
-        return SecurityRoles.USER;
+        return role;
     }
 
     private String safeIp() {

@@ -7,6 +7,7 @@ import cn.hutool.json.JSONUtil;
 import com.course.platform.infra.cache.SystemVariableCache;
 import com.course.platform.common.constant.Constants;
 import com.course.platform.common.exception.BusinessException;
+import com.course.platform.infra.docking.DockingLogSanitizer;
 import com.course.platform.infra.external.ApiHttpClient;
 import com.course.platform.domain.vo.CourseInfoResponse;
 import com.course.platform.domain.dto.DockResult;
@@ -57,9 +58,9 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         params.put("user", request.getStudentAccount());
         params.put("pass", request.getStudentPassword());
 
-        log.info("Benz查课请求: url={}, params={}", url, params);
+        log.info("Benz查课请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
-        log.info("Benz查课响应: {}", response);
+        log.debug("Benz查课响应已接收: length={}", response == null ? 0 : response.length());
 
         JSONObject json = JSONUtil.parseObj(response);
         if (json.getInt("code") != 1 && json.getInt("code") != 0) { // 部分接口成功码可能是0或1，需根据实际调整，参考代码中是code!=1为错，但benz对接.php中是code==-1为错
@@ -102,9 +103,9 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         // 可选参数
         // params.put("miaoshua", order.getIsFlash() == 1 ? "1" : "0");
 
-        log.info("Benz下单请求: url={}, params={}", url, params);
+        log.info("Benz下单请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
-        log.info("Benz下单响应: {}", response);
+        log.debug("Benz下单响应已接收: length={}", response == null ? 0 : response.length());
 
         JSONObject json = JSONUtil.parseObj(response);
         if (json.getInt("code") == 1 || json.getInt("code") == 0) { // 参考代码中 code==0 为成功
@@ -144,7 +145,7 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
                 }
             }
             
-            log.info("Benz下单成功，提取到的订单ID: {}", thirdOrderId);
+            log.info("Benz下单成功，已获取第三方订单ID: {}", StrUtil.isNotBlank(thirdOrderId));
             return DockResult.success("下单成功", thirdOrderId);
         } else {
             return DockResult.fail(json.getStr("msg"));
@@ -163,9 +164,9 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         params.put("school", order.getSchoolName());    // 学校名称
         params.put("kcname", order.getCourseName());    // 课程名称（更精确匹配）
 
-        log.info("Benz查单请求: url={}, params={}", url, params);
+        log.info("Benz查单请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
-        log.info("Benz查单响应: {}", response);
+        log.debug("Benz查单响应已接收: length={}", response == null ? 0 : response.length());
 
         JSONObject json = JSONUtil.parseObj(response);
         if (json.getInt("code") == 1) {
@@ -246,7 +247,7 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
                 thirdOrderId = progressResult.getThirdOrderId();
                 
                 if (StrUtil.isNotBlank(thirdOrderId)) {
-                    log.info("通过查单获取到订单ID：{}", thirdOrderId);
+                    log.info("通过查单获取到第三方订单ID");
                     // 更新订单的 third_order_id
                     order.setThirdOrderId(thirdOrderId);
                 } else {
@@ -263,9 +264,9 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         params.put("key", apiProvider.getApiKey());
         params.put("id", thirdOrderId);
 
-        log.info("Benz补单请求: url={}, params={}", url, params);
+        log.info("Benz补单请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
-        log.info("Benz补单响应: {}", response);
+        log.debug("Benz补单响应已接收: length={}", response == null ? 0 : response.length());
 
         JSONObject json = JSONUtil.parseObj(response);
         // 参考 bsjk.php: code==1 为成功
@@ -283,9 +284,9 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         params.put("uid", apiProvider.getUsername());
         params.put("key", apiProvider.getApiKey());
 
-        log.info("Benz获取课程列表请求: url={}, params={}", url, params);
+        log.info("Benz获取课程列表请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
-        // log.info("Benz获取课程列表响应: {}", response); // 响应可能很大，暂不打印
+        // log.debug("Benz获取课程列表响应已接收: length={}", response == null ? 0 : response.length()); // 响应可能很大，暂不打印
 
         JSONObject json = JSONUtil.parseObj(response);
         if (json.getInt("code") != 1 && json.getInt("code") != 0) {
@@ -328,7 +329,7 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
             params.put("timestamp", timestampSeconds);
         }
 
-        log.info("Benz批量查单请求: url={}, params={}", url, params);
+        log.info("Benz批量查单请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
         log.info("Benz批量查单响应数据量: {} 字节", response != null ? response.length() : 0);
 
@@ -392,7 +393,7 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
                     .thirdOrderId(item.getStr("id"))  // yid
                     .build();
         } catch (Exception e) {
-            log.error("解析批量订单进度失败: {}", item, e);
+            log.error("解析批量订单进度失败，已跳过敏感响应内容", e);
             return null;
         }
     }

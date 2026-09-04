@@ -67,10 +67,10 @@
                 {{ formatTime(session.lastMessageTime) }}
               </div>
             </div>
-            <div v-if="session.customerServiceId" class="cs-info">
+            <div v-if="session.customerServiceUid" class="cs-info">
               客服：{{ session.customerServiceName || '未知' }}
             </div>
-            <div v-if="!session.customerServiceId && session.status === 1" class="take-action">
+            <div v-if="!session.customerServiceUid && session.status === 1" class="take-action">
               <el-button
                 type="primary"
                 size="small"
@@ -115,8 +115,8 @@
           <!-- 消息列表 -->
           <div class="message-list" ref="messageListRef">
             <div
-              v-for="message in messages"
-              :key="message.id"
+              v-for="(message, index) in messages"
+              :key="`${message.createTime}-${index}`"
               class="message-item"
               :class="{ 'message-right': message.senderType === 2 }"
             >
@@ -308,7 +308,6 @@ const handleSendMessage = async () => {
     const response = await sendMessage({
       sessionId: currentSessionId.value,
       content: inputMessage.value.trim(),
-      senderType: 2, // 客服
       messageType: 1  // 文本
     })
 
@@ -485,12 +484,12 @@ onUnmounted(() => {
 }
 
 .session-item:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--brand-primary) 7%, var(--surface-solid));
 }
 
 .session-item.active {
-  background: var(--color-primary-light-9);
-  border-left: 3px solid var(--color-primary);
+  background: color-mix(in srgb, var(--brand-primary) 12%, var(--surface-solid));
+  border-left: 3px solid var(--brand-primary);
 }
 
 .session-header {
@@ -643,7 +642,7 @@ onUnmounted(() => {
 
 .message-right .message-content {
   background: var(--brand-primary);
-  color: white;
+  color: var(--text-on-brand);
 }
 
 .message-header {
@@ -661,7 +660,7 @@ onUnmounted(() => {
 }
 
 .message-right .sender-name {
-  color: rgba(255, 255, 255, 0.9);
+  color: color-mix(in srgb, var(--text-on-brand) 90%, transparent);
 }
 
 .message-time {
@@ -671,7 +670,7 @@ onUnmounted(() => {
 }
 
 .message-right .message-time {
-  color: rgba(255, 255, 255, 0.7);
+  color: color-mix(in srgb, var(--text-on-brand) 70%, transparent);
 }
 
 .message-text {
@@ -682,7 +681,7 @@ onUnmounted(() => {
 }
 
 .message-right .message-text {
-  color: white;
+  color: var(--text-on-brand);
 }
 
 /* 输入区域 */
@@ -700,12 +699,12 @@ onUnmounted(() => {
 
 /* 暗黑模式 */
 html.dark .message-content {
-  background: #2d2d2d;
+  background: var(--surface-solid);
 }
 
 html.dark .message-right .message-content {
   background: var(--brand-primary);
-  color: white;
+  color: var(--text-on-brand);
 }
 
 /* 响应式 */

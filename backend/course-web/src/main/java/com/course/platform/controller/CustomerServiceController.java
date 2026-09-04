@@ -7,6 +7,7 @@ import com.course.platform.domain.dto.CustomerServiceMessageDTO;
 import com.course.platform.domain.entity.CustomerServiceSession;
 import com.course.platform.domain.vo.CustomerServiceMessageVO;
 import com.course.platform.domain.vo.CustomerServiceSessionVO;
+import com.course.platform.domain.vo.CustomerServiceSessionResponse;
 import com.course.platform.application.service.support.CustomerServiceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -41,10 +42,18 @@ public class CustomerServiceController {
      */
     @PostMapping("/session")
     @Operation(summary = "创建或获取用户会话", description = "用户创建或获取客服会话")
-    public Result<CustomerServiceSession> createOrGetSession() {
+    public Result<CustomerServiceSessionResponse> createOrGetSession() {
         Long userId = getCurrentUserId();
         CustomerServiceSession session = customerServiceService.createOrGetSession(userId);
-        return Result.success(session);
+        return Result.success(CustomerServiceSessionResponse.builder()
+                .sessionId(session.getSessionId())
+                .status(session.getStatus())
+                .startTime(session.getStartTime())
+                .endTime(session.getEndTime())
+                .lastMessageTime(session.getLastMessageTime())
+                .createTime(session.getCreateTime())
+                .updateTime(session.getUpdateTime())
+                .build());
     }
 
     /**
@@ -115,13 +124,13 @@ public class CustomerServiceController {
      * 分配客服（管理员接口）
      */
     @PostMapping("/session/{sessionId}/assign")
-    @PreAuthorize("hasAnyRole('ADMIN','CS')")
+    @PreAuthorize("hasAuthority('customer-service:assign')")
     @Operation(summary = "分配客服", description = "管理员为会话分配客服")
     public Result<Boolean> assignCustomerService(
             @Parameter(description = "会话ID") @PathVariable String sessionId,
-            @Parameter(description = "客服ID") @RequestParam Long customerServiceId) {
+            @Parameter(description = "客服 UUID") @RequestParam String customerServiceUid) {
 
-        Boolean success = customerServiceService.assignCustomerService(sessionId, customerServiceId);
+        Boolean success = customerServiceService.assignCustomerService(sessionId, customerServiceUid);
         return Result.success(success);
     }
 
@@ -129,7 +138,7 @@ public class CustomerServiceController {
      * 获取所有会话列表（管理端）
      */
     @GetMapping("/admin/sessions")
-    @PreAuthorize("hasAnyRole('ADMIN','CS')")
+    @PreAuthorize("hasAuthority('customer-service:read')")
     @Operation(summary = "获取所有会话列表", description = "管理端获取所有用户会话")
     public Result<List<CustomerServiceSessionVO>> getAllSessions(
             @Parameter(description = "会话状态") @RequestParam(required = false) Integer status) {
@@ -142,7 +151,7 @@ public class CustomerServiceController {
      * 客服接入会话（管理端）
      */
     @PostMapping("/admin/session/{sessionId}/take")
-    @PreAuthorize("hasAnyRole('ADMIN','CS')")
+    @PreAuthorize("hasAuthority('customer-service:take')")
     @Operation(summary = "接入会话", description = "客服接入用户会话")
     public Result<Boolean> takeSession(
             @Parameter(description = "会话ID") @PathVariable String sessionId) {

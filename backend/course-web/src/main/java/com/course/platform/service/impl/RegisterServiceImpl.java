@@ -7,12 +7,15 @@ import com.course.platform.infra.cache.SystemVariableCache;
 import com.course.platform.common.constant.Constants;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
+import com.course.platform.common.security.SecurityRoles;
+import com.course.platform.common.util.PublicUidUtil;
 import com.course.platform.domain.dto.InviteCodeRequest;
 import com.course.platform.domain.dto.RegisterRequest;
 import com.course.platform.domain.entity.SystemConfig;
 import com.course.platform.domain.entity.User;
 import com.course.platform.infra.persistence.mapper.SystemConfigMapper;
 import com.course.platform.infra.persistence.mapper.UserMapper;
+import com.course.platform.infra.persistence.mapper.UserAuthorityMapper;
 import com.course.platform.application.service.support.OperationLogService;
 import com.course.platform.application.service.auth.RegisterService;
 import lombok.RequiredArgsConstructor;
@@ -35,13 +38,14 @@ import java.math.BigDecimal;
 public class RegisterServiceImpl implements RegisterService {
 
     private final UserMapper userMapper;
+    private final UserAuthorityMapper userAuthorityMapper;
     private final SystemConfigMapper systemConfigMapper;
     private final PasswordEncoder passwordEncoder;
     private final OperationLogService operationLogService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Long register(RegisterRequest request) {
+    public String register(RegisterRequest request) {
         // 1. 检查注册开关
         SystemConfig registerSwitch = systemConfigMapper.selectOne(new LambdaQueryWrapper<SystemConfig>()
                 .eq(SystemConfig::getConfigKey, "user_register_enabled"));
@@ -72,6 +76,7 @@ public class RegisterServiceImpl implements RegisterService {
 
         // 4. 创建用户
         User user = new User();
+        user.setUid(PublicUidUtil.generate());
         user.setParentId(inviter.getId());
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
@@ -80,8 +85,13 @@ public class RegisterServiceImpl implements RegisterService {
         user.setBalance(BigDecimal.ZERO);
         user.setTotalRecharge(BigDecimal.ZERO);
         user.setStatus(SystemVariableCache.getStatusValue("user_status", "normal"));
+        user.setRole(SecurityRoles.USER);
+        user.setMustChangePassword(0);
 
         userMapper.insert(user);
+        if (userAuthorityMapper.assignRole(user.getId(), "USER") != 1) {
+            throw new IllegalStateException("默认 USER 角色不存在，拒绝创建无权限边界的账号");
+        }
 
         // 5. 记录日志
         operationLogService.log(user.getId(), "注册",
@@ -94,7 +104,7 @@ public class RegisterServiceImpl implements RegisterService {
 
         log.info("用户注册成功：userId={}, username={}, inviterId={}", user.getId(), user.getUsername(), inviter.getId());
 
-        return user.getId();
+        return user.getUid();
     }
 
     @Override

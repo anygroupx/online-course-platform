@@ -39,7 +39,7 @@
           pageSize,
           total,
         }"
-        row-key="id"
+        row-key="uid"
         storage-key="users"
         :enable-storage="true"
         :enable-column-manage="true"
@@ -56,8 +56,8 @@
         </template>
 
         <!-- API密钥列自定义渲染 -->
-        <template #column-apiKey="{ row }">
-          <el-tag v-if="row.apiKey && row.apiKey !== '0'" type="success"
+        <template #column-apiEnabled="{ row }">
+          <el-tag v-if="row.apiEnabled" type="success"
             >已开通</el-tag
           >
           <el-tag v-else type="info">未开通</el-tag>
@@ -354,6 +354,7 @@ const {
   storageKey: "users",
   initialFilters: {
     keyword: "",
+    status: null,
   },
   pageSize: 10,
   columns: columnsConfig,
@@ -401,6 +402,7 @@ const loadUsers = async () => {
     await loadData(async (params) => {
       const res = await queryUsers({
         keyword: params.keyword,
+        status: params.status,
         page: params.page,
         pageSize: params.pageSize,
       });
@@ -459,7 +461,7 @@ const handleRecharge = (row) => {
 const handleRechargeSubmit = async () => {
   try {
     await recharge({
-      targetUserId: currentUser.value.id,
+      targetUserUid: currentUser.value.uid,
       amount: rechargeForm.value.amount,
     });
     ElMessage.success("充值成功");
@@ -478,7 +480,7 @@ const handleResetPassword = async (row) => {
       type: "warning",
     });
 
-    const res = await resetPassword(row.id);
+    const res = await resetPassword(row.uid);
     ElMessage.success(`密码重置成功，新密码：${res.data}`);
   } catch (error) {
     if (error !== "cancel") {
@@ -497,7 +499,7 @@ const handleToggleStatus = async (row) => {
     });
 
     const newStatus = row.status === 1 ? 0 : 1;
-    await changeUserStatus(row.id, newStatus);
+    await changeUserStatus(row.uid, newStatus);
     ElMessage.success(`${action}成功`);
     loadUsers();
   } catch (error) {

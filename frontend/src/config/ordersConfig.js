@@ -74,13 +74,6 @@ export const columnsConfig = [
     visible: true,
   },
   {
-    key: "studentPassword",
-    label: "学生密码",
-    width: 120,
-    visible: true,
-    formatter: (row) => row.studentPassword || "-",
-  },
-  {
     key: "courseName",
     label: "课程名称",
     minWidth: 150,

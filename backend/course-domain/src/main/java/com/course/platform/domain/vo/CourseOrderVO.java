@@ -14,15 +14,13 @@ import java.time.LocalDateTime;
 public class CourseOrderVO {
     private Long id;
     private String orderNo;
-    private Long userId;
+    private String userUid;
     private Long platformId;
     private String platformName;
     private String schoolName;
     private String studentName;
     private String studentAccount;
     /** 学生密码仅通过受保护的 HTTPS 订单接口传输。 */
-    private String studentPassword;
-    private Boolean hasStudentPassword;
     private String studentPhoneMasked;
     private String courseId;
     private String courseName;

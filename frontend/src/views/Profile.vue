@@ -49,9 +49,9 @@
             </template>
 
             <div class="api-key-section">
-              <template v-if="userInfo.apiKey && userInfo.apiKey !== '0'">
+              <template v-if="userInfo.apiEnabled">
                 <el-alert
-                  title="API密钥已开通"
+                  title="API 密钥已开通；出于安全原因，密钥明文仅在签发时显示一次"
                   type="success"
                   :closable="false"
                   show-icon
@@ -62,39 +62,21 @@
                   <div class="key-item">
                     <label>用户ID (UID):</label>
                     <div class="key-value">
-                      <code>{{ userInfo.userId }}</code>
-                      <el-button
-                        size="small"
-                        text
-                        @click="copyToClipboard(userInfo.userId, 'UID')"
-                      >
+                      <code>{{ userInfo.uid }}</code>
+                      <el-button size="small" text @click="copyToClipboard(userInfo.uid, 'UID')">
                         <el-icon><DocumentCopy /></el-icon>
                       </el-button>
                     </div>
                   </div>
-
                   <div class="key-item">
-                    <label>API密钥 (Key):</label>
+                    <label>密钥标识:</label>
                     <div class="key-value">
-                      <code v-if="showApiKey">{{ userInfo.apiKey }}</code>
-                      <code v-else>{{ maskApiKey(userInfo.apiKey) }}</code>
-                      <el-button
-                        size="small"
-                        text
-                        @click="toggleApiKeyVisibility"
-                      >
-                        <el-icon
-                          ><View v-if="!showApiKey" /><Hide v-else
-                        /></el-icon>
-                      </el-button>
-                      <el-button
-                        size="small"
-                        text
-                        @click="copyToClipboard(userInfo.apiKey, 'API密钥')"
-                      >
-                        <el-icon><DocumentCopy /></el-icon>
-                      </el-button>
+                      <code>{{ userInfo.apiKeyPrefix || '已配置' }}••••</code>
                     </div>
+                  </div>
+                  <div class="key-item" v-if="userInfo.apiKeyExpiresAt">
+                    <label>到期时间:</label>
+                    <div class="key-value">{{ formatDate(userInfo.apiKeyExpiresAt) }}</div>
                   </div>
                 </div>
 
@@ -152,7 +134,7 @@
             <el-card class="stat-card">
               <el-statistic title="总订单数" :value="stats.totalOrders">
                 <template #prefix>
-                  <el-icon color="#4e8cff"><Document /></el-icon>
+                  <el-icon color="var(--brand-primary)"><Document /></el-icon>
                 </template>
               </el-statistic>
             </el-card>
@@ -166,7 +148,7 @@
                 prefix="¥"
               >
                 <template #prefix>
-                  <el-icon color="#63c56e"><Money /></el-icon>
+                  <el-icon color="var(--color-success)"><Money /></el-icon>
                 </template>
               </el-statistic>
             </el-card>
@@ -339,8 +321,6 @@ import {
   UserFilled,
   DocumentCopy,
   Document,
-  View,
-  Hide,
   Key,
   Money,
 } from "@element-plus/icons-vue";
@@ -358,7 +338,6 @@ const stats = ref({
 });
 
 // API密钥相关状态
-const showApiKey = ref(false);
 const enablingApiKey = ref(false);
 
 // 邀请码相关状态
@@ -396,17 +375,6 @@ const formatDate = (date) => {
   return dayjs(date).format("YYYY-MM-DD HH:mm:ss");
 };
 
-// 遮罩API密钥
-const maskApiKey = (key) => {
-  if (!key || key.length < 8) return "***";
-  return key.substring(0, 4) + "***" + key.substring(key.length - 4);
-};
-
-// 切换API密钥可见性
-const toggleApiKeyVisibility = () => {
-  showApiKey.value = !showApiKey.value;
-};
-
 // 复制到剪贴板
 const copyToClipboard = async (text, label) => {
   try {
@@ -439,8 +407,13 @@ const handleEnableApiKey = async () => {
 
     // 检查响应码
     if (res.code === 1) {
-      ElMessage.success("API密钥开通成功");
-      // 重新加载用户信息
+      const issuedKey = res.data;
+      await ElMessageBox.alert(
+        `请立即复制并安全保存此 API 密钥；关闭后系统无法再次显示：\n\n${issuedKey}`,
+        "API 密钥仅显示一次",
+        { confirmButtonText: "我已安全保存", closeOnClickModal: false, closeOnPressEscape: false }
+      );
+      // 关闭弹窗后不在组件状态中保留明文。
       await loadUserInfo();
       // 更新store中的用户信息
       await userStore.fetchUserInfo();
@@ -609,7 +582,7 @@ html.dark .key-value {
 .stat-item .stat-value {
   font-size: 32px;
   font-weight: 600;
-  color: var(--color-primary);
+  color: var(--brand-primary);
   margin-bottom: 8px;
 }
 

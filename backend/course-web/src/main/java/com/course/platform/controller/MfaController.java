@@ -29,7 +29,7 @@ public class MfaController {
     private final MfaService mfaService;
 
     @GetMapping("/status")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('mfa:manage')")
     @Operation(summary = "查询 MFA 状态")
     public Result<MfaStatusVO> status(Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
@@ -37,7 +37,7 @@ public class MfaController {
     }
 
     @PostMapping("/setup")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('mfa:manage')")
     @Operation(summary = "开始绑定 MFA")
     public Result<MfaSetupVO> setup(Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
@@ -45,7 +45,7 @@ public class MfaController {
     }
 
     @PostMapping("/setup/confirm")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('mfa:manage')")
     @Operation(summary = "确认绑定 MFA")
     public Result<Void> confirm(@Valid @RequestBody MfaConfirmSetupRequest request,
                                 Authentication authentication) {
@@ -55,7 +55,7 @@ public class MfaController {
     }
 
     @PostMapping("/disable")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('mfa:manage')")
     @Operation(summary = "关闭 MFA")
     public Result<Void> disable(@Valid @RequestBody MfaCodeRequest request,
                                 Authentication authentication) {

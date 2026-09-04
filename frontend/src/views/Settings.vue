@@ -178,10 +178,10 @@
               <el-button
                 type="primary"
                 plain
-                @click="$router.push('/theme-config')"
+                @click="$router.push({ path: '/admin/variables', query: { type: 'theme_color_light' } })"
               >
                 <el-icon><Brush /></el-icon>
-                自定义主题颜色
+                管理系统主题颜色
               </el-button>
             </el-form-item>
 

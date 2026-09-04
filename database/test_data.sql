@@ -55,7 +55,8 @@ VALUES
 ('failed', '失败', 'order_status', '4', '订单处理失败', 5, 0, 1, '#d9534f', 'exclamation'),
 ('exam_pending', '待考试', 'order_status', '5', '等待开始考试', 6, 0, 1, '#9b59b6', 'graduation-cap'),
 ('exam_processing', '考试中', 'order_status', '6', '正在考试中', 7, 0, 1, '#e67e22', 'book-open'),
-('exam_completed', '考试完成', 'order_status', '7', '考试已完成', 8, 0, 1, '#1abc9c', 'check-circle');
+('exam_completed', '考试完成', 'order_status', '7', '考试已完成', 8, 0, 1, '#1abc9c', 'check-circle'),
+('refund_pending', '等待退款', 'order_status', '8', '第三方已退款，等待本地退款处理', 9, 0, 1, '#d97706', 'refresh-cw');
 
 -- 对接状态变量
 INSERT INTO `system_variable` (`variable_key`, `variable_name`, `variable_type`, `variable_value`, `variable_label`, `sort_order`, `is_default`, `is_enabled`, `color`, `icon`) 
@@ -157,7 +158,8 @@ VALUES
 ('failed', '失败', 'order_status', '4', '订单处理失败', 5, 0, 1, '#d9534f', 'exclamation'),
 ('exam_pending', '待考试', 'order_status', '5', '等待开始考试', 6, 0, 1, '#9b59b6', 'graduation-cap'),
 ('exam_processing', '考试中', 'order_status', '6', '正在考试中', 7, 0, 1, '#e67e22', 'book-open'),
-('exam_completed', '考试完成', 'order_status', '7', '考试已完成', 8, 0, 1, '#1abc9c', 'check-circle');
+('exam_completed', '考试完成', 'order_status', '7', '考试已完成', 8, 0, 1, '#1abc9c', 'check-circle'),
+('refund_pending', '等待退款', 'order_status', '8', '第三方已退款，等待本地退款处理', 9, 0, 1, '#d97706', 'refresh-cw');
 
 -- 对接状态变量
 INSERT INTO `system_variable` (`variable_key`, `variable_name`, `variable_type`, `variable_value`, `variable_label`, `sort_order`, `is_default`, `is_enabled`, `color`, `icon`) 

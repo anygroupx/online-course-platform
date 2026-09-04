@@ -1,6 +1,6 @@
 <template>
   <div class="price-list-page">
-    <el-card class="info-card">
+    <el-card class="price-explanation-card">
       <div class="price-info">
         <el-icon class="info-icon"><InfoFilled /></el-icon>
         <div class="info-text">
@@ -105,11 +105,15 @@ onMounted(() => {
   padding: 20px;
 }
 
-.info-card {
+.price-explanation-card {
   margin-bottom: 20px;
-  background: var(--primary-gradient);
-  color: white;
   border: none;
+  color: var(--text-on-brand);
+  background: var(--primary-gradient) !important;
+}
+
+.price-explanation-card :deep(.el-card__body) {
+  color: inherit;
 }
 
 .price-info {
@@ -119,6 +123,7 @@ onMounted(() => {
 }
 
 .info-icon {
+  color: inherit;
   font-size: 40px;
   margin-right: 20px;
 }
@@ -182,7 +187,7 @@ onMounted(() => {
 .rate-price {
   font-size: 14px;
   font-weight: bold;
-  color: var(--color-primary);
+  color: var(--brand-primary);
 }
 
 .my-price {

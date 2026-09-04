@@ -663,7 +663,7 @@ defineExpose({
   color: var(--el-color-info);
 }
 
-/* 普通按钮增强 - 深色背景+白色文字，确保高对比度 */
+/* 普通按钮增强：功能色背景使用可配置的反色文字，确保主题切换后仍清晰。 */
 .table-actions :deep(.el-button--small:not(.is-link)) {
   padding: 5px 12px;
   border-width: 1px;
@@ -672,51 +672,51 @@ defineExpose({
 .table-actions :deep(.el-button--primary:not(.is-link)) {
   background: var(--primary-gradient) !important;
   border: none !important;
-  color: #ffffff !important;
-  box-shadow: var(--primary-shadow);
+  color: var(--text-on-brand) !important;
+  box-shadow: var(--shadow-sm);
 }
 
 .table-actions :deep(.el-button--primary:not(.is-link):hover),
 .table-actions :deep(.el-button--primary:not(.is-link):focus) {
   opacity: 0.94;
-  box-shadow: var(--primary-shadow-hover);
-  color: #ffffff !important;
+  box-shadow: var(--shadow-md);
+  color: var(--text-on-brand) !important;
 }
 
 .table-actions :deep(.el-button--success:not(.is-link)) {
   --el-button-bg-color: var(--el-color-success);
   --el-button-border-color: var(--el-color-success);
-  --el-button-text-color: #ffffff;
+  --el-button-text-color: var(--text-on-brand);
   --el-button-hover-bg-color: var(--el-color-success-light-3);
   --el-button-hover-border-color: var(--el-color-success-light-3);
-  --el-button-hover-text-color: #ffffff;
+  --el-button-hover-text-color: var(--text-on-brand);
 }
 
 .table-actions :deep(.el-button--warning:not(.is-link)) {
   --el-button-bg-color: var(--el-color-warning);
   --el-button-border-color: var(--el-color-warning);
-  --el-button-text-color: #ffffff;
+  --el-button-text-color: var(--text-on-brand);
   --el-button-hover-bg-color: var(--el-color-warning-light-3);
   --el-button-hover-border-color: var(--el-color-warning-light-3);
-  --el-button-hover-text-color: #ffffff;
+  --el-button-hover-text-color: var(--text-on-brand);
 }
 
 .table-actions :deep(.el-button--danger:not(.is-link)) {
   --el-button-bg-color: var(--el-color-danger);
   --el-button-border-color: var(--el-color-danger);
-  --el-button-text-color: #ffffff;
+  --el-button-text-color: var(--text-on-brand);
   --el-button-hover-bg-color: var(--el-color-danger-light-3);
   --el-button-hover-border-color: var(--el-color-danger-light-3);
-  --el-button-hover-text-color: #ffffff;
+  --el-button-hover-text-color: var(--text-on-brand);
 }
 
 .table-actions :deep(.el-button--info:not(.is-link)) {
   --el-button-bg-color: var(--el-color-info);
   --el-button-border-color: var(--el-color-info);
-  --el-button-text-color: #ffffff;
+  --el-button-text-color: var(--text-on-brand);
   --el-button-hover-bg-color: var(--el-color-info-dark-2);
   --el-button-hover-border-color: var(--el-color-info-dark-2);
-  --el-button-hover-text-color: #ffffff;
+  --el-button-hover-text-color: var(--text-on-brand);
 }
 
 .table-actions :deep(.el-button--default:not(.is-link)) {

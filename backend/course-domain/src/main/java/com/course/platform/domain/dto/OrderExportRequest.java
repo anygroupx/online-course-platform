@@ -21,7 +21,7 @@ public class OrderExportRequest {
     @NotEmpty(message = "订单ID列表不能为空")
     private List<Long> orderIds;
 
-    @Schema(description = "导出格式：1-学校+账号+密码+课程名字，2-账号+密码+课程名字，3-学校+账号+密码，4-账号+密码", required = true)
+    @Schema(description = "导出格式：1-学校+账号+课程，2-账号+课程，3-学校+账号，4-账号（永不导出密码）", required = true)
     @NotNull(message = "导出格式不能为空")
     private Integer format;
 

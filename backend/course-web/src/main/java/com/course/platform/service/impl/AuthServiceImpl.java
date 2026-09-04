@@ -7,11 +7,10 @@ import com.course.platform.application.service.security.MfaService;
 import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.application.service.support.OperationLogService;
 import com.course.platform.application.service.system.SystemConfigService;
-import com.course.platform.common.constant.Constants;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
-import com.course.platform.common.security.SecurityRoles;
 import com.course.platform.common.security.TokenHashUtil;
+import com.course.platform.security.UserAuthorityService;
 import com.course.platform.domain.dto.LoginRequest;
 import com.course.platform.domain.entity.RefreshToken;
 import com.course.platform.domain.entity.User;
@@ -45,6 +44,7 @@ public class AuthServiceImpl implements AuthService {
     private final OperationLogService operationLogService;
     private final MfaService mfaService;
     private final SecurityAuditService securityAuditService;
+    private final UserAuthorityService userAuthorityService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -89,14 +89,14 @@ public class AuthServiceImpl implements AuthService {
         boolean mfaEnabled = mfaService.isEnabled(user);
 
         // 管理员启用 MFA 时，不直接签发 Token，返回 challenge
-        if (mfaEnabled && SecurityRoles.ADMIN.equals(role)) {
+        if (mfaEnabled && "SUPER_ADMIN".equals(role)) {
             String challengeId = mfaService.createChallenge(user);
             securityAuditService.record("MFA_REQUIRED", "INFO", user.getId(), user.getUsername(),
                     "/auth/login", "POST", "管理员登录需要 MFA", "challengeId=" + challengeId);
             return LoginResponse.builder()
                     .token(null)
                     .refreshToken(null)
-                    .userId(user.getId())
+                    .uid(user.getUid())
                     .username(user.getUsername())
                     .nickname(StrUtil.isNotBlank(user.getNickname()) ? user.getNickname() : user.getUsername())
                     .balance(null)
@@ -110,8 +110,8 @@ public class AuthServiceImpl implements AuthService {
                     .build();
         }
 
-        String token = jwtUtil.generateToken(user.getId(), user.getUsername());
-        String refreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
+        String token = jwtUtil.generateToken(user.getUid(), user.getUsername());
+        String refreshToken = jwtUtil.generateRefreshToken(user.getUid(), user.getUsername());
 
         Integer expireDays = systemConfigService.getConfigValueAsInteger("refresh_token_expire_days", 7);
         LocalDateTime expireTime = LocalDateTime.now().plusDays(expireDays);
@@ -129,12 +129,12 @@ public class AuthServiceImpl implements AuthService {
         LoginResponse response = LoginResponse.builder()
                 .token(token)
                 .refreshToken(refreshToken)
-                .userId(user.getId())
+                .uid(user.getUid())
                 .username(user.getUsername())
                 .nickname(StrUtil.isNotBlank(user.getNickname()) ? user.getNickname() : user.getUsername())
                 .balance(user.getBalance())
                 .rate(user.getRate())
-                .isAdmin(SecurityRoles.ADMIN.equals(role))
+                .isAdmin("SUPER_ADMIN".equals(role))
                 .role(role)
                 .mustChangePassword(mustChange)
                 .mfaRequired(false)
@@ -213,8 +213,8 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ResultCode.ACCOUNT_DISABLED);
         }
 
-        String newToken = jwtUtil.generateToken(user.getId(), user.getUsername());
-        String newRefreshToken = jwtUtil.generateRefreshToken(user.getId(), user.getUsername());
+        String newToken = jwtUtil.generateToken(user.getUid(), user.getUsername());
+        String newRefreshToken = jwtUtil.generateRefreshToken(user.getUid(), user.getUsername());
         Integer expireDays = systemConfigService.getConfigValueAsInteger("refresh_token_expire_days", 7);
         LocalDateTime newExpireTime = LocalDateTime.now().plusDays(expireDays);
 
@@ -239,12 +239,12 @@ public class AuthServiceImpl implements AuthService {
         return LoginResponse.builder()
                 .token(newToken)
                 .refreshToken(newRefreshToken)
-                .userId(user.getId())
+                .uid(user.getUid())
                 .username(user.getUsername())
                 .nickname(StrUtil.isNotBlank(user.getNickname()) ? user.getNickname() : user.getUsername())
                 .balance(user.getBalance())
                 .rate(user.getRate())
-                .isAdmin(SecurityRoles.ADMIN.equals(role))
+                .isAdmin("SUPER_ADMIN".equals(role))
                 .role(role)
                 .mustChangePassword(user.getMustChangePassword() != null && user.getMustChangePassword() == 1)
                 .mfaRequired(false)
@@ -253,13 +253,13 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private String resolveRole(User user) {
-        if (StrUtil.isNotBlank(user.getRole())) {
-            return user.getRole().trim().toUpperCase();
+        String role = userAuthorityService.getPrimaryRole(user.getId());
+        if (StrUtil.isBlank(role)) {
+            securityAuditService.record("ACCESS_DENIED", "WARN", user.getId(), user.getUsername(),
+                    "/auth/login", "POST", "账号没有有效的 RBAC 角色", null);
+            throw new BusinessException(ResultCode.FORBIDDEN);
         }
-        if (Constants.DEFAULT_ADMIN_ID.equals(user.getId())) {
-            return SecurityRoles.ADMIN;
-        }
-        return SecurityRoles.USER;
+        return role;
     }
 
     private String safeIp() {

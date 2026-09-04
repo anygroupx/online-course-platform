@@ -179,7 +179,7 @@ public class CourseOrder implements Serializable {
     private Integer retryCount;
 
     /**
-     * 订单状态：0-待处理 1-进行中 2-已完成 3-已取消 4-失败
+     * 订单状态：0-待处理 1-进行中 2-已完成 3-已取消 4-失败 5-待考试 6-考试中 7-考试完成 8-等待退款
      */
     @TableField("order_status")
     private Integer orderStatus;

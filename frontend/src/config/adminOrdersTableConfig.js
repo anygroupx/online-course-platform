@@ -43,11 +43,6 @@ export const adminOrdersColumns = [
     width: 150,
   },
   {
-    key: "studentPassword",
-    label: "学生密码",
-    width: 120,
-  },
-  {
     key: "orderStatus",
     label: "订单状态",
     width: 100,

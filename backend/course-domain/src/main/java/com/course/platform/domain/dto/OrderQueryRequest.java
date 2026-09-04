@@ -40,9 +40,9 @@ public class OrderQueryRequest {
     private Integer dockStatus;
 
     /**
-     * 代理账号ID
+     * 代理账号 UUID
      */
-    private Long userId;
+    private String userUid;
 
     /**
      * 代理账号名称

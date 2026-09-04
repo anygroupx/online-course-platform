@@ -86,13 +86,6 @@
               <el-icon><Setting /></el-icon>
               列管理
             </el-button>
-            <el-button
-              :type="showPassword ? 'success' : 'info'"
-              @click="togglePasswordDisplay"
-            >
-              <el-icon><View /></el-icon>
-              {{ showPassword ? "隐藏密码" : "显示密码" }}
-            </el-button>
             <el-button type="primary" @click="handleCreate">
               <el-icon><Plus /></el-icon>
               新建订单
@@ -187,19 +180,19 @@
             </el-form-item>
             <el-form-item label="代理账号">
               <el-select
-                v-model="queryForm.userId"
+                v-model="queryForm.userUid"
                 placeholder="选择代理账号"
                 clearable
                 style="width: 100%"
               >
                 <el-option
                   v-for="agent in agentList"
-                  :key="agent.id"
+                  :key="agent.uid"
                   :label="
                     agent.username +
                     (agent.nickname ? ` (${agent.nickname})` : '')
                   "
-                  :value="agent.id"
+                  :value="agent.uid"
                 />
               </el-select>
             </el-form-item>
@@ -308,13 +301,16 @@
             class="advanced-filter-collapse"
           >
             <el-collapse-item title="高级筛选" name="1">
-              <el-form :inline="true" :model="queryForm" label-width="100px">
+              <el-form
+                :model="queryForm"
+                label-position="top"
+                class="advanced-filter-form"
+              >
                 <el-form-item label="学生账号">
                   <el-input
                     v-model="queryForm.studentAccount"
                     placeholder="学生账号"
                     clearable
-                    style="width: 150px"
                     @input="handleRealTimeSearch"
                   />
                 </el-form-item>
@@ -323,7 +319,6 @@
                     v-model="queryForm.dockStatus"
                     placeholder="对接状态"
                     clearable
-                    style="width: 120px"
                     @change="handleRealTimeSearch"
                   >
                     <el-option
@@ -338,24 +333,23 @@
                 </el-form-item>
                 <el-form-item label="代理账号">
                   <el-select
-                    v-model="queryForm.userId"
+                    v-model="queryForm.userUid"
                     placeholder="选择代理账号"
                     clearable
-                    style="width: 150px"
                     @change="handleRealTimeSearch"
                   >
                     <el-option
                       v-for="agent in agentList"
-                      :key="agent.id"
+                      :key="agent.uid"
                       :label="
                         agent.username +
                         (agent.nickname ? ` (${agent.nickname})` : '')
                       "
-                      :value="agent.id"
+                      :value="agent.uid"
                     />
                   </el-select>
                 </el-form-item>
-                <el-form-item label="创建时间">
+                <el-form-item label="创建时间" class="advanced-filter-date">
                   <el-date-picker
                     v-model="dateRange"
                     type="datetimerange"
@@ -364,7 +358,6 @@
                     end-placeholder="结束时间"
                     format="YYYY-MM-DD HH:mm:ss"
                     value-format="YYYY-MM-DD HH:mm:ss"
-                    style="width: 350px"
                     @change="handleRealTimeSearch"
                   />
                 </el-form-item>
@@ -404,22 +397,11 @@
           :sortable="column.sortable"
           :header-cell-style="{ cursor: 'move' }"
         >
-          <template
-            #default="scope"
-            v-if="column.prop === 'studentAccountPassword'"
-          >
-            <div style="display: flex; align-items: center; gap: 8px">
-              <span style="font-weight: 500">{{
-                scope.row.studentAccount
-              }}</span>
-              <span style="color: var(--color-text-secondary)">|</span>
-              <span style="color: var(--color-amount-success)">{{
-                showPassword ? scope.row.studentPassword || "-" : "****"
-              }}</span>
-            </div>
+          <template #default="scope" v-if="column.prop === 'studentAccount'">
+            <span style="font-weight: 500">{{ scope.row.studentAccount }}</span>
           </template>
           <template #default="scope" v-else-if="column.prop === 'amount'">
-            <span style="color: var(--color-amount-danger)"
+            <span style="color: var(--color-danger)"
               >¥{{ scope.row.amount }}</span
             >
           </template>
@@ -1068,7 +1050,7 @@
             style="
               max-height: 200px;
               overflow-y: auto;
-              border: 1px solid #dcdfe6;
+              border: 1px solid var(--border-color);
               padding: 10px;
               border-radius: 4px;
             "
@@ -1083,7 +1065,7 @@
                 style="
                   margin-left: 10px;
                   font-size: 12px;
-                  color: var(--color-text-regular);
+                  color: var(--text-regular);
                 "
               >
                 {{ getStatusText(order.orderStatus) }} -
@@ -1092,7 +1074,7 @@
             </div>
             <div
               v-if="selectedOrders.length > 10"
-              style="color: var(--color-text-secondary); font-size: 12px"
+              style="color: var(--text-secondary); font-size: 12px"
             >
               还有 {{ selectedOrders.length - 10 }} 个订单...
             </div>
@@ -1316,16 +1298,13 @@ const dateRange = ref([]);
 // 倒计时配置
 const defaultCountdownDuration = ref(60);
 
-// 密码显示控制
-const showPassword = ref(false);
-
 // 个性化配置
 const tableConfig = ref({
   columnOrder: [
     "id",
     "orderNo",
     "platformName",
-    "studentAccountPassword",
+    "studentAccount",
     "courseName",
     "amount",
     "progress",
@@ -1338,7 +1317,7 @@ const tableConfig = ref({
     id: 80,
     orderNo: 200,
     platformName: 120,
-    studentAccountPassword: 200,
+    studentAccount: 200,
     courseName: 200,
     amount: 100,
     progress: 100,
@@ -1363,7 +1342,7 @@ const columnDefinitions = ref({
     sortable: true,
   },
   platformName: { label: "平台", width: 120 },
-  studentAccountPassword: { label: "学生账号密码", width: 200 },
+  studentAccount: { label: "学生账号", width: 180 },
   courseName: { label: "课程名称", showOverflowTooltip: true },
   amount: { label: "金额", width: 100, sortable: true },
   progress: { label: "进度", width: 100 },
@@ -1399,7 +1378,7 @@ const queryFormRef = ref(null);
 // 常用筛选字段（默认展示）
 const commonFields = ["orderNo", "platformId", "orderStatus"];
 // 高级筛选字段
-const advancedFields = ["studentAccount", "dockStatus", "userId", "dateRange"];
+const advancedFields = ["studentAccount", "dockStatus", "userUid", "dateRange"];
 
 // 桌面端：折叠面板状态
 const advancedSearchVisible = ref([]);
@@ -1412,7 +1391,7 @@ const showQueryFields = ref({
   studentAccount: true,
   orderStatus: true,
   dockStatus: true,
-  userId: true,
+  userUid: true,
   dateRange: true,
 });
 
@@ -1476,7 +1455,7 @@ const toggleQueryFields = () => {
       .filter((key) => showQueryFields.value[key])
       .join(","),
     inputPlaceholder:
-      "orderNo,platformId,studentAccount,orderStatus,dockStatus,userId,dateRange",
+      "orderNo,platformId,studentAccount,orderStatus,dockStatus,userUid,dateRange",
   })
     .then(({ value }) => {
       const fields = value.split(",").map((field) => field.trim());
@@ -1551,7 +1530,7 @@ const queryForm = ref({
   studentAccount: "",
   orderStatus: null,
   dockStatus: null,
-  userId: null,
+  userUid: null,
   page: 1,
   pageSize: 10,
 });
@@ -1571,7 +1550,7 @@ const columnVisible = ref({
   id: true,
   orderNo: true,
   platformName: true,
-  studentAccountPassword: true,
+  studentAccount: true,
   courseName: true,
   amount: true,
   progress: true,
@@ -1720,21 +1699,6 @@ const getStatusIndicatorClass = (status) => {
   return classMap[status] || "";
 };
 
-// 密码更新方法
-const handlePasswordUpdate = async (row) => {
-  try {
-    // 这里可以调用API更新密码
-    ElMessage.success("密码更新成功");
-  } catch (error) {
-    ElMessage.error("密码更新失败");
-  }
-};
-
-// 切换密码显示/隐藏
-const togglePasswordDisplay = () => {
-  showPassword.value = !showPassword.value;
-};
-
 // 排序变化处理
 const handleSortChange = ({ prop, order }) => {
   tableConfig.value.sortConfig = { prop, order };
@@ -1788,7 +1752,7 @@ const resetColumnOrder = () => {
     "id",
     "orderNo",
     "platformName",
-    "studentAccountPassword",
+    "studentAccount",
     "courseName",
     "amount",
     "progress",
@@ -1802,7 +1766,7 @@ const resetColumnOrder = () => {
     id: true,
     orderNo: true,
     platformName: true,
-    studentAccountPassword: true,
+    studentAccount: true,
     courseName: true,
     amount: true,
     progress: true,
@@ -1878,7 +1842,6 @@ const loadOrders = async () => {
         orderNo: item?.orderNo || "",
         platformName: item?.platformName || "",
         studentAccount: item?.studentAccount || "",
-        studentPassword: item?.studentPassword || "",
         courseName: item?.courseName || "",
         amount: item?.amount || 0,
         progress: item?.progress || "0%",
@@ -2007,7 +1970,7 @@ const handleResetQuery = () => {
     studentAccount: "",
     orderStatus: null,
     dockStatus: null,
-    userId: null,
+    userUid: null,
     page: 1,
     pageSize: 10,
   };
@@ -2870,6 +2833,9 @@ const getFormatText = (format) => {
 
 .statistics-cards {
   margin-bottom: 20px;
+  /* Element Plus 的 gutter 已负责水平间距；额外 column-gap 会让 4 个 25% 列换行。 */
+  column-gap: 0;
+  row-gap: 16px;
 }
 
 .stat-card {
@@ -2885,7 +2851,7 @@ const getFormatText = (format) => {
 .stat-card .stat-value {
   font-size: 28px;
   font-weight: bold;
-  color: #303133;
+  color: var(--text-primary);
   margin-bottom: 8px;
 }
 
@@ -2901,7 +2867,7 @@ const getFormatText = (format) => {
   transform: translateY(-50%);
   font-size: 40px;
   opacity: 0.3;
-  color: var(--color-primary);
+  color: var(--brand-primary);
 }
 
 .stat-card .stat-icon.success {
@@ -2981,23 +2947,23 @@ const getFormatText = (format) => {
 
 @keyframes statusChange {
   0% {
-    background-color: #fff3cd !important;
+    background-color: color-mix(in srgb, var(--color-warning) 12%, var(--surface-solid)) !important;
     transform: scale(1);
   }
   25% {
-    background-color: #ffeaa7 !important;
+    background-color: color-mix(in srgb, var(--color-warning) 24%, var(--surface-solid)) !important;
     transform: scale(1.02);
   }
   50% {
-    background-color: #fdcb6e !important;
+    background-color: color-mix(in srgb, var(--color-warning) 40%, var(--surface-solid)) !important;
     transform: scale(1.01);
   }
   75% {
-    background-color: #ffeaa7 !important;
+    background-color: color-mix(in srgb, var(--color-warning) 24%, var(--surface-solid)) !important;
     transform: scale(1.02);
   }
   100% {
-    background-color: #fff3cd !important;
+    background-color: color-mix(in srgb, var(--color-warning) 12%, var(--surface-solid)) !important;
     transform: scale(1);
   }
 }
@@ -3019,28 +2985,28 @@ const getFormatText = (format) => {
 
 /* 状态颜色样式 */
 .status-pending .el-input__wrapper {
-  border-color: var(--color-primary);
-  background-color: rgba(78, 140, 255, 0.1);
+  border-color: var(--brand-primary);
+  background-color: color-mix(in srgb, var(--brand-primary) 10%, var(--surface-solid));
 }
 
 .status-processing .el-input__wrapper {
   border-color: var(--color-warning);
-  background-color: rgba(247, 166, 47, 0.1);
+  background-color: color-mix(in srgb, var(--color-warning) 10%, var(--surface-solid));
 }
 
 .status-completed .el-input__wrapper {
   border-color: var(--color-success);
-  background-color: rgba(99, 197, 110, 0.1);
+  background-color: color-mix(in srgb, var(--color-success) 10%, var(--surface-solid));
 }
 
 .status-cancelled .el-input__wrapper {
   border-color: var(--color-info);
-  background-color: rgba(144, 147, 153, 0.1);
+  background-color: color-mix(in srgb, var(--color-info) 10%, var(--surface-solid));
 }
 
 .status-failed .el-input__wrapper {
   border-color: var(--color-danger);
-  background-color: rgba(240, 101, 101, 0.1);
+  background-color: color-mix(in srgb, var(--color-danger) 10%, var(--surface-solid));
 }
 
 /* 状态指示器 */
@@ -3054,28 +3020,28 @@ const getFormatText = (format) => {
 }
 
 .indicator-pending {
-  background-color: var(--color-primary);
-  box-shadow: 0 0 6px rgba(78, 140, 255, 0.6);
+  background-color: var(--brand-primary);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--brand-primary) 60%, transparent);
 }
 
 .indicator-processing {
   background-color: var(--color-warning);
-  box-shadow: 0 0 6px rgba(247, 166, 47, 0.6);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-warning) 60%, transparent);
 }
 
 .indicator-completed {
   background-color: var(--color-success);
-  box-shadow: 0 0 6px rgba(99, 197, 110, 0.6);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-success) 60%, transparent);
 }
 
 .indicator-cancelled {
   background-color: var(--color-info);
-  box-shadow: 0 0 6px rgba(144, 147, 153, 0.6);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-info) 60%, transparent);
 }
 
 .indicator-failed {
   background-color: var(--color-danger);
-  box-shadow: 0 0 6px rgba(240, 101, 101, 0.6);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-danger) 60%, transparent);
 }
 
 /* 密码输入框样式 */
@@ -3085,7 +3051,7 @@ const getFormatText = (format) => {
 }
 
 .el-table .el-input--small .el-input__wrapper:hover {
-  border-color: var(--color-primary);
+  border-color: var(--brand-primary);
 }
 
 /* 表格拖拽样式 */
@@ -3095,7 +3061,7 @@ const getFormatText = (format) => {
 }
 
 .el-table .el-table__header-wrapper th:hover {
-  background-color: #f5f7fa;
+  background-color: color-mix(in srgb, var(--brand-primary) 6%, var(--surface-solid));
 }
 
 /* 列管理对话框样式 */
@@ -3114,14 +3080,14 @@ const getFormatText = (format) => {
   align-items: center;
   padding: 12px;
   margin-bottom: 8px;
-  background-color: #f8f9fa;
+  background-color: color-mix(in srgb, var(--brand-primary) 3%, var(--surface-solid));
   border-radius: 6px;
   cursor: move;
   transition: all 0.3s;
 }
 
 .column-item:hover {
-  background-color: #e9ecef;
+  background-color: color-mix(in srgb, var(--brand-primary) 8%, var(--surface-solid));
   transform: translateY(-1px);
 }
 
@@ -3149,7 +3115,7 @@ const getFormatText = (format) => {
   display: flex;
   justify-content: space-between;
   padding-top: 20px;
-  border-top: 1px solid #e4e7ed;
+  border-top: 1px solid var(--border-color-light);
 }
 
 /* 表单提示样式 */
@@ -3219,7 +3185,60 @@ const getFormatText = (format) => {
 
 .advanced-filter-collapse :deep(.el-collapse-item__header) {
   font-weight: 500;
-  color: #606266;
+  color: var(--text-regular);
+}
+
+.advanced-filter-collapse :deep(.el-collapse-item__content) {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-solid) 58%, transparent);
+}
+
+.advanced-filter-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+
+.advanced-filter-form :deep(.el-form-item) {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.advanced-filter-form :deep(.el-form-item__content),
+.advanced-filter-form :deep(.el-input),
+.advanced-filter-form :deep(.el-select),
+.advanced-filter-form :deep(.el-date-editor) {
+  width: 100% !important;
+  min-width: 0;
+}
+
+.advanced-filter-form :deep(.el-input__wrapper),
+.advanced-filter-form :deep(.el-select__wrapper),
+.advanced-filter-form :deep(.el-date-editor.el-input__wrapper) {
+  background: var(--surface-solid);
+  box-shadow: inset 0 0 0 1px var(--border-color) !important;
+}
+
+.advanced-filter-date {
+  grid-column: span 2;
+}
+
+@media (max-width: 1399px) {
+  .advanced-filter-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) and (max-width: 899px) {
+  .advanced-filter-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .advanced-filter-date {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 767px) {
@@ -3410,12 +3429,12 @@ html.dark .el-form-item__label {
 
 /* 列管理 */
 html.dark .column-item {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
   color: var(--text-primary);
 }
 
 html.dark .column-item:hover {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
 html.dark .drag-handle {
@@ -3429,22 +3448,22 @@ html.dark .operation-buttons .el-button {
 
 /* 状态指示器在 Dark Mode 下保持原有颜色，增强对比度 */
 html.dark .indicator-pending {
-  box-shadow: 0 0 8px rgba(78, 140, 255, 0.8);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--brand-primary) 80%, transparent);
 }
 
 html.dark .indicator-processing {
-  box-shadow: 0 0 8px rgba(247, 166, 47, 0.8);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-warning) 80%, transparent);
 }
 
 html.dark .indicator-completed {
-  box-shadow: 0 0 8px rgba(99, 197, 110, 0.8);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-success) 80%, transparent);
 }
 
 html.dark .indicator-cancelled {
-  box-shadow: 0 0 8px rgba(144, 147, 153, 0.8);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-info) 80%, transparent);
 }
 
 html.dark .indicator-failed {
-  box-shadow: 0 0 8px rgba(240, 101, 101, 0.8);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--color-danger) 80%, transparent);
 }
 </style>

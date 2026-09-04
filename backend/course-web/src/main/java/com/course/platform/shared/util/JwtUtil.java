@@ -1,7 +1,7 @@
 package com.course.platform.shared.util;
 
-import cn.hutool.core.date.DateUtil;
 import com.course.platform.common.constant.Constants;
+import com.course.platform.common.util.PublicUidUtil;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -66,20 +66,22 @@ public class JwtUtil {
     /**
      * 生成Token
      *
-     * @param userId 用户ID
+     * @param uid 对外用户 UUID
      * @param username 用户名
      * @return Token字符串
      */
-    public String generateToken(Long userId, String username) {
+    public String generateToken(String uid, String username) {
+        String normalizedUid = requireValidUid(uid);
         Date now = new Date();
         // 从数据库读取 Access Token 过期时间（分钟）
         Integer expireMinutes = systemConfigService.getConfigValueAsInteger("token_expire_minutes", 15);
         Date expiryDate = new Date(now.getTime() + expireMinutes * 60 * 1000L);
 
         return Jwts.builder()
-                .subject(username)
-                .claim(Constants.USER_ID_KEY, userId)
+                .subject(normalizedUid)
+                .claim(Constants.USER_UID_KEY, normalizedUid)
                 .claim(Constants.USERNAME_KEY, username)
+                .claim("type", "access")
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSecretKey())
@@ -89,22 +91,28 @@ public class JwtUtil {
     /**
      * 生成Token（带额外信息）
      *
-     * @param userId 用户ID
+     * @param uid 对外用户 UUID
      * @param username 用户名
      * @param claims 额外信息
      * @return Token字符串
      */
-    public String generateToken(Long userId, String username, Map<String, Object> claims) {
+    public String generateToken(String uid, String username, Map<String, Object> claims) {
+        String normalizedUid = requireValidUid(uid);
         Date now = new Date();
         // 从数据库读取 Access Token 过期时间（分钟）
         Integer expireMinutes = systemConfigService.getConfigValueAsInteger("token_expire_minutes", 15);
         Date expiryDate = new Date(now.getTime() + expireMinutes * 60 * 1000L);
 
-        return Jwts.builder()
-                .subject(username)
-                .claim(Constants.USER_ID_KEY, userId)
+        var builder = Jwts.builder();
+        if (claims != null && !claims.isEmpty()) {
+            builder.claims(claims);
+        }
+        return builder
+                // 保留字段最后写入，防止额外 claims 覆盖公开 UID 或 subject。
+                .subject(normalizedUid)
+                .claim(Constants.USER_UID_KEY, normalizedUid)
                 .claim(Constants.USERNAME_KEY, username)
-                .claims(claims)
+                .claim("type", "access")
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSecretKey())
@@ -131,17 +139,17 @@ public class JwtUtil {
     }
 
     /**
-     * 从Token中获取用户ID
+     * 从Token中获取对外用户 UUID
      *
      * @param token Token字符串
-     * @return 用户ID
+     * @return 对外用户 UUID
      */
-    public Long getUserIdFromToken(String token) {
+    public String getUserUidFromToken(String token) {
         Claims claims = getClaimsFromToken(token);
         if (claims == null) {
             return null;
         }
-        return claims.get(Constants.USER_ID_KEY, Long.class);
+        return claims.get(Constants.USER_UID_KEY, String.class);
     }
 
     /**
@@ -170,8 +178,12 @@ public class JwtUtil {
             if (claims == null) {
                 return false;
             }
+            String type = claims.get("type", String.class);
             Date expiration = claims.getExpiration();
-            return expiration != null && !expiration.before(new Date());
+            return "access".equals(type)
+                    && hasMatchingPublicUid(claims)
+                    && expiration != null
+                    && !expiration.before(new Date());
         } catch (Exception e) {
             log.error("验证Token失败: {}", e.getMessage());
             return false;
@@ -205,32 +217,33 @@ public class JwtUtil {
      */
     public String refreshToken(String token) {
         Claims claims = getClaimsFromToken(token);
-        if (claims == null) {
+        if (claims == null || !validateToken(token)) {
             return null;
         }
 
-        Long userId = claims.get(Constants.USER_ID_KEY, Long.class);
+        String uid = claims.get(Constants.USER_UID_KEY, String.class);
         String username = claims.get(Constants.USERNAME_KEY, String.class);
 
-        return generateToken(userId, username);
+        return PublicUidUtil.isValid(uid) ? generateToken(PublicUidUtil.normalize(uid), username) : null;
     }
 
     /**
      * 生成Refresh Token
      *
-     * @param userId 用户ID
+     * @param uid 对外用户 UUID
      * @param username 用户名
      * @return Refresh Token字符串
      */
-    public String generateRefreshToken(Long userId, String username) {
+    public String generateRefreshToken(String uid, String username) {
+        String normalizedUid = requireValidUid(uid);
         Date now = new Date();
         // 从数据库读取 Refresh Token 过期时间（天）
         Integer expireDays = systemConfigService.getConfigValueAsInteger("refresh_token_expire_days", 7);
         Date expiryDate = new Date(now.getTime() + expireDays * 24 * 60 * 60 * 1000L);
 
         return Jwts.builder()
-                .subject(username)
-                .claim(Constants.USER_ID_KEY, userId)
+                .subject(normalizedUid)
+                .claim(Constants.USER_UID_KEY, normalizedUid)
                 .claim(Constants.USERNAME_KEY, username)
                 .claim("type", "refresh")
                 .issuedAt(now)
@@ -257,10 +270,25 @@ public class JwtUtil {
                 return false;
             }
             Date expiration = claims.getExpiration();
-            return expiration != null && !expiration.before(new Date());
+            return hasMatchingPublicUid(claims) && expiration != null && !expiration.before(new Date());
         } catch (Exception e) {
             log.error("验证Refresh Token失败: {}", e.getMessage());
             return false;
         }
+    }
+
+    private String requireValidUid(String uid) {
+        if (!PublicUidUtil.isValid(uid)) {
+            throw new IllegalArgumentException("uid must be a valid UUID v4");
+        }
+        return PublicUidUtil.normalize(uid);
+    }
+
+    private boolean hasMatchingPublicUid(Claims claims) {
+        String uid = claims.get(Constants.USER_UID_KEY, String.class);
+        String subject = claims.getSubject();
+        return PublicUidUtil.isValid(uid)
+                && PublicUidUtil.isValid(subject)
+                && PublicUidUtil.normalize(uid).equals(PublicUidUtil.normalize(subject));
     }
 }

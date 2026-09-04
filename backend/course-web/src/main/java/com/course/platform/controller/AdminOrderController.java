@@ -11,6 +11,7 @@ import com.course.platform.security.SecurityUtils;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.Result;
 import com.course.platform.common.result.ResultCode;
+import com.course.platform.common.util.PublicUidUtil;
 import com.course.platform.domain.dto.OrderQueryRequest;
 import com.course.platform.domain.dto.OrderExportRequest;
 import com.course.platform.domain.dto.AdjustCountdownDTO;
@@ -65,7 +66,7 @@ import java.util.ArrayList;
  */
 @Slf4j
 @Tag(name = "管理员订单管理", description = "系统管理员订单管理接口")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAuthority('order:update')")
 @RequestMapping("/admin/orders")
 @RequiredArgsConstructor
 @RestController
@@ -91,7 +92,7 @@ public class AdminOrderController {
      * 验证管理员权限
      */
     private void checkAdmin(Long userId) {
-        SecurityUtils.requireAdmin();
+        SecurityUtils.requireAuthority("order:update");
     }
 
     /**
@@ -126,8 +127,9 @@ public class AdminOrderController {
         if (request.getDockStatus() != null) {
             queryWrapper.eq(CourseOrder::getDockStatus, request.getDockStatus());
         }
-        if (request.getUserId() != null) {
-            queryWrapper.eq(CourseOrder::getUserId, request.getUserId());
+        if (StrUtil.isNotBlank(request.getUserUid())) {
+            User targetUser = findUserByUid(request.getUserUid());
+            queryWrapper.eq(CourseOrder::getUserId, targetUser.getId());
         }
         // 自营订单筛选条件
         if (request.getIsSelfOperated() != null) {
@@ -158,7 +160,7 @@ public class AdminOrderController {
                 BigDecimal.ZERO, null);
 
         Page<CourseOrderVO> voPage = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
-        voPage.setRecords(result.getRecords().stream().map(SensitiveDataMasker::toOrderVO).toList());
+        voPage.setRecords(toOrderVOs(result.getRecords()));
         return Result.success(voPage);
     }
 
@@ -173,14 +175,14 @@ public class AdminOrderController {
 
         // 查询所有用户（代理账号）
         List<User> users = userMapper.selectList(new LambdaQueryWrapper<User>()
-                .select(User::getId, User::getUsername, User::getNickname)
+                .select(User::getUid, User::getUsername, User::getNickname)
                 .orderByAsc(User::getUsername)
         );
 
         List<Map<String, Object>> result = new ArrayList<>();
         for (User user : users) {
             Map<String, Object> map = new HashMap<>();
-            map.put("id", user.getId());
+            map.put("uid", user.getUid());
             map.put("username", user.getUsername());
             map.put("nickname", user.getNickname());
             result.add(map);
@@ -382,7 +384,7 @@ public class AdminOrderController {
                 String.format("管理员查看订单详情：%s", order.getOrderNo()),
                 BigDecimal.ZERO, null);
 
-        return Result.success(SensitiveDataMasker.toOrderVO(order));
+        return Result.success(toOrderVO(order));
     }
 
     /**
@@ -635,7 +637,7 @@ public class AdminOrderController {
         checkAdmin(userId);
 
         List<CourseOrder> orders = orderCountdownService.getActiveCountdownOrders();
-        return Result.success(orders.stream().map(SensitiveDataMasker::toOrderVO).toList());
+        return Result.success(toOrderVOs(orders));
     }
 
     /**
@@ -995,29 +997,6 @@ public class AdminOrderController {
     }
 
     /**
-     * 根据格式格式化订单信息
-     */
-    private String formatOrderForExport(CourseOrder order, Integer format) {
-        String school = order.getSchoolName() != null ? order.getSchoolName() : "";
-        String account = order.getStudentAccount() != null ? order.getStudentAccount() : "";
-        String password = order.getStudentPassword() != null ? order.getStudentPassword() : "";
-        String courseName = order.getCourseName() != null ? order.getCourseName() : "";
-
-        switch (format) {
-            case 1: // 学校+账号+密码+课程名字
-                return String.format("%s %s %s %s", school, account, password, courseName);
-            case 2: // 账号+密码+课程名字
-                return String.format("%s %s %s", account, password, courseName);
-            case 3: // 学校+账号+密码
-                return String.format("%s %s %s", school, account, password);
-            case 4: // 账号+密码
-                return String.format("%s %s", account, password);
-            default:
-                return null;
-        }
-    }
-
-    /**
      * 获取订单状态文本
      * Source: 使用SystemVariableCache动态获取状态名称
      */
@@ -1088,7 +1067,7 @@ public class AdminOrderController {
         checkAdmin(userId);
 
         List<CourseOrder> orders = orderCountdownService.getActiveExamCountdownOrders();
-        return Result.success(orders.stream().map(SensitiveDataMasker::toOrderVO).toList());
+        return Result.success(toOrderVOs(orders));
     }
 
     /**
@@ -1165,4 +1144,43 @@ public class AdminOrderController {
 
         return Result.success("考试倒计时调整成功");
     }
+    private User findUserByUid(String uid) {
+        if (!PublicUidUtil.isValid(uid)) {
+            throw new com.course.platform.common.exception.BusinessException(
+                    com.course.platform.common.result.ResultCode.USER_NOT_FOUND);
+        }
+        User user = userMapper.selectOne(new LambdaQueryWrapper<User>()
+                .eq(User::getUid, PublicUidUtil.normalize(uid))
+                .last("LIMIT 1"));
+        if (user == null) {
+            throw new com.course.platform.common.exception.BusinessException(
+                    com.course.platform.common.result.ResultCode.USER_NOT_FOUND);
+        }
+        return user;
+    }
+
+    private CourseOrderVO toOrderVO(CourseOrder order) {
+        if (order == null) {
+            return null;
+        }
+        User user = userMapper.selectById(order.getUserId());
+        return SensitiveDataMasker.toOrderVO(order, user == null ? null : user.getUid());
+    }
+
+    private List<CourseOrderVO> toOrderVOs(List<CourseOrder> orders) {
+        if (orders == null || orders.isEmpty()) {
+            return List.of();
+        }
+        List<Long> userIds = orders.stream()
+                .map(CourseOrder::getUserId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, String> uidByUserId = userIds.isEmpty() ? Map.of() : userMapper.selectBatchIds(userIds).stream()
+                .collect(java.util.stream.Collectors.toMap(User::getId, User::getUid));
+        return orders.stream()
+                .map(order -> SensitiveDataMasker.toOrderVO(order, uidByUserId.get(order.getUserId())))
+                .toList();
+    }
+
 }

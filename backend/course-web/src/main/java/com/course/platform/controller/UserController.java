@@ -30,11 +30,11 @@ public class UserController {
 
     @Operation(summary = "创建用户", description = "创建新用户（代理开户）")
     @PostMapping
-    public Result<Long> createUser(@Valid @RequestBody UserCreateRequest request,
+    public Result<String> createUser(@Valid @RequestBody UserCreateRequest request,
                                     Authentication authentication) {
         Long operatorId = (Long) authentication.getPrincipal();
-        Long userId = userService.createUser(request, operatorId);
-        return Result.success("用户创建成功", userId);
+        String uid = userService.createUser(request, operatorId);
+        return Result.success("用户创建成功", uid);
     }
 
     @Operation(summary = "更新用户信息", description = "更新用户基本信息")
@@ -60,12 +60,12 @@ public class UserController {
         return Result.success(voPage);
     }
 
-    @Operation(summary = "获取用户详情", description = "根据ID获取用户详细信息")
-    @GetMapping("/{id}")
-    public Result<UserVO> getUser(@PathVariable Long id,
+    @Operation(summary = "获取用户详情", description = "根据 UUID 获取用户详细信息")
+    @GetMapping("/{uid}")
+    public Result<UserVO> getUser(@PathVariable String uid,
                                  Authentication authentication) {
         Long operatorId = (Long) authentication.getPrincipal();
-        User user = userService.getUserById(id, operatorId);
+        User user = userService.getUserByUid(uid, operatorId);
         return Result.success(SensitiveDataMasker.toUserVO(user));
     }
 
@@ -89,21 +89,21 @@ public class UserController {
     }
 
     @Operation(summary = "重置密码", description = "重置下级用户密码")
-    @PostMapping("/{id}/reset-password")
-    public Result<String> resetPassword(@PathVariable Long id,
+    @PostMapping("/{uid}/reset-password")
+    public Result<String> resetPassword(@PathVariable String uid,
                                          Authentication authentication) {
         Long operatorId = (Long) authentication.getPrincipal();
-        String newPassword = userService.resetPassword(id, operatorId);
+        String newPassword = userService.resetPassword(uid, operatorId);
         return Result.success("密码重置成功", newPassword);
     }
 
     @Operation(summary = "禁用/启用用户", description = "修改用户状态")
-    @PostMapping("/{id}/status")
-    public Result<Void> changeUserStatus(@PathVariable Long id,
+    @PostMapping("/{uid}/status")
+    public Result<Void> changeUserStatus(@PathVariable String uid,
                                           @RequestParam Integer status,
                                           Authentication authentication) {
         Long operatorId = (Long) authentication.getPrincipal();
-        userService.changeUserStatus(id, status, operatorId);
+        userService.changeUserStatus(uid, status, operatorId);
         return Result.success("用户状态修改成功");
     }
 }

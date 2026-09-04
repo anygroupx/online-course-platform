@@ -147,7 +147,7 @@ const {
     studentAccount: "",
     orderStatus: null,
     dockStatus: null,
-    userId: null,
+    userUid: null,
   },
   pageSize: 10,
   columns: columnsConfig,
@@ -334,13 +334,13 @@ const handleAccountUpdate = async (row) => {
   align-items: center;
   margin-bottom: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .order-no {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .custom-mobile-card .card-body {
@@ -355,12 +355,12 @@ const handleAccountUpdate = async (row) => {
 }
 
 .info-item .label {
-  color: #909399;
+  color: var(--text-secondary);
   min-width: 60px;
 }
 
 .info-item .value {
-  color: #606266;
+  color: var(--text-regular);
   flex: 1;
 }
 

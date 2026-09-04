@@ -187,9 +187,13 @@ const handleClearSelection = () => {
 }
 
 .batch-card {
-  border: 1px solid var(--color-primary);
+  border: 1px solid var(--brand-primary);
   /* 企业方案：使用更高对比度的背景，确保文字清晰可读 */
-  background: linear-gradient(135deg, #ffffff 0%, #f5f9ff 100%);
+  background: linear-gradient(
+    135deg,
+    var(--surface-solid) 0%,
+    color-mix(in srgb, var(--brand-primary) 6%, var(--surface-solid)) 100%
+  );
 }
 
 .batch-content {
@@ -208,18 +212,18 @@ const handleClearSelection = () => {
 }
 
 .info-icon {
-  color: var(--color-info-primary);
+  color: var(--color-info);
   font-size: 18px;
 }
 
 .info-text {
   font-size: 14px;
   /* 企业方案：使用CSS变量确保文本对比度达标（5.7:1） */
-  color: var(--color-text-regular);
+  color: var(--text-regular);
 }
 
 .info-text strong {
-  color: var(--color-info-primary);
+  color: var(--color-info);
   font-size: 16px;
   margin: 0 4px;
 }

@@ -5,9 +5,12 @@
     <!-- 查询会话消息列表 -->
     <select id="selectMessagesBySessionId" resultType="com.course.platform.domain.vo.CustomerServiceMessageVO">
         SELECT 
-            m.id,
             m.session_id,
-            m.sender_id,
+            CASE m.sender_type
+                WHEN 1 THEN u.uid
+                WHEN 2 THEN cs.uid
+                ELSE NULL
+            END AS senderUid,
             CASE m.sender_type
                 WHEN 1 THEN u.nickname
                 WHEN 2 THEN cs.nickname

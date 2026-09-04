@@ -65,6 +65,8 @@ public class SecurityConfig {
             "/swagger-ui/**",
             "/v3/api-docs/**",
             "/webjars/**",
+            // 客户端只读主题配置
+            "/theme/variables",
             // 静态资源
             "/favicon.ico",
             "/error"
@@ -99,13 +101,20 @@ public class SecurityConfig {
                         // 其他白名单路径
                         .requestMatchers(PERMIT_ALL_PATHS).permitAll()
                         // 管理端路径必须 ADMIN
-                        .requestMatchers("/admin/**", "/payment/config/**", "/payment-config/**",
-                                "/aqks/**", "/system/**", "/system-config/**", "/system-variable/**",
-                                "/operation-log/**", "/order-batch/**",
-                                "/announcement/create", "/announcement/update", "/announcement/page",
-                                "/announcement/*/publish", "/announcement/*/offline").hasRole("ADMIN")
-                        .requestMatchers("/customer-service/admin/**",
-                                "/customer-service/session/*/assign").hasAnyRole("ADMIN", "CS")
+                        .requestMatchers("/admin/orders/**", "/admin/aqks/**", "/order-batch/**", "/admin/countdown-config/**", "/admin/docking/**").hasAuthority("order:update")
+                        .requestMatchers("/payment/config/**", "/payment-config/**").hasAuthority("payment:config")
+                        .requestMatchers("/system/**", "/system-config/**", "/system-variable/**", "/admin/variables/**").hasAuthority("system-config:update")
+                        .requestMatchers("/logs/**").hasAuthority("security:event:read")
+                        .requestMatchers("/announcement/create").hasAuthority("announcement:create")
+                        .requestMatchers("/announcement/update", "/announcement/page").hasAuthority("announcement:update")
+                        .requestMatchers("/announcement/*/publish", "/announcement/*/offline").hasAuthority("announcement:publish")
+                        .requestMatchers("/customer-service/admin/**").hasAuthority("customer-service:read")
+                        .requestMatchers("/customer-service/session/*/assign").hasAuthority("customer-service:assign")
+                        .requestMatchers("/admin/api-providers/**").hasAuthority("api-provider:update")
+                        .requestMatchers("/admin/platforms/**", "/admin/platform-categories/**").hasAuthority("platform:update")
+                        .requestMatchers("/admin/security/**").authenticated()
+                        .requestMatchers("/admin/rbac/**").hasAuthority("rbac:manage")
+                        .requestMatchers("/admin/**").denyAll()
                         // 所有其他请求需要认证
                         .anyRequest().authenticated()
                 )

@@ -48,20 +48,20 @@
       @reset="handleResetQuery"
     >
       <!-- 自定义复杂字段：代理账号下拉（带格式化 label） -->
-      <template #filter-userId="{ filter, isMobile }">
+      <template #filter-userUid="{ filter, isMobile }">
         <el-select
-          v-model="queryForm.userId"
+          v-model="queryForm.userUid"
           placeholder="选择代理账号"
           clearable
           :style="{ width: isMobile ? '100%' : '150px' }"
         >
           <el-option
             v-for="agent in agentList"
-            :key="agent.id"
+            :key="agent.uid"
             :label="
               agent.username + (agent.nickname ? ` (${agent.nickname})` : '')
             "
-            :value="agent.id"
+            :value="agent.uid"
           />
         </el-select>
       </template>
@@ -340,7 +340,7 @@ const filterMockOrders = (orders, filters) => {
     }
 
     // 代理账号筛选
-    if (filters.userId && order.user.id !== filters.userId) {
+    if (filters.userUid && order.user.uid !== filters.userUid) {
       return false;
     }
 
@@ -540,13 +540,13 @@ onMounted(() => {
 .stat-value {
   font-size: 28px;
   font-weight: bold;
-  color: #303133;
+  color: var(--text-primary);
   margin-bottom: 8px;
 }
 
 .stat-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 
 /* 自定义移动端卡片样式 */
@@ -561,13 +561,13 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding-bottom: 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .order-no {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .card-info {
@@ -582,12 +582,12 @@ onMounted(() => {
 }
 
 .info-item .label {
-  color: #909399;
+  color: var(--text-secondary);
   min-width: 60px;
 }
 
 .info-item .value {
-  color: #606266;
+  color: var(--text-regular);
 }
 
 .info-item .price {
@@ -599,6 +599,6 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   padding-top: 12px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--border-color-light);
 }
 </style>

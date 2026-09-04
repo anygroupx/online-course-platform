@@ -7,9 +7,10 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.course.platform.infra.cache.SystemVariableCache;
 import com.course.platform.common.constant.Constants;
-import com.course.platform.security.SecurityUtils;
+import com.course.platform.security.ResourceAuthorizationService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
+import com.course.platform.common.util.PublicUidUtil;
 import com.course.platform.domain.dto.OrderCreateRequest;
 import com.course.platform.domain.dto.OrderQueryRequest;
 import com.course.platform.domain.entity.CoursePlatform;
@@ -52,6 +53,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
     private final ApiProviderMapper apiProviderMapper;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final AccountLedgerServiceImpl accountLedgerService;
+    private final ResourceAuthorizationService authorizationService;
 
     /**
      * 获取订单状态值
@@ -176,7 +178,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         LambdaQueryWrapper<CourseOrder> queryWrapper = new LambdaQueryWrapper<>();
 
         // 非管理员只能查看自己的订单
-        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(userId))) {
+        if (!authorizationService.canReadAllOrders(org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication())) {
             queryWrapper.eq(CourseOrder::getUserId, userId);
         }
 
@@ -197,8 +199,17 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         if (request.getDockStatus() != null) {
             queryWrapper.eq(CourseOrder::getDockStatus, request.getDockStatus());
         }
-        if (request.getUserId() != null) {
-            queryWrapper.eq(CourseOrder::getUserId, request.getUserId());
+        if (StrUtil.isNotBlank(request.getUserUid())) {
+            if (!PublicUidUtil.isValid(request.getUserUid())) {
+                throw new BusinessException(ResultCode.USER_NOT_FOUND);
+            }
+            User targetUser = userMapper.selectOne(new LambdaQueryWrapper<User>()
+                    .eq(User::getUid, PublicUidUtil.normalize(request.getUserUid()))
+                    .last("LIMIT 1"));
+            if (targetUser == null) {
+                throw new BusinessException(ResultCode.USER_NOT_FOUND);
+            }
+            queryWrapper.eq(CourseOrder::getUserId, targetUser.getId());
         }
 
         queryWrapper.orderByDesc(CourseOrder::getCreateTime);
@@ -223,10 +234,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
             throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
         }
 
-        // 非管理员只能查看自己的订单
-        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(userId)) && !order.getUserId().equals(userId)) {
-            throw new BusinessException(ResultCode.FORBIDDEN);
-        }
+        authorizationService.requireCanReadOrder(order);
 
         return order;
     }
@@ -235,6 +243,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
     @Transactional(rollbackFor = Exception.class)
     public void cancelOrder(Long orderId, Long userId) {
         CourseOrder order = getOrderById(orderId, userId);
+        authorizationService.requireCanUpdateOrder(order);
 
         // 只能取消待处理的订单 - 修改使用==而不是equals
         if (order.getOrderStatus() != getOrderStatus("pending") && order.getOrderStatus() != getOrderStatus("failed")) {
@@ -269,6 +278,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
     @Transactional(rollbackFor = Exception.class)
     public void retryOrder(Long orderId, Long userId) {
         CourseOrder order = getOrderById(orderId, userId);
+        authorizationService.requireCanUpdateOrder(order);
 
         // 检查补单次数
         if (order.getRetryCount() >= 5) {
@@ -321,6 +331,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
     @Override
     public void updateOrderProgress(Long orderId, Long userId) {
         CourseOrder order = getOrderById(orderId, userId);
+        authorizationService.requireCanUpdateOrder(order);
 
         // 如果是自营平台，使用模拟进度
         CoursePlatform platform = coursePlatformMapper.selectById(order.getPlatformId());
@@ -439,10 +450,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
             throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
         }
 
-        // 非管理员只能查看自己的订单
-        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(userId)) && !order.getUserId().equals(userId)) {
-            throw new BusinessException(ResultCode.FORBIDDEN);
-        }
+        authorizationService.requireCanReadOrder(order);
 
         return order;
     }

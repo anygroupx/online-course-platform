@@ -2,7 +2,7 @@ package com.course.platform.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.course.platform.infra.cache.SystemVariableCache;
-import com.course.platform.common.constant.Constants;
+import com.course.platform.security.SecurityUtils;
 import com.course.platform.domain.entity.CourseOrder;
 import com.course.platform.domain.entity.User;
 import com.course.platform.domain.vo.StatisticsResponse;
@@ -42,7 +42,7 @@ public class StatisticsServiceImpl implements StatisticsService {
 
         // 订单统计
         LambdaQueryWrapper<CourseOrder> orderWrapper = new LambdaQueryWrapper<>();
-        if (!Constants.DEFAULT_ADMIN_ID.equals(userId)) {
+        if (!SecurityUtils.isAdmin()) {
             orderWrapper.eq(CourseOrder::getUserId, userId);
         }
 
@@ -51,7 +51,7 @@ public class StatisticsServiceImpl implements StatisticsService {
 
         // 今日订单
         LambdaQueryWrapper<CourseOrder> todayOrderWrapper = new LambdaQueryWrapper<>();
-        if (!Constants.DEFAULT_ADMIN_ID.equals(userId)) {
+        if (!SecurityUtils.isAdmin()) {
             todayOrderWrapper.eq(CourseOrder::getUserId, userId);
         }
         todayOrderWrapper.between(CourseOrder::getCreateTime, todayStart, todayEnd);
@@ -59,7 +59,7 @@ public class StatisticsServiceImpl implements StatisticsService {
         builder.todayOrders(todayOrders);
 
         // 用户统计（仅管理员）
-        if (Constants.DEFAULT_ADMIN_ID.equals(userId)) {
+        if (SecurityUtils.isAdmin()) {
             Long totalUsers = userMapper.selectCount(null);
             builder.totalUsers(totalUsers);
 
@@ -86,7 +86,7 @@ public class StatisticsServiceImpl implements StatisticsService {
         builder.totalAmount(totalAmount);
         
         LambdaQueryWrapper<CourseOrder> todayAmountWrapper = new LambdaQueryWrapper<>();
-        if (!Constants.DEFAULT_ADMIN_ID.equals(userId)) {
+        if (!SecurityUtils.isAdmin()) {
             todayAmountWrapper.eq(CourseOrder::getUserId, userId);
         }
         todayAmountWrapper.between(CourseOrder::getCreateTime, todayStart, todayEnd);
@@ -95,7 +95,7 @@ public class StatisticsServiceImpl implements StatisticsService {
 
         // 订单状态统计
         LambdaQueryWrapper<CourseOrder> pendingWrapper = new LambdaQueryWrapper<>();
-        if (!Constants.DEFAULT_ADMIN_ID.equals(userId)) {
+        if (!SecurityUtils.isAdmin()) {
             pendingWrapper.eq(CourseOrder::getUserId, userId);
         }
         pendingWrapper.eq(CourseOrder::getOrderStatus, SystemVariableCache.getStatusValue("order_status", "pending"));
@@ -103,7 +103,7 @@ public class StatisticsServiceImpl implements StatisticsService {
         builder.pendingOrders(pendingOrders);
 
         LambdaQueryWrapper<CourseOrder> processingWrapper = new LambdaQueryWrapper<>();
-        if (!Constants.DEFAULT_ADMIN_ID.equals(userId)) {
+        if (!SecurityUtils.isAdmin()) {
             processingWrapper.eq(CourseOrder::getUserId, userId);
         }
         processingWrapper.eq(CourseOrder::getOrderStatus, SystemVariableCache.getStatusValue("order_status", "processing"));

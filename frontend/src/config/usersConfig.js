@@ -24,7 +24,20 @@ export const filterConfig = {
       width: "200px",
     },
   ],
-  advanced: [],
+  advanced: [
+    {
+      key: "status",
+      label: "用户状态",
+      type: "select",
+      placeholder: "全部状态",
+      clearable: true,
+      width: "180px",
+      options: [
+        { label: "正常", value: 1 },
+        { label: "禁用", value: 0 },
+      ],
+    },
+  ],
 };
 
 /**
@@ -32,9 +45,10 @@ export const filterConfig = {
  */
 export const columnsConfig = [
   {
-    key: "id",
+    key: "uid",
     label: "UID",
-    width: 80,
+    minWidth: 300,
+    showOverflowTooltip: true,
     visible: true,
   },
   {
@@ -70,7 +84,7 @@ export const columnsConfig = [
     formatter: (row) => `¥${row.totalRecharge || 0}`,
   },
   {
-    key: "apiKey",
+    key: "apiEnabled",
     label: "API密钥",
     width: 120,
     visible: true,

@@ -19,9 +19,9 @@ public interface UserService {
      * 
      * @param request 创建请求
      * @param operatorId 操作人ID
-     * @return 用户ID
+     * @return 对外用户 UUID
      */
-    Long createUser(UserCreateRequest request, Long operatorId);
+    String createUser(UserCreateRequest request, Long operatorId);
 
     /**
      * 更新用户信息
@@ -46,11 +46,11 @@ public interface UserService {
     /**
      * 获取用户详情
      * 
-     * @param userId 用户ID
+     * @param userUid 对外用户 UUID
      * @param operatorId 操作人ID
      * @return 用户信息
      */
-    User getUserById(Long userId, Long operatorId);
+    User getUserByUid(String userUid, Long operatorId);
 
     /**
      * 充值
@@ -72,11 +72,11 @@ public interface UserService {
     /**
      * 重置密码
      * 
-     * @param targetUserId 目标用户ID
+     * @param targetUserUid 目标用户 UUID
      * @param operatorId 操作人ID
      * @return 新密码
      */
-    String resetPassword(Long targetUserId, Long operatorId);
+    String resetPassword(String targetUserUid, Long operatorId);
 
     /**
      * 禁用/启用用户
@@ -85,6 +85,6 @@ public interface UserService {
      * @param status 状态
      * @param operatorId 操作人ID
      */
-    void changeUserStatus(Long userId, Integer status, Long operatorId);
+    void changeUserStatus(String userUid, Integer status, Long operatorId);
 }
 

@@ -5,7 +5,7 @@ import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.Result;
 import com.course.platform.common.result.ResultCode;
-import com.course.platform.common.security.SecurityRoles;
+import com.course.platform.common.security.SecurityAuthorities;
 import com.course.platform.controller.SecurityAdminController;
 import com.course.platform.domain.entity.PaymentReconcileReport;
 import com.course.platform.domain.entity.SecurityAuditLog;
@@ -48,8 +48,10 @@ class BolaBflaAuthorizationTest {
         SecurityContextHolder.clearContext();
     }
 
-    private void auth(Long userId, String role) {
-        var authorities = List.of(new SimpleGrantedAuthority(SecurityRoles.toSpringRole(role)));
+    private void auth(Long userId, String... authorityNames) {
+        var authorities = java.util.Arrays.stream(authorityNames)
+                .map(SimpleGrantedAuthority::new)
+                .toList();
         var authentication = new UsernamePasswordAuthenticationToken(userId, "n/a", authorities);
         SecurityContextHolder.getContext().setAuthentication(authentication);
     }
@@ -57,7 +59,7 @@ class BolaBflaAuthorizationTest {
     @Test
     @DisplayName("BFLA: 普通用户不可查询安全审计日志")
     void auditLogs_userForbidden() {
-        auth(2L, SecurityRoles.USER);
+        auth(2L, SecurityAuthorities.ROLE_USER);
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> securityAdminController.auditLogs(null, null, 1, 20));
         assertEquals(ResultCode.FORBIDDEN.getCode(), ex.getCode());
@@ -67,7 +69,7 @@ class BolaBflaAuthorizationTest {
     @Test
     @DisplayName("BFLA: 管理员可查询安全审计日志")
     void auditLogs_adminAllowed() {
-        auth(1L, SecurityRoles.ADMIN);
+        auth(1L, SecurityAuthorities.SECURITY_EVENT_READ);
         IPage<SecurityAuditLog> page = new Page<>(1, 20);
         when(securityAuditService.query(null, null, 1, 20)).thenReturn(page);
 
@@ -79,7 +81,7 @@ class BolaBflaAuthorizationTest {
     @Test
     @DisplayName("BFLA: 普通用户不可触发支付对账")
     void reconcile_userForbidden() {
-        auth(9L, SecurityRoles.USER);
+        auth(9L, SecurityAuthorities.ROLE_USER);
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> securityAdminController.reconcile(LocalDate.now()));
         assertEquals(ResultCode.FORBIDDEN.getCode(), ex.getCode());
@@ -89,7 +91,7 @@ class BolaBflaAuthorizationTest {
     @Test
     @DisplayName("BFLA: 管理员可触发支付对账")
     void reconcile_adminAllowed() {
-        auth(1L, SecurityRoles.ADMIN);
+        auth(1L, SecurityAuthorities.PAYMENT_RECONCILE);
         PaymentReconcileReport report = new PaymentReconcileReport();
         report.setStatus("MATCHED");
         when(paymentReconcileService.reconcile(any())).thenReturn(report);
@@ -110,7 +112,7 @@ class BolaBflaAuthorizationTest {
     @Test
     @DisplayName("SecurityUtils: requireAdmin 对 CS 角色拒绝（垂直越权）")
     void requireAdmin_csForbidden() {
-        auth(5L, SecurityRoles.CS);
+        auth(5L, SecurityAuthorities.CUSTOMER_SERVICE_READ);
         BusinessException ex = assertThrows(BusinessException.class, SecurityUtils::requireAdmin);
         assertEquals(ResultCode.FORBIDDEN.getCode(), ex.getCode());
     }
@@ -118,7 +120,7 @@ class BolaBflaAuthorizationTest {
     @Test
     @DisplayName("SecurityUtils: CS 可通过 requireCustomerService")
     void requireCustomerService_csAllowed() {
-        auth(5L, SecurityRoles.CS);
+        auth(5L, SecurityAuthorities.CUSTOMER_SERVICE_READ);
         assertDoesNotThrow(SecurityUtils::requireCustomerService);
         assertTrue(SecurityUtils.isCustomerService());
         assertFalse(SecurityUtils.isAdmin());

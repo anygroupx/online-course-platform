@@ -51,6 +51,10 @@ public class ApiProviderServiceImpl implements ApiProviderService {
         if (existing == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "API接口不存在");
         }
+        // 列表接口仅返回脱敏账号；编辑时未重新填写账号则保留原值。
+        if (!StringUtils.hasText(apiProvider.getUsername())) {
+            apiProvider.setUsername(existing.getUsername());
+        }
         // 未提交敏感字段时保留原密文
         if (!StringUtils.hasText(apiProvider.getPassword())) {
             apiProvider.setPassword(existing.getPassword());
@@ -99,6 +103,7 @@ public class ApiProviderServiceImpl implements ApiProviderService {
     /**
      * 运行时解密（供对接服务调用）
      */
+    @Override
     public ApiProvider loadDecrypted(Long id) {
         ApiProvider provider = apiProviderMapper.selectById(id);
         return decryptSecrets(provider);
@@ -115,7 +120,13 @@ public class ApiProviderServiceImpl implements ApiProviderService {
     }
 
     private ApiProvider decryptSecrets(ApiProvider provider) {
-        if (provider == null || !StringUtils.hasText(cryptoSecret)) {
+        if (provider == null) {
+            return null;
+        }
+        if (!StringUtils.hasText(cryptoSecret)) {
+            if (hasEncryptedSecrets(provider)) {
+                throw new BusinessException("API凭据已加密，但系统未配置解密密钥");
+            }
             return provider;
         }
         provider.setPassword(SecretCrypto.decrypt(provider.getPassword(), cryptoSecret));
@@ -123,5 +134,12 @@ public class ApiProviderServiceImpl implements ApiProviderService {
         provider.setApiKey(SecretCrypto.decrypt(provider.getApiKey(), cryptoSecret));
         provider.setCookie(SecretCrypto.decrypt(provider.getCookie(), cryptoSecret));
         return provider;
+    }
+
+    private boolean hasEncryptedSecrets(ApiProvider provider) {
+        return SecretCrypto.isEncrypted(provider.getPassword())
+                || SecretCrypto.isEncrypted(provider.getToken())
+                || SecretCrypto.isEncrypted(provider.getApiKey())
+                || SecretCrypto.isEncrypted(provider.getCookie());
     }
 }

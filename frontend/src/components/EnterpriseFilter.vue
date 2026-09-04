@@ -131,7 +131,7 @@
 
         <!-- 高级筛选（折叠面板） -->
         <el-collapse
-          v-if="hasAdvancedConfig || hasAdvancedFilters"
+          v-if="showAdvancedFilters"
           v-model="collapseVisible"
           class="advanced-filter-collapse"
         >
@@ -315,10 +315,14 @@ if (props.enableStorage) {
 
 // 计算属性：是否有高级筛选配置
 const hasAdvancedConfig = computed(() => {
-  return (
-    props.config && props.config.advanced && props.config.advanced.length > 0
-  );
+  return Boolean(props.config?.advanced?.length);
 });
+
+// 配置驱动模式只按实际配置决定是否显示；纯插槽模式保留显式开关。
+// 避免 config.advanced 为空时仍出现可展开但没有内容的面板。
+const showAdvancedFilters = computed(() =>
+  props.config ? hasAdvancedConfig.value : props.hasAdvancedFilters,
+);
 
 // 计算属性：移动端所有筛选项
 const allConfigFilters = computed(() => {
@@ -415,7 +419,7 @@ const getOptions = (filter) => {
 // 获取选项的 label
 const getOptionLabel = (option, filter) => {
   if (typeof option === "object") {
-    return option[filter.labelKey || "label"] || option.name || option.text;
+    return option[filter.labelKey || "label"] ?? option.name ?? option.text;
   }
   return option;
 };
@@ -423,7 +427,7 @@ const getOptionLabel = (option, filter) => {
 // 获取选项的 value
 const getOptionValue = (option, filter) => {
   if (typeof option === "object") {
-    return option[filter.valueKey || "value"] || option.id;
+    return option[filter.valueKey || "value"] ?? option.id;
   }
   return option;
 };
@@ -486,6 +490,7 @@ defineExpose({
     drawerVisible.value = true;
   },
   toggleAdvanced: () => {
+    if (!showAdvancedFilters.value) return;
     collapseVisible.value = collapseVisible.value.length ? [] : ["1"];
   },
 });

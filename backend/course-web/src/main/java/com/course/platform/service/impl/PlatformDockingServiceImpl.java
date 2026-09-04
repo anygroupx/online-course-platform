@@ -15,6 +15,7 @@ import com.course.platform.infra.persistence.mapper.CourseOrderMapper;
 import com.course.platform.infra.persistence.mapper.PlatformCategoryMapper;
 import com.course.platform.domain.entity.PlatformCategory;
 import com.course.platform.infra.persistence.mapper.CoursePlatformMapper;
+import com.course.platform.application.service.platform.ApiProviderService;
 import com.course.platform.application.service.platform.PlatformDockingService;
 import com.course.platform.application.service.platform.docking.PlatformDockingStrategy;
 import com.course.platform.infra.docking.PlatformDockingStrategyFactory;
@@ -43,17 +44,20 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
     private final CoursePlatformMapper coursePlatformMapper;
     private final CourseOrderMapper courseOrderMapper;
     private final PlatformCategoryMapper platformCategoryMapper;
+    private final ApiProviderService apiProviderService;
 
     public PlatformDockingServiceImpl(PlatformDockingStrategyFactory strategyFactory,
                                       ApiProviderMapper apiProviderMapper,
                                       CoursePlatformMapper coursePlatformMapper,
                                       CourseOrderMapper courseOrderMapper,
-                                      PlatformCategoryMapper platformCategoryMapper) {
+                                      PlatformCategoryMapper platformCategoryMapper,
+                                      ApiProviderService apiProviderService) {
         this.strategyFactory = strategyFactory;
         this.apiProviderMapper = apiProviderMapper;
         this.coursePlatformMapper = coursePlatformMapper;
         this.courseOrderMapper = courseOrderMapper;
         this.platformCategoryMapper = platformCategoryMapper;
+        this.apiProviderService = apiProviderService;
     }
 
     @Override
@@ -62,8 +66,8 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
             throw new BusinessException("未配置查课接口");
         }
         
-        ApiProvider apiProvider = apiProviderMapper.selectById(platform.getQueryApiId());
-        if (apiProvider == null || apiProvider.getStatus() != 1) {
+        ApiProvider apiProvider = apiProviderService.loadDecrypted(platform.getQueryApiId());
+        if (apiProvider == null || !Integer.valueOf(1).equals(apiProvider.getStatus())) {
             throw new BusinessException("查课接口配置不存在或已禁用");
         }
 
@@ -77,6 +81,7 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
 
     @Override
     public DockResult dockOrder(CourseOrder order, CoursePlatform platform, ApiProvider apiProvider) {
+        apiProvider = resolveDecryptedProvider(apiProvider);
         PlatformDockingStrategy strategy = strategyFactory.getStrategy(apiProvider.getProviderType());
         if (strategy == null) {
             return DockResult.fail("不支持的接口类型: " + apiProvider.getProviderType());
@@ -86,6 +91,7 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
 
     @Override
     public OrderProgressResult queryOrderProgress(CourseOrder order, CoursePlatform platform, ApiProvider apiProvider) {
+        apiProvider = resolveDecryptedProvider(apiProvider);
         PlatformDockingStrategy strategy = strategyFactory.getStrategy(apiProvider.getProviderType());
         if (strategy == null) {
             throw new BusinessException("不支持的接口类型: " + apiProvider.getProviderType());
@@ -95,6 +101,7 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
 
     @Override
     public DockResult retryOrder(CourseOrder order, CoursePlatform platform, ApiProvider apiProvider) {
+        apiProvider = resolveDecryptedProvider(apiProvider);
         PlatformDockingStrategy strategy = strategyFactory.getStrategy(apiProvider.getProviderType());
         if (strategy == null) {
             return DockResult.fail("不支持的接口类型: " + apiProvider.getProviderType());
@@ -121,7 +128,7 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
     public Map<String, Object> importPlatforms(Long apiProviderId, BigDecimal priceMultiplier, 
                                                 String targetCategoryId, Boolean syncCategories, 
                                                 List<String> skipCategoryIds) {
-        ApiProvider apiProvider = apiProviderMapper.selectById(apiProviderId);
+        ApiProvider apiProvider = apiProviderService.loadDecrypted(apiProviderId);
         if (apiProvider == null) {
             throw new BusinessException("API配置不存在");
         }
@@ -250,7 +257,7 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> batchSyncOrderProgress(Long apiProviderId, Long timestampSeconds, Integer offset) {
-        ApiProvider apiProvider = apiProviderMapper.selectById(apiProviderId);
+        ApiProvider apiProvider = apiProviderService.loadDecrypted(apiProviderId);
         if (apiProvider == null) {
             throw new BusinessException("API配置不存在");
         }
@@ -310,8 +317,7 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
                             totalUpdated += updated;
                         }
                     } catch (Exception e) {
-                        log.error("更新订单进度失败: account={}, courseName={}", 
-                                result.getStudentAccount(), result.getCourseName(), e);
+                        log.error("更新订单进度失败: apiProviderId={}", apiProviderId, e);
                     }
                 }
             }
@@ -327,14 +333,34 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
             log.info("继续下一批次，新 offset={}", currentOffset);
         }
 
-        // 更新最后同步时间为当前时间（转换为秒级时间戳）
-        apiProvider.setLastSyncTime(java.time.Instant.now().getEpochSecond());
-        apiProviderMapper.updateById(apiProvider);
+        // 解密后的 provider 只用于调用第三方，禁止整体回写，避免明文凭据落库。
+        ApiProvider syncTimeUpdate = new ApiProvider();
+        syncTimeUpdate.setId(apiProviderId);
+        syncTimeUpdate.setLastSyncTime(java.time.Instant.now().getEpochSecond());
+        apiProviderMapper.updateById(syncTimeUpdate);
 
         Map<String, Object> result = new HashMap<>();
         result.put("totalUpdated", totalUpdated);
         result.put("message", "已同步" + totalUpdated + "条订单");
         return result;
+    }
+
+    /**
+     * 将调用方传入的配置统一替换为数据库中的解密副本。
+     * 临时/测试配置没有 ID 时保持原对象，避免破坏现有扩展调用。
+     */
+    private ApiProvider resolveDecryptedProvider(ApiProvider apiProvider) {
+        if (apiProvider == null) {
+            throw new BusinessException("API配置不存在");
+        }
+        if (apiProvider.getId() == null) {
+            return apiProvider;
+        }
+        ApiProvider decrypted = apiProviderService.loadDecrypted(apiProvider.getId());
+        if (decrypted == null) {
+            throw new BusinessException("API配置不存在");
+        }
+        return decrypted;
     }
 
     /** 同步分类（参考 benzcron.php 的分类同步逻辑）

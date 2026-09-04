@@ -5,7 +5,10 @@ import com.course.platform.infra.cache.SystemVariableCache;
 import com.course.platform.common.constant.Constants;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.security.TokenHashUtil;
+import com.course.platform.common.util.PublicUidUtil;
 import java.time.LocalDateTime;
+import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
 import com.course.platform.common.result.Result;
 import com.course.platform.common.result.ResultCode;
 import com.course.platform.domain.dto.OrderCreateRequest;
@@ -53,17 +56,17 @@ public class ExternalApiController {
     /**
      * 验证API密钥
      */
-    private User validateApiKey(String uid, String apiKey) {
+    private User validateApiKey(String uid, String apiKey, String requiredScope) {
         if (uid == null || apiKey == null) {
             throw new BusinessException("UID和API密钥不能为空");
         }
 
-        User user;
-        try {
-            user = userMapper.selectById(Long.parseLong(uid));
-        } catch (NumberFormatException e) {
+        if (!PublicUidUtil.isValid(uid)) {
             throw new BusinessException("UID格式错误");
         }
+        User user = userMapper.selectOne(new LambdaQueryWrapper<User>()
+                .eq(User::getUid, PublicUidUtil.normalize(uid))
+                .last("LIMIT 1"));
         if (user == null) {
             throw new BusinessException("用户不存在");
         }
@@ -75,25 +78,19 @@ public class ExternalApiController {
         }
 
         String providedHash = TokenHashUtil.sha256(apiKey);
-        boolean matched = false;
-        if (user.getApiKeyHash() != null && user.getApiKeyHash().equals(providedHash)) {
-            matched = true;
-        } else if (user.getApiKey() != null && !"0".equals(user.getApiKey()) && apiKey.equals(user.getApiKey())) {
-            // 兼容迁移前明文密钥，命中后自动升级为哈希
-            matched = true;
-            user.setApiKeyHash(providedHash);
-            user.setApiKeyPrefix(apiKey.length() >= 8 ? apiKey.substring(0, 8) : apiKey);
-            user.setApiKey(null);
-            if (user.getApiKeyScopes() == null) {
-                user.setApiKeyScopes("orders:read,orders:write,platforms:read");
-            }
-            if (user.getApiKeyExpireTime() == null) {
-                user.setApiKeyExpireTime(LocalDateTime.now().plusYears(1));
-            }
-            userMapper.updateById(user);
-        }
+        boolean matched = user.getApiKeyHash() != null && !user.getApiKeyHash().isBlank()
+                && MessageDigest.isEqual(
+                providedHash.getBytes(StandardCharsets.US_ASCII),
+                user.getApiKeyHash().getBytes(StandardCharsets.US_ASCII));
         if (!matched) {
             throw new BusinessException("API密钥错误");
+        }
+        boolean scopeAllowed = user.getApiKeyScopes() != null
+                && java.util.Arrays.stream(user.getApiKeyScopes().split(","))
+                .map(String::trim)
+                .anyMatch(requiredScope::equals);
+        if (!scopeAllowed) {
+            throw new BusinessException(ResultCode.FORBIDDEN);
         }
         return user;
     }
@@ -105,7 +102,7 @@ public class ExternalApiController {
     @PostMapping("/getmoney")
     public Result<Map<String, Object>> getMoney(@RequestParam String uid,
                                                   @RequestParam String key) {
-        User user = validateApiKey(uid, key);
+        User user = validateApiKey(uid, key, "balance:read");
 
         Map<String, Object> data = new HashMap<>();
         data.put("money", user.getBalance());
@@ -123,7 +120,7 @@ public class ExternalApiController {
             @RequestParam String key,
             @RequestParam String username) {
         // 验证API密钥并获取用户
-        User user = validateApiKey(uid, key);
+        User user = validateApiKey(uid, key, "orders:read");
 
         if (username == null || username.isEmpty()) {
             throw new BusinessException("账号不能为空");
@@ -173,7 +170,7 @@ public class ExternalApiController {
             @RequestParam String key,
             @RequestParam String orderNo) {
         // 验证API密钥并获取用户
-        User user = validateApiKey(uid, key);
+        User user = validateApiKey(uid, key, "orders:write");
 
         if (orderNo == null || orderNo.isEmpty()) {
             throw new BusinessException("订单编号不能为空");
@@ -214,7 +211,7 @@ public class ExternalApiController {
                                                @RequestParam(required = false) String kcid,
                                                @RequestParam String kcname) {
         // 验证API密钥
-        User userObj = validateApiKey(uid, key);
+        User userObj = validateApiKey(uid, key, "orders:write");
 
         // 创建订单请求
         OrderCreateRequest request = new OrderCreateRequest();
@@ -248,7 +245,7 @@ public class ExternalApiController {
                                                             @RequestParam String user,
                                                             @RequestParam String pass) {
         // 验证API密钥
-        validateApiKey(uid, key);
+        User authenticatedUser = validateApiKey(uid, key, "platforms:read");
 
         // 构建查课请求
         QueryCourseRequest request = new QueryCourseRequest();
@@ -258,7 +255,7 @@ public class ExternalApiController {
         request.setStudentPassword(pass);
 
         // 调用查课服务
-        CourseInfoResponse response = courseQueryService.queryCourses(request, Long.parseLong(uid));
+        CourseInfoResponse response = courseQueryService.queryCourses(request, authenticatedUser.getId());
 
         return Result.success("查询成功", response);
     }
@@ -272,7 +269,7 @@ public class ExternalApiController {
                                                                @RequestParam String key,
                                                                @RequestParam String orderNo) {
         // 验证API密钥并获取用户
-        User user = validateApiKey(uid, key);
+        User user = validateApiKey(uid, key, "orders:read");
 
         // 根据orderNo和userId查询订单，确保归属校验
         CourseOrder order = courseOrderMapper.selectOne(new LambdaQueryWrapper<CourseOrder>()
@@ -308,7 +305,7 @@ public class ExternalApiController {
     public Result<List<Map<String, Object>>> getPlatformsExternal(@RequestParam String uid,
                                                                     @RequestParam String key) {
         // 验证API密钥
-        validateApiKey(uid, key);
+        validateApiKey(uid, key, "platforms:read");
 
         // 查询所有在线平台
         List<CoursePlatform> platforms = coursePlatformMapper.selectList(new LambdaQueryWrapper<CoursePlatform>()

@@ -187,6 +187,7 @@ public class SystemVariableCache implements ApplicationRunner {
                 case "exam_pending": return Constants.ORDER_STATUS_EXAM_PENDING;
                 case "exam_processing": return Constants.ORDER_STATUS_EXAM_PROCESSING;
                 case "exam_completed": return Constants.ORDER_STATUS_EXAM_COMPLETED;
+                case "refund_pending": return Constants.ORDER_STATUS_REFUND_PENDING;
             }
         }
         // 对接状态默认值

@@ -102,18 +102,18 @@ public class OrderExportServiceImpl implements OrderExportService {
     }
 
     private String[] getHeadersByFormat(Integer format) {
-        // 兼容旧 format 编号，但密码列改为“密码状态”，永不导出明文
+        // 兼容旧 format 编号，但彻底移除密码列
         switch (format == null ? 1 : format) {
             case 1:
-                return new String[]{"学校名称", "学生账号", "密码状态", "课程名称"};
+                return new String[]{"学校名称", "学生账号", "课程名称"};
             case 2:
-                return new String[]{"学生账号", "密码状态", "课程名称"};
+                return new String[]{"学生账号", "课程名称"};
             case 3:
-                return new String[]{"学校名称", "学生账号", "密码状态"};
+                return new String[]{"学校名称", "学生账号"};
             case 4:
-                return new String[]{"学生账号", "密码状态"};
+                return new String[]{"学生账号"};
             default:
-                return new String[]{"学校名称", "学生账号", "密码状态", "课程名称", "订单号"};
+                return new String[]{"学校名称", "学生账号", "课程名称", "订单号"};
         }
     }
 
@@ -121,26 +121,24 @@ public class OrderExportServiceImpl implements OrderExportService {
         String school = order.getSchoolName() != null ? order.getSchoolName() : "";
         String account = order.getStudentAccount() != null ? order.getStudentAccount() : "";
         String courseName = order.getCourseName() != null ? order.getCourseName() : "";
-        String passwordStatus = (order.getStudentPassword() != null && !order.getStudentPassword().isBlank())
-                ? "已设置" : "未设置";
         String orderNo = order.getOrderNo() != null ? order.getOrderNo() : "";
 
         String[] values;
         switch (format == null ? 1 : format) {
             case 1:
-                values = new String[]{school, account, passwordStatus, courseName};
+                values = new String[]{school, account, courseName};
                 break;
             case 2:
-                values = new String[]{account, passwordStatus, courseName};
+                values = new String[]{account, courseName};
                 break;
             case 3:
-                values = new String[]{school, account, passwordStatus};
+                values = new String[]{school, account};
                 break;
             case 4:
-                values = new String[]{account, passwordStatus};
+                values = new String[]{account};
                 break;
             default:
-                values = new String[]{school, account, passwordStatus, courseName, orderNo};
+                values = new String[]{school, account, courseName, orderNo};
                 break;
         }
         for (int i = 0; i < values.length; i++) {
@@ -154,21 +152,19 @@ public class OrderExportServiceImpl implements OrderExportService {
         String school = order.getSchoolName() != null ? order.getSchoolName() : "";
         String account = order.getStudentAccount() != null ? order.getStudentAccount() : "";
         String courseName = order.getCourseName() != null ? order.getCourseName() : "";
-        String passwordStatus = (order.getStudentPassword() != null && !order.getStudentPassword().isBlank())
-                ? "已设置" : "未设置";
         String orderNo = order.getOrderNo() != null ? order.getOrderNo() : "";
 
         switch (format == null ? 1 : format) {
             case 1:
-                return String.format("%s %s %s %s", school, account, passwordStatus, courseName);
+                return String.format("%s %s %s", school, account, courseName);
             case 2:
-                return String.format("%s %s %s", account, passwordStatus, courseName);
+                return String.format("%s %s", account, courseName);
             case 3:
-                return String.format("%s %s %s", school, account, passwordStatus);
+                return String.format("%s %s", school, account);
             case 4:
-                return String.format("%s %s", account, passwordStatus);
+                return account;
             default:
-                return String.format("%s %s %s %s %s", school, account, passwordStatus, courseName, orderNo);
+                return String.format("%s %s %s %s", school, account, courseName, orderNo);
         }
     }
 }

@@ -53,7 +53,7 @@
                 :color="
                   data.isCategory
                     ? 'var(--color-warning)'
-                    : 'var(--color-primary)'
+                    : 'var(--brand-primary)'
                 "
               >
                 <Folder v-if="data.isCategory" />
@@ -315,7 +315,7 @@
           <span
             style="
               font-size: 12px;
-              color: var(--color-text-secondary);
+              color: var(--text-secondary);
               margin-left: 10px;
             "
             >启用后下单时可自动生成密码</span

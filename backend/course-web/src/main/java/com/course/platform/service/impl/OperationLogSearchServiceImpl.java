@@ -2,7 +2,6 @@ package com.course.platform.service.impl;
 
 import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
-import com.course.platform.common.constant.Constants;
 import com.course.platform.security.SecurityUtils;
 import com.course.platform.domain.document.OperationLogDocument;
 import com.course.platform.domain.entity.OperationLog;
@@ -67,7 +66,7 @@ public class OperationLogSearchServiceImpl implements OperationLogSearchService 
         List<Query> shouldQueries = new ArrayList<>();
 
         // 非管理员只能查看自己的日志
-        if (userId != null && !(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(userId))) {
+        if (userId != null && !(SecurityUtils.isAdmin())) {
             mustQueries.add(Query.of(q -> q.term(t -> t.field("userId").value(userId))));
         }
 

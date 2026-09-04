@@ -7,6 +7,8 @@ import com.course.platform.common.result.Result;
 import com.course.platform.domain.dto.OrderCreateRequest;
 import com.course.platform.domain.dto.OrderQueryRequest;
 import com.course.platform.domain.entity.CourseOrder;
+import com.course.platform.domain.entity.User;
+import com.course.platform.infra.persistence.mapper.UserMapper;
 import com.course.platform.domain.vo.CourseOrderVO;
 import com.course.platform.security.SensitiveDataMasker;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,6 +31,7 @@ import java.util.Map;
 public class CourseOrderController {
 
     private final CourseOrderService courseOrderService;
+    private final UserMapper userMapper;
 
     @Operation(summary = "创建订单", description = "创建新的课程订单")
     @PostMapping
@@ -49,7 +52,9 @@ public class CourseOrderController {
         Long userId = (Long) authentication.getPrincipal();
         IPage<CourseOrder> page = courseOrderService.queryOrders(request, userId);
         Page<CourseOrderVO> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
-        voPage.setRecords(page.getRecords().stream().map(SensitiveDataMasker::toOrderVO).toList());
+        String userUid = requireCurrentUserUid(userId);
+        voPage.setRecords(page.getRecords().stream()
+                .map(order -> SensitiveDataMasker.toOrderVO(order, userUid)).toList());
         return Result.success(voPage);
     }
 
@@ -59,7 +64,7 @@ public class CourseOrderController {
                                           Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         CourseOrder order = courseOrderService.getOrderByOrderNo(orderNo, userId);
-        return Result.success(SensitiveDataMasker.toOrderVO(order));
+        return Result.success(SensitiveDataMasker.toOrderVO(order, requireCurrentUserUid(userId)));
     }
 
     @Operation(summary = "取消订单", description = "取消待处理的订单")
@@ -88,4 +93,13 @@ public class CourseOrderController {
         courseOrderService.updateOrderProgressByOrderNo(orderNo, userId);
         return Result.success("进度更新成功");
     }
+    private String requireCurrentUserUid(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new com.course.platform.common.exception.BusinessException(
+                    com.course.platform.common.result.ResultCode.USER_NOT_FOUND);
+        }
+        return user.getUid();
+    }
+
 }

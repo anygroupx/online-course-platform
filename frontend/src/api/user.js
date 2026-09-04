@@ -77,9 +77,9 @@ export function changePassword(data) {
 /**
  * 重置密码
  */
-export function resetPassword(id) {
+export function resetPassword(uid) {
   return request({
-    url: `/users/${id}/reset-password`,
+    url: `/users/${uid}/reset-password`,
     method: 'post'
   })
 }
@@ -87,9 +87,9 @@ export function resetPassword(id) {
 /**
  * 禁用/启用用户
  */
-export function changeUserStatus(id, status) {
+export function changeUserStatus(uid, status) {
   return request({
-    url: `/users/${id}/status`,
+    url: `/users/${uid}/status`,
     method: 'post',
     params: { status }
   })
@@ -98,11 +98,11 @@ export function changeUserStatus(id, status) {
 /**
  * 开通API密钥
  */
-export function enableApiKey(type, targetUserId) {
+export function enableApiKey(type, targetUserUid) {
   return request({
     url: '/api-keys/enable',
     method: 'post',
-    params: { type, targetUserId }
+    params: { type, targetUserUid }
   })
 }
 

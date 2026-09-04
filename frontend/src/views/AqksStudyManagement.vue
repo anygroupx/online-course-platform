@@ -359,7 +359,7 @@
           currentOrderDetail.updateTime
         }}</el-descriptions-item>
         <el-descriptions-item label="订单金额" v-if="currentOrderDetail.amount">
-          <span style="color: #f56c6c; font-weight: bold"
+          <span style="color: var(--color-danger); font-weight: bold"
             >￥{{ currentOrderDetail.amount }}</span
           >
         </el-descriptions-item>

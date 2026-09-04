@@ -1,5 +1,6 @@
 package com.course.platform.domain.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
@@ -29,6 +30,7 @@ public class OperationLog implements Serializable {
      * 用户ID
      */
     @TableField("user_id")
+    @JsonIgnore
     private Long userId;
 
     /**

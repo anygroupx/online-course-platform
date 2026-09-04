@@ -26,6 +26,12 @@ public class User implements Serializable {
     private Long id;
 
     /**
+     * 对外公开的随机 UUID。内部关联仍使用自增主键 id。
+     */
+    @TableField(value = "uid", fill = FieldFill.INSERT)
+    private String uid;
+
+    /**
      * 上级代理ID
      */
     @TableField("parent_id")
@@ -138,7 +144,7 @@ public class User implements Serializable {
     private Integer status;
 
     /**
-     * 角色：ADMIN / CS / USER
+     * 历史角色镜像；授权唯一来源为 sys_user_role / sys_role_permission
      */
     @TableField("role")
     private String role;

@@ -32,7 +32,7 @@ export const adminOrdersFilterConfig = {
       // 方式1：从 options prop 中获取
       optionsKey: "platformList",
       labelKey: "name",
-      valueKey: "id",
+      valueKey: "uid",
     },
     {
       key: "orderStatus",
@@ -63,14 +63,14 @@ export const adminOrdersFilterConfig = {
       optionsGetter: (options) => options.statusOptions?.dock_status || [],
     },
     {
-      key: "userId",
+      key: "userUid",
       label: "代理账号",
       type: "select",
       placeholder: "选择代理",
       width: "150px",
       optionsKey: "agentList",
       labelKey: "username",
-      valueKey: "id",
+      valueKey: "uid",
       // 自定义 label 渲染
       optionLabelFormatter: (agent) => {
         return agent.username + (agent.nickname ? ` (${agent.nickname})` : "");
@@ -96,7 +96,7 @@ export const defaultQueryForm = {
   studentAccount: "",
   orderStatus: null,
   dockStatus: null,
-  userId: null,
+  userUid: null,
   dateRange: [],
   page: 1,
   pageSize: 10,

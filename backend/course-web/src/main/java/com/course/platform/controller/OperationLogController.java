@@ -28,7 +28,7 @@ import java.time.LocalDateTime;
  * @since 2025-01-17
  */
 @Tag(name = "日志管理", description = "操作日志查询接口")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAuthority('security:event:read')")
 @RequestMapping("/logs")
 @RequiredArgsConstructor
 @RestController
@@ -78,7 +78,7 @@ public class OperationLogController {
     @PostMapping("/sync-to-es")
     public Result<Integer> syncToElasticsearch(Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        SecurityUtils.requireAdmin();
+        SecurityUtils.requireAuthority("security:event:read");
         int count = operationLogSearchService.syncAllFromDatabase();
         return Result.success("同步完成，共同步 " + count + " 条记录", count);
     }

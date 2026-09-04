@@ -125,7 +125,7 @@ export const useVariableStore = defineStore('variable', () => {
         color.includes('#409eff') ||
         color.includes('#667eea') ||
         color.includes('#5bc0de') ||
-        color.includes('var(--color-primary)')
+        color.includes('var(--brand-primary)')
       ) return 'primary'
     }
 
@@ -135,7 +135,7 @@ export const useVariableStore = defineStore('variable', () => {
   // 根据类型和值获取变量颜色
   const getVariableColor = (type, value) => {
     const variable = getVariableByTypeAndValue(type, value)
-    return variable ? variable.color : '#909399'
+    return variable?.color || ''
   }
 
   // 根据类型和值获取变量图标

@@ -13,9 +13,9 @@ public interface ApiKeyService {
      * 
      * @param userId 用户ID
      * @param type 开通类型：1-自己开通 2-给下级开通
-     * @param targetUserId 目标用户ID（给下级开通时）
+     * @param targetUserUid 目标用户 UUID（给下级开通时）
      * @return API密钥
      */
-    String enableApiKey(Long userId, Integer type, Long targetUserId);
+    String enableApiKey(Long userId, Integer type, String targetUserUid);
 }
 

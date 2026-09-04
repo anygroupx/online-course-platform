@@ -15,23 +15,15 @@ import java.time.LocalDateTime;
 public class CustomerServiceMessageVO {
 
     /**
-     * 消息ID
-     */
-    private Long id;
-
-    /**
      * 会话ID
      */
     private String sessionId;
 
     /**
-     * 发送者ID
-     */
-    private Long senderId;
-
-    /**
      * 发送者名称
      */
+    private String senderUid;
+
     private String senderName;
 
     /**

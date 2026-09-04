@@ -24,9 +24,9 @@ public class Constants {
     public static final String TOKEN_HEADER = "Authorization";
 
     /**
-     * 用户ID键
+     * 对外用户 UUID 键
      */
-    public static final String USER_ID_KEY = "userId";
+    public static final String USER_UID_KEY = "uid";
 
     /**
      * 用户名键
@@ -99,6 +99,11 @@ public class Constants {
     public static final int ORDER_STATUS_EXAM_COMPLETED = 7;
 
     /**
+     * 订单状态 - 等待退款
+     */
+    public static final int ORDER_STATUS_REFUND_PENDING = 8;
+
+    /**
      * 对接状态 - 待对接
      */
     public static final int DOCK_STATUS_PENDING = 0;
@@ -136,7 +141,6 @@ public class Constants {
     /**
      * 默认管理员ID
      */
-    public static final Long DEFAULT_ADMIN_ID = 1L;
 
     /**
      * 根代理父ID

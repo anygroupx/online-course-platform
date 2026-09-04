@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
  * @since 2025-12-20
  */
 @Slf4j
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAuthority('order:update')")
 @RestController
 @RequestMapping("/admin/aqks")
 @RequiredArgsConstructor

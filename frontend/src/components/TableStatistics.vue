@@ -136,7 +136,7 @@ const formatValue = (value) => {
 }
 
 .stat-icon.primary {
-  color: var(--color-primary);
+  color: var(--brand-primary);
 }
 
 .stat-icon.success {
