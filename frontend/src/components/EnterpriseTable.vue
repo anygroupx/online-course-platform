@@ -622,6 +622,8 @@ defineExpose({
 <style scoped>
 .enterprise-table {
   width: 100%;
+  /* 激活下方组件级容器查询，使卡片布局由可用宽度而非设备宽度决定。 */
+  container-type: inline-size;
 }
 
 .desktop-table {
@@ -751,15 +753,24 @@ defineExpose({
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  min-width: 0;
   margin-bottom: 12px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border-color-light);
 }
 
 .card-title {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.card-header :deep(.el-tag) {
+  flex: 0 0 auto;
 }
 
 .card-body {
