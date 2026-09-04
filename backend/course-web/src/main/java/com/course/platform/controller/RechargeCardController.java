@@ -5,6 +5,7 @@ import com.course.platform.common.result.Result;
 import com.course.platform.domain.dto.CardQueryRequest;
 import com.course.platform.domain.dto.CardRechargeRequest;
 import com.course.platform.domain.dto.GenerateCardRequest;
+import com.course.platform.domain.dto.IssuedRechargeCard;
 import com.course.platform.domain.entity.RechargeCard;
 import com.course.platform.application.service.payment.RechargeCardService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,6 +13,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -37,11 +41,16 @@ public class RechargeCardController {
      */
     @Operation(summary = "生成充值卡密", description = "管理员生成充值卡密")
     @PostMapping("/generate")
-    public Result<List<RechargeCard>> generateCards(@Valid @RequestBody GenerateCardRequest request,
+    @PreAuthorize("hasAuthority('payment:config')")
+    public ResponseEntity<Result<List<IssuedRechargeCard>>> generateCards(
+                                                    @Valid @RequestBody GenerateCardRequest request,
                                                     Authentication authentication) {
         Long operatorId = (Long) authentication.getPrincipal();
-        List<RechargeCard> cards = rechargeCardService.generateCards(request, operatorId);
-        return Result.success("卡密生成成功", cards);
+        List<IssuedRechargeCard> cards = rechargeCardService.generateCards(request, operatorId);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .header("Pragma", "no-cache")
+                .body(Result.success("卡密生成成功（卡密仅显示一次）", cards));
     }
 
     /**
@@ -49,11 +58,14 @@ public class RechargeCardController {
      */
     @Operation(summary = "查询充值卡密列表", description = "分页查询充值卡密列表")
     @GetMapping
+    @PreAuthorize("hasAuthority('payment:read')")
     public Result<IPage<RechargeCard>> queryCards(@RequestParam(required = false) String cardNo,
                                                   @RequestParam(required = false) Integer status,
                                                   @RequestParam(required = false) Long usedBy,
                                                   @RequestParam(defaultValue = "1") Integer page,
                                                   @RequestParam(defaultValue = "10") Integer pageSize) {
+        page = Math.max(1, page);
+        pageSize = Math.max(1, Math.min(100, pageSize));
         CardQueryRequest request = new CardQueryRequest();
         request.setCardNo(cardNo);
         request.setStatus(status);
@@ -68,6 +80,7 @@ public class RechargeCardController {
      */
     @Operation(summary = "获取卡密详情", description = "根据ID获取卡密详细信息")
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('payment:read')")
     public Result<RechargeCard> getCard(@PathVariable Long id) {
         RechargeCard card = rechargeCardService.getCardById(id);
         return Result.success(card);
@@ -78,6 +91,7 @@ public class RechargeCardController {
      */
     @Operation(summary = "禁用卡密", description = "禁用指定的充值卡密")
     @PostMapping("/{id}/disable")
+    @PreAuthorize("hasAuthority('payment:config')")
     public Result<Void> disableCard(@PathVariable Long id,
                                     Authentication authentication) {
         Long operatorId = (Long) authentication.getPrincipal();

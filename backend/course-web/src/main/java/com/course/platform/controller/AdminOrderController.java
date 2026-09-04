@@ -78,7 +78,8 @@ public class AdminOrderController {
     private final OrderCountdownService orderCountdownService;
     private final CountdownConfigService countdownConfigService;
     private final CountdownHistoryService countdownHistoryService;
-    private  final OrderExportService orderExportService;
+    private final OrderExportService orderExportService;
+    private final com.course.platform.service.impl.AccountLedgerServiceImpl accountLedgerService;
 
     /**
      * 订单状态常量获取辅助方法
@@ -388,115 +389,100 @@ public class AdminOrderController {
     }
 
     /**
-     * 管理员删除订单
+     * 管理员归档订单（保留金融审计证据）
      */
-    @Operation(summary = "删除订单", description = "管理员删除订单")
+    @Operation(summary = "归档订单", description = "管理员逻辑归档订单")
     @DeleteMapping("/{orderId}")
     @Transactional(rollbackFor = Exception.class)
     public Result<Void> deleteOrder(@PathVariable Long orderId,
                                     @RequestParam(required = false) String reason,
                                     Authentication authentication) {
-        Long userId = (Long) authentication.getPrincipal();
-        checkAdmin(userId);
+        Long operatorId = (Long) authentication.getPrincipal();
+        checkAdmin(operatorId);
 
-        // 1. 查询订单是否存在
         CourseOrder order = courseOrderMapper.selectById(orderId);
         if (order == null) {
             throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
         }
-
-        // 2. 检查订单状态，只有特定状态的订单才能删除
         if (order.getOrderStatus() == getOrderStatus("processing")) {
-            throw new BusinessException("进行中的订单不能删除，请先取消订单");
+            throw new BusinessException("进行中的订单不能归档，请先取消订单");
         }
 
-        // 3. 如果订单已完成，需要退回余额
-        if (order.getOrderStatus() == getOrderStatus("completed")) {
-            User user = userMapper.selectById(order.getUserId());
-            if (user != null) {
-                user.setBalance(user.getBalance().add(order.getAmount()));
-                userMapper.updateById(user);
-
-                // 记录余额退回日志
-                operationLogService.log(order.getUserId(), "订单删除退回",
-                        String.format("管理员删除订单退回：%s，金额：%s元", order.getOrderNo(), order.getAmount()),
-                        order.getAmount(), user.getBalance());
-            }
+        refundCompletedOrderForArchive(order, "管理员归档订单退款");
+        if (courseOrderMapper.deleteById(orderId) != 1) {
+            throw new BusinessException("订单归档失败");
         }
 
-        // 4. 删除订单
-        courseOrderMapper.deleteById(orderId);
-
-        // 5. 记录操作日志
-        operationLogService.log(userId, "删除订单",
-                String.format("管理员删除订单：%s，原因：%s", order.getOrderNo(),
+        operationLogService.log(operatorId, "归档订单",
+                String.format("管理员归档订单：%s，原因：%s", order.getOrderNo(),
                         reason != null ? reason : "无"),
                 BigDecimal.ZERO, null);
-
-        log.info("管理员删除订单成功：orderId={}, operatorId={}, reason={}", orderId, userId, reason);
-
-        return Result.success("订单删除成功");
+        log.info("管理员归档订单成功：orderId={}, operatorId={}, reason={}", orderId, operatorId, reason);
+        return Result.success("订单已归档");
     }
 
     /**
-     * 管理员批量删除订单
+     * 管理员批量归档订单。任一资金步骤失败时整批回滚，禁止部分提交。
      */
-    @Operation(summary = "批量删除订单", description = "管理员批量删除订单")
+    @Operation(summary = "批量归档订单", description = "管理员批量逻辑归档订单")
     @DeleteMapping("/batch-delete")
     @Transactional(rollbackFor = Exception.class)
     public Result<Void> batchDeleteOrders(@RequestBody List<Long> orderIds,
-                                           @RequestParam(required = false) String reason,
-                                           Authentication authentication) {
-        Long userId = (Long) authentication.getPrincipal();
-        checkAdmin(userId);
+                                          @RequestParam(required = false) String reason,
+                                          Authentication authentication) {
+        Long operatorId = (Long) authentication.getPrincipal();
+        checkAdmin(operatorId);
+        if (orderIds == null || orderIds.isEmpty() || orderIds.size() > 100) {
+            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "每次须选择1到100个订单");
+        }
 
-        int successCount = 0;
+        List<CourseOrder> orders = new ArrayList<>();
+        for (Long orderId : orderIds.stream().distinct().toList()) {
+            CourseOrder order = courseOrderMapper.selectById(orderId);
+            if (order == null) {
+                throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
+            }
+            if (order.getOrderStatus() == getOrderStatus("processing")) {
+                throw new BusinessException("进行中的订单不能归档：" + order.getOrderNo());
+            }
+            orders.add(order);
+        }
+
         BigDecimal totalRefund = BigDecimal.ZERO;
-
-        for (Long orderId : orderIds) {
-            try {
-                CourseOrder order = courseOrderMapper.selectById(orderId);
-                if (order != null) {
-                    // 检查订单状态
-                    if (order.getOrderStatus() == getOrderStatus("processing")) {
-                        log.warn("跳过进行中的订单：orderId={}", orderId);
-                        continue;
-                    }
-
-                    // 如果订单已完成，退回余额
-                    if (order.getOrderStatus() == getOrderStatus("completed")) {
-                        User user = userMapper.selectById(order.getUserId());
-                        if (user != null) {
-                            user.setBalance(user.getBalance().add(order.getAmount()));
-                            userMapper.updateById(user);
-                            totalRefund = totalRefund.add(order.getAmount());
-
-                            // 记录余额退回日志
-                            operationLogService.log(order.getUserId(), "批量删除订单退回",
-                                    String.format("管理员批量删除订单退回：%s，金额：%s元", order.getOrderNo(), order.getAmount()),
-                                    order.getAmount(), user.getBalance());
-                        }
-                    }
-
-                    // 删除订单
-                    courseOrderMapper.deleteById(orderId);
-                    successCount++;
-                }
-            } catch (Exception e) {
-                log.error("批量删除订单失败：orderId={}, error={}", orderId, e.getMessage());
+        for (CourseOrder order : orders) {
+            if (order.getOrderStatus() == getOrderStatus("completed")) {
+                refundCompletedOrderForArchive(order, "管理员批量归档订单退款");
+                totalRefund = totalRefund.add(order.getAmount());
+            }
+            if (courseOrderMapper.deleteById(order.getId()) != 1) {
+                throw new BusinessException("订单归档失败：" + order.getOrderNo());
             }
         }
 
-        // 记录操作日志
-        operationLogService.log(userId, "批量删除订单",
-                String.format("批量删除订单：成功%d/%d，退回金额：%s元，原因：%s",
-                        successCount, orderIds.size(), totalRefund,
-                        reason != null ? reason : "无"),
+        operationLogService.log(operatorId, "批量归档订单",
+                String.format("批量归档订单：成功%d/%d，退回金额：%s元，原因：%s",
+                        orders.size(), orderIds.size(), totalRefund, reason != null ? reason : "无"),
                 BigDecimal.ZERO, null);
+        log.info("管理员批量归档订单完成：count={}, operatorId={}", orders.size(), operatorId);
+        return Result.success(String.format("批量归档完成，成功归档%d个订单", orders.size()));
+    }
 
-        log.info("管理员批量删除订单完成：successCount={}/{}, operatorId={}", successCount, orderIds.size(), userId);
-
-        return Result.success(String.format("批量删除完成，成功删除%d个订单", successCount));
+    private void refundCompletedOrderForArchive(CourseOrder order, String operationType) {
+        if (order.getOrderStatus() != getOrderStatus("completed")) {
+            return;
+        }
+        accountLedgerService.credit(
+                order.getUserId(),
+                order.getAmount(),
+                com.course.platform.service.impl.AccountLedgerServiceImpl.BIZ_REFUND,
+                order.getOrderNo(),
+                operationType + "：" + order.getOrderNo(),
+                false
+        );
+        User latestUser = userMapper.selectById(order.getUserId());
+        operationLogService.log(order.getUserId(), operationType,
+                String.format("订单：%s，金额：%s元", order.getOrderNo(), order.getAmount()),
+                order.getAmount(), latestUser == null ? null : latestUser.getBalance());
     }
 
     /**

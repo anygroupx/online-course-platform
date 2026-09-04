@@ -41,7 +41,6 @@
     <el-card class="table-card">
       <el-table :data="tableData" v-loading="loading" stripe>
         <el-table-column prop="cardNo" label="卡号" width="200" />
-        <el-table-column prop="cardPassword" label="卡密" width="120" />
         <el-table-column prop="amount" label="面额" width="100">
           <template #default="{ row }">
             <span class="amount">¥{{ row.amount }}</span>
@@ -150,10 +149,11 @@
       title="生成结果"
       width="600px"
       append-to-body
+      @closed="generatedCards = []"
     >
       <div class="result-content">
         <el-alert
-          title="卡密生成成功"
+          title="卡密仅显示一次，请立即安全保存；关闭后无法再次查询"
           type="success"
           :closable="false"
           style="margin-bottom: 20px"

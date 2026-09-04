@@ -8,17 +8,16 @@ import com.alipay.api.domain.*;
 import com.alipay.api.internal.util.AlipaySignature;
 import com.alipay.api.request.*;
 import com.alipay.api.response.*;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.course.platform.common.exception.BusinessException;
+import com.course.platform.common.result.ResultCode;
 import com.course.platform.config.AlipayClientFactory;
 import com.course.platform.domain.dto.CreatePaymentRequest;
 import com.course.platform.domain.dto.PaymentOrderResponse;
 import com.course.platform.domain.entity.PaymentConfig;
 import com.course.platform.domain.entity.PaymentNotifyLog;
 import com.course.platform.domain.entity.PaymentOrder;
-import com.course.platform.domain.entity.User;
 import com.course.platform.infra.persistence.mapper.PaymentNotifyLogMapper;
 import com.course.platform.infra.persistence.mapper.PaymentOrderMapper;
-import com.course.platform.infra.persistence.mapper.UserMapper;
 import com.course.platform.application.service.payment.AlipayService;
 import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.application.service.system.SystemConfigService;
@@ -26,11 +25,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 支付宝支付服务实现类
@@ -52,9 +54,6 @@ public class AlipayServiceImpl implements AlipayService {
     private PaymentNotifyLogMapper paymentNotifyLogMapper;
 
     @Autowired
-    private UserMapper userMapper;
-
-    @Autowired
     private SystemConfigService systemConfigService;
 
     @Autowired
@@ -66,7 +65,13 @@ public class AlipayServiceImpl implements AlipayService {
     @Autowired
     private SecurityAuditService securityAuditService;
 
-    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
+    private static final Set<String> NOTIFY_LOG_ALLOWLIST = Set.of(
+            "notify_id", "notify_type", "notify_time", "app_id", "out_trade_no",
+            "trade_no", "trade_status", "total_amount", "receipt_amount", "seller_id"
+    );
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -99,7 +104,8 @@ public class AlipayServiceImpl implements AlipayService {
 
         // 设置回调地址
         PaymentConfig config = alipayClientFactory.getCurrentConfig();
-        order.setReturnUrl(request.getReturnUrl() != null ? request.getReturnUrl() : config.getReturnUrl());
+        // 回调地址只能来自服务端可信配置，禁止客户端覆盖形成开放重定向。
+        order.setReturnUrl(config.getReturnUrl());
         order.setNotifyUrl(config.getNotifyUrl());
 
         paymentOrderMapper.insert(order);
@@ -188,236 +194,289 @@ public class AlipayServiceImpl implements AlipayService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public String handleNotify(Map<String, String> params, String requestIp) {
-        // 1. 记录通知日志
-        PaymentNotifyLog log = new PaymentNotifyLog();
-        log.setOrderNo(params.get("out_trade_no"));
-        log.setAlipayTradeNo(params.get("trade_no"));
-        log.setNotifyParams(JSONUtil.toJsonStr(params));
-        log.setNotifyType(params.get("notify_type"));
-        log.setTradeStatus(params.get("trade_status"));
-        log.setRequestIp(requestIp);
-        log.setRequestTime(LocalDateTime.now());
-
+        PaymentNotifyLog notifyLog = buildNotifyLog(params, requestIp);
         try {
-            // 2. 验证签名
-            PaymentConfig config = alipayClientFactory.getCurrentConfig();
+            PaymentConfig config = requirePaymentConfig();
             boolean signVerified = AlipaySignature.rsaCheckV1(
-                params,
-                config.getAlipayPublicKey(),
-                config.getCharset(),
-                config.getSignType()
+                    params,
+                    config.getAlipayPublicKey(),
+                    config.getCharset(),
+                    config.getSignType()
             );
-
-            log.setVerifyResult(signVerified ? 1 : 0);
-            log.setVerifyMessage(signVerified ? "签名验证成功" : "签名验证失败");
-
+            notifyLog.setVerifyResult(signVerified ? 1 : 0);
+            notifyLog.setVerifyMessage(signVerified ? "签名验证成功" : "签名验证失败");
             if (!signVerified) {
-                log.setProcessStatus(2);
-                log.setProcessMessage("签名验证失败");
-                log.setResponseContent("fail");
-                paymentNotifyLogMapper.insert(log);
-                securityAuditService.record("PAYMENT_CALLBACK", "CRITICAL", null, null,
-                        "/payment/notify", "POST", "支付宝回调签名验证失败",
-                        "orderNo=" + params.get("out_trade_no") + ",ip=" + requestIp);
-                return "fail";
+                recordCallbackSecurityEvent(null, params.get("out_trade_no"), requestIp, "支付宝回调签名验证失败");
+                return finishNotify(notifyLog, false, "签名验证失败");
             }
 
-            // 3. 查询订单
-            String orderNo = params.get("out_trade_no");
-            PaymentOrder order = paymentOrderMapper.selectOne(
-                new LambdaQueryWrapper<PaymentOrder>()
-                    .eq(PaymentOrder::getOrderNo, orderNo)
-            );
+            String orderNo = requireCallbackField(params, "out_trade_no");
+            String tradeNo = requireCallbackField(params, "trade_no");
+            String appId = requireCallbackField(params, "app_id");
+            requireCallbackField(params, "total_amount");
+            String tradeStatus = requireCallbackField(params, "trade_status");
 
-            if (order == null) {
-                log.setProcessStatus(2);
-                log.setProcessMessage("订单不存在");
-                log.setResponseContent("fail");
-                paymentNotifyLogMapper.insert(log);
-                return "fail";
+            if (!config.getAppId().equals(appId)) {
+                recordCallbackSecurityEvent(null, orderNo, requestIp, "支付宝回调 app_id 不匹配");
+                return finishNotify(notifyLog, false, "应用标识不匹配");
             }
 
-            // 4. 检查订单状态(幂等性检查)
-            if ("PAID".equals(order.getStatus())) {
-                log.setProcessStatus(1);
-                log.setProcessMessage("订单已处理，重复通知");
-                log.setResponseContent("success");
-                log.setProcessTime(LocalDateTime.now());
-                paymentNotifyLogMapper.insert(log);
-                return "success";
+            if (!"TRADE_SUCCESS".equals(tradeStatus) && !"TRADE_FINISHED".equals(tradeStatus)) {
+                // 合法但非终态的通知无需改变资金；确认接收以避免无意义重试。
+                return finishNotify(notifyLog, true, "忽略非支付成功状态：" + safeText(tradeStatus, 32));
             }
 
-            // 5. 验证金额
-            BigDecimal notifyAmount = new BigDecimal(params.get("total_amount"));
-            if (order.getAmount().compareTo(notifyAmount) != 0) {
-                log.setProcessStatus(2);
-                log.setProcessMessage("金额不匹配");
-                log.setResponseContent("fail");
-                paymentNotifyLogMapper.insert(log);
-                securityAuditService.record("PAYMENT_CALLBACK", "CRITICAL", order.getUserId(), null,
-                        "/payment/notify", "POST", "支付宝回调金额不匹配",
-                        "orderNo=" + orderNo + ", expect=" + order.getAmount() + ", actual=" + notifyAmount);
-                return "fail";
-            }
-
-            // 6. 处理交易状态
-            String tradeStatus = params.get("trade_status");
-            if ("TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus)) {
-                boolean credited = markPaidAndCredit(
-                        order,
-                        params.get("trade_no"),
-                        params.get("buyer_logon_id"),
-                        params.get("buyer_user_id")
-                );
-                log.setProcessStatus(1);
-                log.setProcessMessage(credited ? "支付成功，余额已更新" : "支付成功（重复通知，未重复入账）");
-                log.setProcessTime(LocalDateTime.now());
-            } else {
-                log.setProcessStatus(2);
-                log.setProcessMessage("交易状态：" + tradeStatus);
-            }
-
-            log.setResponseContent("success");
-            paymentNotifyLogMapper.insert(log);
-            return "success";
-
+            TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+            Boolean credited = transaction.execute(status -> processVerifiedPayment(
+                    orderNo,
+                    tradeNo,
+                    parseAmount(params.get("total_amount")),
+                    params.get("buyer_logon_id"),
+                    params.get("buyer_user_id")
+            ));
+            return finishNotify(notifyLog, true,
+                    Boolean.TRUE.equals(credited) ? "支付成功，余额已更新" : "重复通知，未重复入账");
         } catch (Exception e) {
-            this.log.error("处理支付宝通知异常", e);
-            log.setProcessStatus(2);
-            log.setProcessMessage("处理异常：" + e.getMessage());
-            log.setResponseContent("fail");
-            paymentNotifyLogMapper.insert(log);
-            return "fail";
+            this.log.error("处理支付宝通知失败，订单号：{}", params.get("out_trade_no"), e);
+            recordCallbackSecurityEvent(null, params.get("out_trade_no"), requestIp, "支付宝回调验证或处理失败");
+            return finishNotify(notifyLog, false, "回调处理失败");
         }
+    }
+
+    boolean processVerifiedPayment(String orderNo, String tradeNo, BigDecimal notifyAmount,
+                                           String buyerLogonId, String buyerUserId) {
+        PaymentOrder order = paymentOrderMapper.selectByOrderNo(orderNo);
+        if (order == null) {
+            throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
+        }
+        if (order.getAmount() == null || order.getAmount().compareTo(notifyAmount) != 0) {
+            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "回调金额不匹配");
+        }
+        return markPaidAndCredit(order, tradeNo, buyerLogonId, buyerUserId);
+    }
+
+    private PaymentNotifyLog buildNotifyLog(Map<String, String> params, String requestIp) {
+        PaymentNotifyLog notifyLog = new PaymentNotifyLog();
+        notifyLog.setOrderNo(safeText(params.get("out_trade_no"), 64));
+        notifyLog.setAlipayTradeNo(safeText(params.get("trade_no"), 64));
+        notifyLog.setNotifyParams(JSONUtil.toJsonStr(sanitizedNotifyParams(params)));
+        notifyLog.setNotifyType(safeText(params.get("notify_type"), 50));
+        notifyLog.setTradeStatus(safeText(params.get("trade_status"), 50));
+        notifyLog.setRequestIp(safeText(requestIp, 50));
+        notifyLog.setRequestTime(LocalDateTime.now());
+        return notifyLog;
+    }
+
+    private Map<String, String> sanitizedNotifyParams(Map<String, String> params) {
+        Map<String, String> sanitized = new LinkedHashMap<>();
+        NOTIFY_LOG_ALLOWLIST.forEach(key -> {
+            String value = params.get(key);
+            if (value != null) {
+                sanitized.put(key, safeText(value, 256));
+            }
+        });
+        return sanitized;
+    }
+
+    private String finishNotify(PaymentNotifyLog notifyLog, boolean success, String message) {
+        notifyLog.setProcessStatus(success ? 1 : 2);
+        notifyLog.setProcessMessage(safeText(message, 255));
+        notifyLog.setProcessTime(LocalDateTime.now());
+        notifyLog.setResponseContent(success ? "success" : "fail");
+        try {
+            paymentNotifyLogMapper.insert(notifyLog);
+        } catch (Exception logError) {
+            log.error("支付通知审计日志写入失败，orderNo={}", notifyLog.getOrderNo(), logError);
+        }
+        return success ? "success" : "fail";
+    }
+
+    private void recordCallbackSecurityEvent(Long userId, String orderNo, String requestIp, String summary) {
+        try {
+            securityAuditService.record("PAYMENT_CALLBACK", "CRITICAL", userId, null,
+                    "/payment/notify", "POST", summary,
+                    "orderNo=" + safeText(orderNo, 64) + ",ip=" + safeText(requestIp, 50));
+        } catch (Exception auditError) {
+            log.error("支付回调安全事件写入失败", auditError);
+        }
+    }
+
+    private PaymentConfig requirePaymentConfig() {
+        PaymentConfig config = alipayClientFactory.getCurrentConfig();
+        if (config == null || config.getAppId() == null || config.getAppId().isBlank()) {
+            throw new IllegalStateException("支付配置不可用");
+        }
+        return config;
+    }
+
+    private String requireCallbackField(Map<String, String> params, String name) {
+        String value = params.get(name);
+        if (value == null || value.isBlank() || value.length() > 256) {
+            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "支付回调字段无效：" + name);
+        }
+        return value;
+    }
+
+    private BigDecimal parseAmount(String raw) {
+        try {
+            BigDecimal amount = new BigDecimal(raw);
+            if (amount.compareTo(BigDecimal.ZERO) <= 0 || amount.stripTrailingZeros().scale() > 2) {
+                throw new NumberFormatException("invalid monetary value");
+            }
+            return amount;
+        } catch (RuntimeException e) {
+            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "支付回调金额无效");
+        }
+    }
+
+    private String safeText(String value, int maxLength) {
+        if (value == null) {
+            return null;
+        }
+        String cleaned = value.replaceAll("[\r\n\t]", " ");
+        return cleaned.substring(0, Math.min(cleaned.length(), maxLength));
     }
 
     @Override
     public PaymentOrder handleReturn(Map<String, String> params) {
         try {
-            // 验证签名
-            PaymentConfig config = alipayClientFactory.getCurrentConfig();
+            PaymentConfig config = requirePaymentConfig();
             boolean signVerified = AlipaySignature.rsaCheckV1(
-                params,
-                config.getAlipayPublicKey(),
-                config.getCharset(),
-                config.getSignType()
+                    params,
+                    config.getAlipayPublicKey(),
+                    config.getCharset(),
+                    config.getSignType()
             );
-
             if (!signVerified) {
-                throw new RuntimeException("签名验证失败");
+                throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "签名验证失败");
             }
 
-            // 查询订单
-            String orderNo = params.get("out_trade_no");
-            return paymentOrderMapper.selectOne(
-                new LambdaQueryWrapper<PaymentOrder>()
-                    .eq(PaymentOrder::getOrderNo, orderNo)
-            );
+            String orderNo = requireCallbackField(params, "out_trade_no");
+            String tradeNo = requireCallbackField(params, "trade_no");
+            String appId = requireCallbackField(params, "app_id");
+            BigDecimal amount = parseAmount(requireCallbackField(params, "total_amount"));
+            if (!config.getAppId().equals(appId)) {
+                throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "应用标识不匹配");
+            }
 
+            PaymentOrder order = paymentOrderMapper.selectByOrderNo(orderNo);
+            if (order == null) {
+                throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
+            }
+            if (order.getAmount() == null || order.getAmount().compareTo(amount) != 0) {
+                throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "回调金额不匹配");
+            }
+            if (order.getAlipayTradeNo() != null && !order.getAlipayTradeNo().equals(tradeNo)) {
+                throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "交易号不匹配");
+            }
+            return order;
         } catch (AlipayApiException e) {
-            log.error("处理同步回调异常", e);
-            throw new RuntimeException("处理同步回调失败：" + e.getMessage());
+            log.error("处理同步回调验签异常", e);
+            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "同步回调验证失败");
         }
     }
 
     @Override
     public PaymentOrder queryPaymentStatus(String orderNo) {
-        return paymentOrderMapper.selectOne(
-            new LambdaQueryWrapper<PaymentOrder>()
-                .eq(PaymentOrder::getOrderNo, orderNo)
-        );
+        if (orderNo == null || orderNo.isBlank() || orderNo.length() > 64) {
+            return null;
+        }
+        return paymentOrderMapper.selectByOrderNo(orderNo);
     }
 
     @Override
     public boolean queryAlipayTradeStatus(String orderNo) {
+        AlipayTradeQueryResponse response = queryAlipayTrade(orderNo);
+        if (response == null || !response.isSuccess()) {
+            return false;
+        }
+        return isSuccessfulTradeStatus(response.getTradeStatus());
+    }
+
+    private AlipayTradeQueryResponse queryAlipayTrade(String orderNo) {
         try {
             AlipayClient client = alipayClientFactory.getClient();
-
+            if (client == null) {
+                return null;
+            }
             AlipayTradeQueryRequest request = new AlipayTradeQueryRequest();
             AlipayTradeQueryModel model = new AlipayTradeQueryModel();
             model.setOutTradeNo(orderNo);
             request.setBizModel(model);
-
-            AlipayTradeQueryResponse response = client.execute(request);
-
-            if (response.isSuccess()) {
-                String tradeStatus = response.getTradeStatus();
-                return "TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus);
-            }
-
-            return false;
-
+            return client.execute(request);
         } catch (AlipayApiException e) {
             log.error("查询支付宝交易状态失败，订单号：{}", orderNo, e);
-            return false;
+            return null;
         }
+    }
+
+    private boolean isSuccessfulTradeStatus(String tradeStatus) {
+        return "TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean closeOrder(String orderNo) {
-        PaymentOrder order = queryPaymentStatus(orderNo);
-
-        if (order == null || !"PENDING".equals(order.getStatus())) {
-            return false;
-        }
-
-        order.setStatus("CLOSED");
-        order.setCloseTime(LocalDateTime.now());
-        paymentOrderMapper.updateById(order);
-
-        return true;
+        return paymentOrderMapper.closeIfPending(orderNo, LocalDateTime.now()) == 1;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean refund(String orderNo, String refundReason) {
-        PaymentOrder order = queryPaymentStatus(orderNo);
-
-        if (order == null || !"PAID".equals(order.getStatus())) {
-            throw new RuntimeException("订单状态不正确，无法退款");
+        String reason = refundReason == null || refundReason.isBlank() ? "用户申请退款" : refundReason.trim();
+        if (reason.length() > 200) {
+            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "退款原因不能超过200个字符");
         }
 
+        int claimed = paymentOrderMapper.markRefundingIfPaid(orderNo, reason);
+        PaymentOrder order = paymentOrderMapper.selectByOrderNoForUpdate(orderNo);
+        if (claimed != 1) {
+            if (order != null && "REFUNDED".equals(order.getStatus())) {
+                return true;
+            }
+            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "订单状态不正确，无法退款");
+        }
+        if (order == null || !"REFUNDING".equals(order.getStatus())) {
+            throw new IllegalStateException("退款订单状态抢占失败");
+        }
+
+        // 先在同一事务内锁定并扣减余额，余额不足时绝不调用支付渠道。
+        updateUserBalance(order.getUserId(), order.getAmount().negate(), order.getId());
+
+        String outRequestNo = "REFUND-" + order.getOrderNo();
         try {
             AlipayClient client = alipayClientFactory.getClient();
-
             AlipayTradeRefundRequest request = new AlipayTradeRefundRequest();
             AlipayTradeRefundModel model = new AlipayTradeRefundModel();
             model.setOutTradeNo(orderNo);
-            model.setRefundAmount(order.getAmount().toString());
-            model.setRefundReason(refundReason != null ? refundReason : "用户申请退款");
+            model.setOutRequestNo(outRequestNo);
+            model.setRefundAmount(order.getAmount().toPlainString());
+            model.setRefundReason(reason);
             request.setBizModel(model);
 
             AlipayTradeRefundResponse response = client.execute(request);
-
-            if (response.isSuccess()) {
-                // 更新订单状态
-                order.setStatus("REFUNDED");
-                order.setRefundAmount(order.getAmount());
-                order.setRefundReason(refundReason);
-                order.setRefundTime(LocalDateTime.now());
-                paymentOrderMapper.updateById(order);
-
-                // 扣减用户余额
-                updateUserBalance(order.getUserId(), order.getAmount().negate(), order.getId());
-
-                return true;
+            if (response == null || !response.isSuccess()) {
+                String providerMessage = response == null ? "empty response" : safeText(response.getSubMsg(), 120);
+                throw new BusinessException(ResultCode.ERROR.getCode(), "支付渠道退款失败：" + providerMessage);
             }
-
-            return false;
-
         } catch (AlipayApiException e) {
-            log.error("退款失败，订单号：{}", orderNo, e);
-            throw new RuntimeException("退款失败：" + e.getMessage());
+            log.error("退款调用失败，订单号：{}", orderNo, e);
+            throw new BusinessException(ResultCode.ERROR.getCode(), "支付渠道退款调用失败");
         }
+
+        if (paymentOrderMapper.markRefundedIfRefunding(orderNo, reason, LocalDateTime.now()) != 1) {
+            throw new IllegalStateException("退款状态更新失败");
+        }
+        recordPaymentEvent(orderNo, "REFUND", outRequestNo);
+        return true;
     }
 
-    /**
-     * 更新用户余额（原子 + 账本）
-     */
+    /** 更新用户余额（原子账户锁 + 账本）。 */
     private void updateUserBalance(Long userId, BigDecimal amount, Long paymentOrderId) {
+        if (paymentOrderId == null) {
+            throw new IllegalStateException("支付订单ID缺失");
+        }
         String bizNo = String.valueOf(paymentOrderId);
         if (amount.compareTo(BigDecimal.ZERO) > 0) {
             accountLedgerService.credit(userId, amount, AccountLedgerServiceImpl.BIZ_PAYMENT, bizNo,
@@ -428,59 +487,72 @@ public class AlipayServiceImpl implements AlipayService {
         }
     }
 
-    /**
-     * 条件更新订单为已支付并入账，返回是否由本线程完成入账
-     */
+    /** 条件更新订单为已支付并入账，返回本事务是否首次完成入账。 */
     private boolean markPaidAndCredit(PaymentOrder order, String alipayTradeNo,
                                       String buyerLogonId, String buyerUserId) {
+        if (alipayTradeNo == null || alipayTradeNo.isBlank() || alipayTradeNo.length() > 64) {
+            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "支付宝交易号无效");
+        }
         int updated = paymentOrderMapper.markPaidIfPending(
                 order.getOrderNo(),
                 alipayTradeNo,
-                buyerLogonId,
-                buyerUserId,
+                safeText(buyerLogonId, 100),
+                safeText(buyerUserId, 32),
                 LocalDateTime.now()
         );
         if (updated != 1) {
-            // 可能是并发回调/主动同步：若已是 PAID，仍需确保账本入账（幂等）
-            PaymentOrder latest = paymentOrderMapper.selectById(order.getId());
-            if (latest == null || !"PAID".equals(latest.getStatus())) {
-                log.info("支付订单非待支付且未完成，跳过入账：{}", order.getOrderNo());
-                return false;
+            PaymentOrder latest = paymentOrderMapper.selectByOrderNoForUpdate(order.getOrderNo());
+            if (latest == null
+                    || !("PAID".equals(latest.getStatus())
+                    || "REFUNDING".equals(latest.getStatus())
+                    || "REFUNDED".equals(latest.getStatus()))
+                    || !alipayTradeNo.equals(latest.getAlipayTradeNo())) {
+                throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "支付订单状态或交易号冲突");
             }
-            order = latest;
-            log.info("支付订单已标记支付，执行账本幂等补齐：{}", order.getOrderNo());
+            // affectedRows != 1 即 replay；严格禁止进入 credit 路径。
+            return false;
         }
-        // 支付事件审计（唯一键幂等，失败不阻断入账）
-        try {
-            com.course.platform.domain.entity.PaymentEvent event = new com.course.platform.domain.entity.PaymentEvent();
-            event.setOrderNo(order.getOrderNo());
-            event.setEventType("PAID");
-            event.setProviderEventId(alipayTradeNo);
-            paymentEventMapper.insert(event);
-        } catch (Exception e) {
-            log.info("支付事件已存在：{}", order.getOrderNo());
-        }
-        // 账本唯一键保证余额只加一次
+
+        recordPaymentEvent(order.getOrderNo(), "PAID", alipayTradeNo);
         updateUserBalance(order.getUserId(), order.getAmount(), order.getId());
         return true;
     }
 
-    /**
-     * 主动同步：查询支付宝成功后安全入账
-     */
+    private void recordPaymentEvent(String orderNo, String eventType, String providerEventId) {
+        com.course.platform.domain.entity.PaymentEvent event = new com.course.platform.domain.entity.PaymentEvent();
+        event.setOrderNo(orderNo);
+        event.setEventType(eventType);
+        event.setProviderEventId(providerEventId);
+        if (paymentEventMapper.insert(event) != 1) {
+            throw new IllegalStateException("支付事件写入失败");
+        }
+    }
+
+    /** 主动同步：渠道查询结果也必须校验金额和第三方交易号。 */
     @Transactional(rollbackFor = Exception.class)
     public boolean syncPaidOrder(String orderNo) {
         PaymentOrder order = queryPaymentStatus(orderNo);
         if (order == null) {
             return false;
         }
-        if ("PAID".equals(order.getStatus())) {
+        if ("PAID".equals(order.getStatus()) || "REFUNDING".equals(order.getStatus())
+                || "REFUNDED".equals(order.getStatus())) {
             return true;
         }
-        if (!queryAlipayTradeStatus(orderNo)) {
+        if (!"PENDING".equals(order.getStatus())) {
             return false;
         }
-        return markPaidAndCredit(order, order.getAlipayTradeNo(), order.getBuyerLogonId(), order.getBuyerUserId());
+
+        AlipayTradeQueryResponse response = queryAlipayTrade(orderNo);
+        if (response == null || !response.isSuccess() || !isSuccessfulTradeStatus(response.getTradeStatus())) {
+            return false;
+        }
+        String tradeNo = response.getTradeNo();
+        BigDecimal providerAmount = parseAmount(response.getTotalAmount());
+        if (order.getAmount().compareTo(providerAmount) != 0) {
+            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "渠道查询金额不匹配");
+        }
+        return markPaidAndCredit(order, tradeNo, response.getBuyerLogonId(), response.getBuyerUserId());
     }
 
     /**

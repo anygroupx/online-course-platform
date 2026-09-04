@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.course.platform.domain.dto.CardQueryRequest;
 import com.course.platform.domain.dto.CardRechargeRequest;
 import com.course.platform.domain.dto.GenerateCardRequest;
+import com.course.platform.domain.dto.IssuedRechargeCard;
 import com.course.platform.domain.entity.RechargeCard;
 
 import java.util.List;
@@ -24,7 +25,7 @@ public interface RechargeCardService {
      * @param operatorId 操作人ID
      * @return 生成的卡密列表
      */
-    List<RechargeCard> generateCards(GenerateCardRequest request, Long operatorId);
+    List<IssuedRechargeCard> generateCards(GenerateCardRequest request, Long operatorId);
 
     /**
      * 分页查询充值卡密

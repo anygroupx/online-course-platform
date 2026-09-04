@@ -143,12 +143,12 @@ public class ApiKeyServiceImpl implements ApiKeyService {
             plain = IdUtil.simpleUUID();
         }
         String prefix = plain.length() >= 8 ? plain.substring(0, 8) : plain;
-        user.setApiKey(null); // 不再保存明文
-        user.setApiKeyHash(TokenHashUtil.sha256(plain));
-        user.setApiKeyPrefix(prefix);
-        user.setApiKeyScopes("balance:read,orders:read,orders:write,platforms:read");
-        user.setApiKeyExpireTime(LocalDateTime.now().plusYears(1));
-        userMapper.updateById(user);
+        String hash = TokenHashUtil.sha256(plain);
+        String scopes = "balance:read,orders:read,orders:write,platforms:read";
+        LocalDateTime expiresAt = LocalDateTime.now().plusYears(1);
+        if (userMapper.updateApiKey(user.getId(), hash, prefix, scopes, expiresAt) != 1) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
         log.info("API Key 已生成并哈希存储：userId={}, prefix={}, source={}", user.getId(), prefix, source);
     }
 }

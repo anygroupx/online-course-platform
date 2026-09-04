@@ -8,6 +8,9 @@ import com.course.platform.infra.persistence.mapper.PaymentOrderMapper;
 import com.course.platform.infra.persistence.mapper.UserMapper;
 import com.course.platform.controller.PaymentController;
 import com.course.platform.controller.RbacAdminController;
+import com.course.platform.controller.RechargeCardController;
+import com.course.platform.application.service.payment.RechargeCardService;
+import com.course.platform.domain.dto.GenerateCardRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,11 +48,16 @@ class MethodSecurityEnforcementTest {
         @Bean PaymentOrderMapper paymentOrderMapper() { return mock(PaymentOrderMapper.class); }
         @Bean OperationLogMapper operationLogMapper() { return mock(OperationLogMapper.class); }
         @Bean PaymentController paymentController() { return new PaymentController(); }
+        @Bean RechargeCardService rechargeCardService() { return mock(RechargeCardService.class); }
+        @Bean RechargeCardController rechargeCardController(RechargeCardService service) {
+            return new RechargeCardController(service);
+        }
     }
 
     @Autowired RbacAdminController rbacController;
     @Autowired RbacAdministrationService rbacService;
     @Autowired PaymentController paymentController;
+    @Autowired RechargeCardController rechargeCardController;
 
     @AfterEach
     void clear() { SecurityContextHolder.clearContext(); }
@@ -79,5 +87,17 @@ class MethodSecurityEnforcementTest {
         var authentication = authenticate(SecurityAuthorities.PAYMENT_READ);
         assertThrows(AccessDeniedException.class,
                 () -> paymentController.refund("ORDER-1", "reason", authentication));
+    }
+
+    @Test
+    void ordinaryUserCannotGenerateOrListRechargeCardSecrets() {
+        var authentication = authenticate(SecurityAuthorities.ROLE_USER);
+        GenerateCardRequest request = new GenerateCardRequest();
+        request.setCount(1);
+        request.setAmount(java.math.BigDecimal.TEN);
+        assertThrows(AccessDeniedException.class,
+                () -> rechargeCardController.generateCards(request, authentication));
+        assertThrows(AccessDeniedException.class,
+                () -> rechargeCardController.queryCards(null, null, null, 1, 10));
     }
 }

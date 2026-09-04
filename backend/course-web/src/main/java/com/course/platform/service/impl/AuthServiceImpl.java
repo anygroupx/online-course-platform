@@ -82,7 +82,10 @@ public class AuthServiceImpl implements AuthService {
         } catch (Exception e) {
             user.setLastLoginIp("127.0.0.1");
         }
-        userMapper.updateById(user);
+        if (userMapper.updateLoginMetadata(user.getId(), user.getLastLoginTime(), user.getLastLoginIp(),
+                defaultPassword ? 1 : 0) != 1) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
 
         String role = resolveRole(user);
         boolean mustChange = user.getMustChangePassword() != null && user.getMustChangePassword() == 1;

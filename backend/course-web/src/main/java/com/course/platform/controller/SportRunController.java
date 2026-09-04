@@ -3,6 +3,7 @@ package com.course.platform.controller;
 import com.course.platform.common.result.Result;
 import com.course.platform.domain.dto.PageQueryDTO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -16,6 +17,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/sport-run")
 @RequiredArgsConstructor
+@PreAuthorize("denyAll()")
 public class SportRunController {
     
     /**
