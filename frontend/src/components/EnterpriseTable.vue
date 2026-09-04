@@ -869,11 +869,22 @@ defineExpose({
 
   .card-actions,
   .card-actions :deep(.action-buttons) {
-    justify-content: stretch;
+    inline-size: 100%;
+    justify-content: flex-end;
   }
 
   .card-actions :deep(.el-button) {
     flex: 1 1 auto;
+  }
+
+  /* 默认下拉操作在窄卡片中占满整行，保持触控目标与自定义操作区一致。 */
+  .card-actions :deep(.el-dropdown),
+  .card-actions :deep(.el-dropdown .el-button) {
+    inline-size: 100%;
+  }
+
+  .card-actions :deep(.el-dropdown .el-button) {
+    justify-content: center;
   }
 }
 </style>
