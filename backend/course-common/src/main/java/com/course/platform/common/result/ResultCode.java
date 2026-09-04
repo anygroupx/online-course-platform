@@ -42,6 +42,7 @@ public enum ResultCode {
     HUMAN_VERIFICATION_FAILED(-115, "人机验证失败，请重试"),
     HUMAN_VERIFICATION_UNAVAILABLE(-116, "人机验证服务暂不可用，请稍后重试"),
     REFRESH_TOKEN_REUSE(-117, "会话已失效，请重新登录"),
+    RATE_LIMIT_UNAVAILABLE(-118, "安全限流服务暂不可用，请稍后重试"),
 
     // 业务错误 (-200 ~ -299)
     BALANCE_INSUFFICIENT(-200, "余额不足"),
