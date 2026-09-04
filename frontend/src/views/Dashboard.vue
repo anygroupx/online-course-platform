@@ -235,7 +235,10 @@
       v-model="announcementDialogVisible"
       :title="selectedAnnouncement?.title || '公告详情'"
       width="560px"
+      class="announcement-detail-dialog"
       :close-on-click-modal="true"
+      append-to-body
+      align-center
     >
       <div v-if="selectedAnnouncement" class="announcement-dialog">
         <div class="announcement-dialog-meta">
@@ -1110,6 +1113,15 @@ button.content-panel:hover,
   line-height: 1.85;
   color: var(--text-regular);
   white-space: pre-wrap;
+}
+
+/* 公告详情脱离首页的 3D 容器，并在各视口保持紧凑、安全的可读宽度。 */
+:global(.announcement-detail-dialog) {
+  inline-size: min(
+    560px,
+    calc(100vw - var(--safe-area-left) - var(--safe-area-right) - 24px)
+  ) !important;
+  margin-block: max(12px, var(--safe-area-top)) max(12px, var(--safe-area-bottom));
 }
 
 @media (max-width: 1280px) {
