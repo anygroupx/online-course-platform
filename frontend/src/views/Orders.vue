@@ -774,13 +774,20 @@ onMounted(async () => {
     padding: 12px;
   }
 
-  .header-actions {
+  /* 移动端将标题与操作区分层，避免主操作按钮挤压标题。 */
+  .card-header {
     flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .header-actions {
     width: 100%;
   }
 
   .header-actions .el-button {
     width: 100%;
+    margin-inline-start: 0;
   }
 }
 </style>
