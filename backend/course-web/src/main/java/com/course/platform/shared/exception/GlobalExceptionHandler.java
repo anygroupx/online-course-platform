@@ -176,7 +176,8 @@ public class GlobalExceptionHandler {
             return HttpStatus.BAD_REQUEST;
         }
         if (code.equals(ResultCode.UNAUTHORIZED.getCode()) || code.equals(ResultCode.TOKEN_EXPIRED.getCode())
-                || code.equals(ResultCode.TOKEN_INVALID.getCode())) {
+                || code.equals(ResultCode.TOKEN_INVALID.getCode())
+                || code.equals(ResultCode.REFRESH_TOKEN_REUSE.getCode())) {
             return HttpStatus.UNAUTHORIZED;
         }
         if (code.equals(ResultCode.FORBIDDEN.getCode())

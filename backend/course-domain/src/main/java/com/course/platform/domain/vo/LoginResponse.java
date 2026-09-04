@@ -65,8 +65,9 @@ public class LoginResponse {
     private Boolean mustChangePassword;
 
     /**
-     * Refresh Token
+     * Refresh Token（仅供 Controller 写入 HttpOnly Cookie，禁止 JSON 序列化）
      */
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String refreshToken;
 
     /**

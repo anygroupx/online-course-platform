@@ -51,6 +51,11 @@ public class RefreshToken {
     private String tokenFamilyId;
 
     /**
+     * 签发时间
+     */
+    private LocalDateTime issuedAt;
+
+    /**
      * 过期时间
      */
     private LocalDateTime expireTime;
@@ -59,6 +64,11 @@ public class RefreshToken {
      * 撤销时间
      */
     private LocalDateTime revokedAt;
+
+    /**
+     * 撤销原因
+     */
+    private String revocationReason;
 
     /**
      * 被替换后的 token 哈希
@@ -70,6 +80,11 @@ public class RefreshToken {
      * 最后使用 IP
      */
     private String lastUsedIp;
+
+    /**
+     * 设备/User-Agent 摘要
+     */
+    private String deviceInfo;
 
     /**
      * 创建时间

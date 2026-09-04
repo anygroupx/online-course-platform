@@ -19,6 +19,7 @@ import com.course.platform.application.service.support.OperationLogService;
 import com.course.platform.application.service.user.UserService;
 import com.course.platform.service.impl.AccountLedgerServiceImpl;
 import com.course.platform.security.SecurityUtils;
+import com.course.platform.security.RefreshSessionService;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +46,7 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final OperationLogService operationLogService;
     private final AccountLedgerServiceImpl accountLedgerService;
+    private final RefreshSessionService refreshSessionService;
 
     @Value("${course.business.user-register-fee:5}")
     private BigDecimal userRegisterFee;
@@ -262,7 +264,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void changePassword(Long userId, String oldPassword, String newPassword) {
-        User user = userMapper.selectById(userId);
+        User user = userMapper.selectByIdForUpdate(userId);
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
@@ -282,6 +284,7 @@ public class UserServiceImpl implements UserService {
         if (userMapper.updatePassword(userId, passwordEncoder.encode(newPassword), 0, LocalDateTime.now()) != 1) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
+        refreshSessionService.revokeAll(userId, "PASSWORD_CHANGE");
 
         operationLogService.log(userId, "修改密码", "修改密码成功", BigDecimal.ZERO, null);
         log.info("修改密码成功：userId={}", userId);
@@ -291,7 +294,7 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String resetPassword(String targetUserUid, Long operatorId) {
-        User targetUser = requireUserByUid(targetUserUid);
+        User targetUser = requireUserByUidForUpdate(targetUserUid);
 
         boolean isAdmin = SecurityUtils.isAdmin();
         if (!isAdmin && (targetUser.getParentId() == null || !targetUser.getParentId().equals(operatorId))) {
@@ -303,6 +306,7 @@ public class UserServiceImpl implements UserService {
                 LocalDateTime.now()) != 1) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
+        refreshSessionService.revokeAll(targetUser.getId(), "PASSWORD_RESET");
 
         operationLogService.log(operatorId, "重置密码",
                 String.format("重置用户[%s]密码", targetUser.getUsername()),
@@ -320,10 +324,13 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException(ResultCode.FORBIDDEN);
         }
 
-        User user = requireUserByUid(userUid);
+        User user = requireUserByUidForUpdate(userUid);
 
         if (userMapper.updateStatus(user.getId(), status) != 1) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        if (status == SystemVariableCache.getStatusValue("user_status", "disabled")) {
+            refreshSessionService.revokeAll(user.getId(), "ACCOUNT_DISABLED");
         }
 
         String action = status == SystemVariableCache.getStatusValue("user_status", "normal") ? "启用" : "禁用";
@@ -332,6 +339,15 @@ public class UserServiceImpl implements UserService {
                 BigDecimal.ZERO, null);
 
         log.info("{}用户成功：userUid={}, operatorId={}", action, user.getUid(), operatorId);
+    }
+
+    private User requireUserByUidForUpdate(String uid) {
+        User user = requireUserByUid(uid);
+        User locked = userMapper.selectByIdForUpdate(user.getId());
+        if (locked == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        return locked;
     }
 
     private User requireUserByUid(String uid) {

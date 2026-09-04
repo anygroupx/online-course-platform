@@ -3,7 +3,6 @@ package com.course.platform.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.course.platform.application.service.security.MfaService;
 import com.course.platform.application.service.security.SecurityAuditService;
-import com.course.platform.application.service.system.SystemConfigService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
 import com.course.platform.common.security.SecretCrypto;
@@ -14,18 +13,15 @@ import com.course.platform.domain.dto.MfaCodeRequest;
 import com.course.platform.domain.dto.MfaConfirmSetupRequest;
 import com.course.platform.domain.dto.MfaVerifyLoginRequest;
 import com.course.platform.domain.entity.MfaChallenge;
-import com.course.platform.domain.entity.RefreshToken;
 import com.course.platform.domain.entity.User;
 import com.course.platform.domain.vo.LoginResponse;
 import com.course.platform.domain.vo.MfaSetupVO;
 import com.course.platform.domain.vo.MfaStatusVO;
 import com.course.platform.infra.persistence.mapper.MfaChallengeMapper;
-import com.course.platform.infra.persistence.mapper.RefreshTokenMapper;
 import com.course.platform.infra.persistence.mapper.UserMapper;
-import com.course.platform.shared.util.JwtUtil;
-import com.course.platform.shared.util.ServletUtil;
 import com.course.platform.security.SecurityUtils;
 import com.course.platform.security.UserAuthorityService;
+import com.course.platform.security.RefreshSessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,9 +45,7 @@ public class MfaServiceImpl implements MfaService {
 
     private final UserMapper userMapper;
     private final MfaChallengeMapper mfaChallengeMapper;
-    private final RefreshTokenMapper refreshTokenMapper;
-    private final JwtUtil jwtUtil;
-    private final SystemConfigService systemConfigService;
+    private final RefreshSessionService refreshSessionService;
     private final SecurityAuditService securityAuditService;
     private final UserAuthorityService userAuthorityService;
 
@@ -124,7 +118,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void disable(Long userId, MfaCodeRequest request) {
-        User user = requireUser(userId);
+        User user = requireUserForUpdate(userId);
         requireAdmin(user);
         if (!isEnabled(user)) {
             return;
@@ -137,6 +131,7 @@ public class MfaServiceImpl implements MfaService {
         if (userMapper.disableMfa(userId) != 1) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
+        refreshSessionService.revokeAll(userId, "MFA_DISABLED");
         securityAuditService.record("MFA_DISABLED", "WARN", userId, user.getUsername(),
                 "/auth/mfa/disable", "POST", "管理员关闭 MFA", null);
     }
@@ -171,7 +166,7 @@ public class MfaServiceImpl implements MfaService {
                 || challenge.getExpireTime() == null || challenge.getExpireTime().isBefore(LocalDateTime.now())) {
             throw new BusinessException(ResultCode.MFA_CHALLENGE_INVALID);
         }
-        User user = requireUser(challenge.getUserId());
+        User user = requireUserForUpdate(challenge.getUserId());
         if (!isEnabled(user)) {
             throw new BusinessException(ResultCode.MFA_REQUIRED);
         }
@@ -180,28 +175,17 @@ public class MfaServiceImpl implements MfaService {
                     "/auth/mfa/verify", "POST", "MFA 登录验证失败", null);
             throw new BusinessException(ResultCode.MFA_CODE_INVALID);
         }
-        challenge.setConsumed(1);
-        mfaChallengeMapper.updateById(challenge);
+        if (mfaChallengeMapper.consumeIfActive(challenge.getChallengeId(), LocalDateTime.now()) != 1) {
+            throw new BusinessException(ResultCode.MFA_CHALLENGE_INVALID);
+        }
 
-        String token = jwtUtil.generateToken(user.getUid(), user.getUsername());
-        String refreshToken = jwtUtil.generateRefreshToken(user.getUid(), user.getUsername());
-        Integer expireDays = systemConfigService.getConfigValueAsInteger("refresh_token_expire_days", 7);
-        RefreshToken refreshTokenEntity = RefreshToken.builder()
-                .userId(user.getId())
-                .token(null)
-                .tokenHash(TokenHashUtil.sha256(refreshToken))
-                .tokenFamilyId(TokenHashUtil.randomHex(16))
-                .expireTime(LocalDateTime.now().plusDays(expireDays))
-                .lastUsedIp(safeIp())
-                .build();
-        refreshTokenMapper.insert(refreshTokenEntity);
-
+        RefreshSessionService.SessionTokens session = refreshSessionService.issue(user);
         String role = resolveRole(user);
         securityAuditService.record("MFA_LOGIN_SUCCESS", "INFO", user.getId(), user.getUsername(),
                 "/auth/mfa/verify", "POST", "MFA 登录成功", null);
         return LoginResponse.builder()
-                .token(token)
-                .refreshToken(refreshToken)
+                .token(session.accessToken())
+                .refreshToken(session.refreshToken())
                 .uid(user.getUid())
                 .username(user.getUsername())
                 .nickname(StringUtils.hasText(user.getNickname()) ? user.getNickname() : user.getUsername())
@@ -269,6 +253,14 @@ public class MfaServiceImpl implements MfaService {
         return user;
     }
 
+    private User requireUserForUpdate(Long userId) {
+        User user = userMapper.selectByIdForUpdate(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        return user;
+    }
+
     private void requireAdmin(User user) {
         if (user == null || !user.getId().equals(SecurityUtils.getCurrentUserId())) {
             throw new BusinessException(ResultCode.FORBIDDEN);
@@ -284,11 +276,5 @@ public class MfaServiceImpl implements MfaService {
         return role;
     }
 
-    private String safeIp() {
-        try {
-            return ServletUtil.getClientIp();
-        } catch (Exception e) {
-            return "127.0.0.1";
-        }
-    }
+
 }

@@ -74,7 +74,9 @@ course:
     # 多个来源使用英文逗号分隔，例如：https://course.example.com,https://admin.example.com
     allowed-origins: ${COURSE_SECURITY_ALLOWED_ORIGINS}
     permit-all-paths:
-      - /auth/**
+      - /auth/login
+      - /auth/refresh
+      - /auth/mfa/verify
       - /health
       - /ping
       - /register
@@ -105,6 +107,9 @@ app:
     # 必须由环境变量注入；生产环境建议改用 KMS。
     secret: ${APP_CRYPTO_SECRET}
   security:
+    auth-cookie:
+      secure: ${AUTH_COOKIE_SECURE:true}
+      same-site: Strict
     alert-webhook: ${SECURITY_ALERT_WEBHOOK:}
     mfa-issuer: ${MFA_ISSUER:OnlineCoursePlatform}
     reconcile-enabled: ${PAYMENT_RECONCILE_ENABLED:true}

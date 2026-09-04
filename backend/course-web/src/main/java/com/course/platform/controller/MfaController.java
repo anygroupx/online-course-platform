@@ -8,6 +8,7 @@ import com.course.platform.domain.dto.MfaVerifyLoginRequest;
 import com.course.platform.domain.vo.LoginResponse;
 import com.course.platform.domain.vo.MfaSetupVO;
 import com.course.platform.domain.vo.MfaStatusVO;
+import com.course.platform.security.AuthCookieService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.servlet.http.HttpServletResponse;
 
 @Tag(name = "MFA", description = "管理员 TOTP 多因素认证")
 @RestController
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MfaController {
 
     private final MfaService mfaService;
+    private final AuthCookieService authCookieService;
 
     @GetMapping("/status")
     @PreAuthorize("hasAuthority('mfa:manage')")
@@ -66,7 +69,10 @@ public class MfaController {
 
     @PostMapping("/verify")
     @Operation(summary = "登录 MFA 二次验证")
-    public Result<LoginResponse> verify(@Valid @RequestBody MfaVerifyLoginRequest request) {
-        return Result.success("MFA 验证成功", mfaService.verifyLogin(request));
+    public Result<LoginResponse> verify(@Valid @RequestBody MfaVerifyLoginRequest request,
+                                        HttpServletResponse httpResponse) {
+        LoginResponse response = mfaService.verifyLogin(request);
+        authCookieService.issue(httpResponse, response.getRefreshToken());
+        return Result.success("MFA 验证成功", response);
     }
 }

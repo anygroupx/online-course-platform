@@ -74,7 +74,9 @@ course:
     # 多个来源使用英文逗号分隔，例如：https://course.example.com,https://admin.example.com
     allowed-origins: ${COURSE_SECURITY_ALLOWED_ORIGINS}
     permit-all-paths:
-      - /auth/**
+      - /auth/login
+      - /auth/refresh
+      - /auth/mfa/verify
       - /health
       - /ping
       - /register
@@ -98,3 +100,9 @@ course:
       enabled: true
       interval-minutes: 30
       interval-milliseconds: 1800000
+
+app:
+  security:
+    auth-cookie:
+      secure: ${AUTH_COOKIE_SECURE:true}
+      same-site: Strict

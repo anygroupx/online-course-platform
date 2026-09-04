@@ -9,12 +9,15 @@ import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
 import com.course.platform.application.service.auth.AuthService;
 import com.course.platform.security.TurnstileVerifier;
+import com.course.platform.security.AuthCookieService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * 认证控制器
@@ -31,16 +34,23 @@ public class AuthController {
     private final AuthService authService;
     private final TurnstileVerifier turnstileVerifier;
     private final UserMapper userMapper;
+    private final AuthCookieService authCookieService;
 
     /**
      * 用户登录
      */
     @Operation(summary = "用户登录", description = "用户名密码登录，返回JWT Token")
     @PostMapping("/login")
-    public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+    public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request,
+                                       HttpServletResponse httpResponse) {
         // 必须在校验账号密码之前消费 Turnstile 单次令牌，阻断自动化撞库。
         turnstileVerifier.verify(request.getTurnstileToken(), "login");
         LoginResponse response = authService.login(request);
+        if (!Boolean.TRUE.equals(response.getMfaRequired())) {
+            authCookieService.issue(httpResponse, response.getRefreshToken());
+        } else {
+            authCookieService.noStore(httpResponse);
+        }
         return Result.success("登录成功", response);
     }
 
@@ -49,9 +59,10 @@ public class AuthController {
      */
     @Operation(summary = "用户登出", description = "退出登录")
     @PostMapping("/logout")
-    public Result<Void> logout(Authentication authentication) {
+    public Result<Void> logout(Authentication authentication, HttpServletResponse response) {
         Long userId = (Long) authentication.getPrincipal();
         authService.logout(userId);
+        authCookieService.clear(response);
         return Result.success("登出成功");
     }
 
@@ -71,8 +82,16 @@ public class AuthController {
      */
     @Operation(summary = "刷新Token", description = "使用Refresh Token获取新的Access Token")
     @PostMapping("/refresh")
-    public Result<LoginResponse> refresh(@Valid @RequestBody com.course.platform.domain.dto.RefreshRequest request) {
-        LoginResponse response = authService.refresh(request.getRefreshToken());
-        return Result.success("Token刷新成功", response);
+    public Result<LoginResponse> refresh(HttpServletRequest request, HttpServletResponse httpResponse) {
+        String refreshToken = authCookieService.requireRefreshToken(request);
+        authCookieService.requireValidCsrf(request);
+        try {
+            LoginResponse response = authService.refresh(refreshToken);
+            authCookieService.issue(httpResponse, response.getRefreshToken());
+            return Result.success("Token刷新成功", response);
+        } catch (BusinessException e) {
+            authCookieService.clear(httpResponse);
+            throw e;
+        }
     }
 }
