@@ -109,12 +109,12 @@ public class MfaServiceImpl implements MfaService {
         }
         User user = requireUser(userId);
         requireAdmin(user);
-        user.setMfaEnabled(1);
-        user.setMfaSecret(SecretCrypto.encrypt(pending.secret(), cryptoSecret));
-        user.setMfaEnabledAt(LocalDateTime.now());
         List<String> backupCodes = pending.backupCodes() == null ? List.of() : pending.backupCodes();
-        user.setMfaBackupCodesHash(backupCodes.stream().map(TokenHashUtil::sha256).collect(Collectors.joining(",")));
-        userMapper.updateById(user);
+        String encryptedSecret = SecretCrypto.encrypt(pending.secret(), cryptoSecret);
+        String backupHashes = backupCodes.stream().map(TokenHashUtil::sha256).collect(Collectors.joining(","));
+        if (userMapper.enableMfa(userId, encryptedSecret, backupHashes, LocalDateTime.now()) != 1) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
         pendingSetups.remove(request.getSetupToken());
         securityAuditService.record("MFA_ENABLED", "INFO", userId, user.getUsername(),
                 "/auth/mfa/setup/confirm", "POST", "管理员启用 MFA", null);
@@ -134,11 +134,9 @@ public class MfaServiceImpl implements MfaService {
                     "/auth/mfa/disable", "POST", "MFA 关闭验证码错误", null);
             throw new BusinessException(ResultCode.MFA_CODE_INVALID);
         }
-        user.setMfaEnabled(0);
-        user.setMfaSecret(null);
-        user.setMfaBackupCodesHash(null);
-        user.setMfaEnabledAt(null);
-        userMapper.updateById(user);
+        if (userMapper.disableMfa(userId) != 1) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
         securityAuditService.record("MFA_DISABLED", "WARN", userId, user.getUsername(),
                 "/auth/mfa/disable", "POST", "管理员关闭 MFA", null);
     }
@@ -233,8 +231,9 @@ public class MfaServiceImpl implements MfaService {
         List<String> hashes = new ArrayList<>(Arrays.asList(user.getMfaBackupCodesHash().split(",")));
         boolean matched = hashes.remove(hash);
         if (matched) {
-            user.setMfaBackupCodesHash(String.join(",", hashes));
-            userMapper.updateById(user);
+            if (userMapper.updateMfaBackupCodes(user.getId(), String.join(",", hashes)) != 1) {
+                throw new BusinessException(ResultCode.USER_NOT_FOUND);
+            }
             securityAuditService.record("MFA_BACKUP_USED", "WARN", user.getId(), user.getUsername(),
                     "/auth/mfa", "POST", "使用了 MFA 备用恢复码", null);
             return true;

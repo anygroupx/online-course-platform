@@ -1,6 +1,5 @@
 package com.course.platform.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
 import com.course.platform.domain.entity.AccountLedger;
@@ -9,14 +8,15 @@ import com.course.platform.infra.persistence.mapper.AccountLedgerMapper;
 import com.course.platform.infra.persistence.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Set;
 
 /**
- * 资金账本服务：余额原子更新 + 不可变流水
+ * 资金账本服务：账户行锁、余额更新和不可变流水处于同一事务。
  */
 @Slf4j
 @Service
@@ -30,58 +30,96 @@ public class AccountLedgerServiceImpl {
     public static final String BIZ_API_FEE = "API_FEE";
     public static final String BIZ_ADJUST = "ADJUST";
 
+    private static final Set<String> ALLOWED_BIZ_TYPES = Set.of(
+            BIZ_PAYMENT, BIZ_ORDER, BIZ_RECHARGE, BIZ_REFUND, BIZ_API_FEE, BIZ_ADJUST
+    );
+    private static final BigDecimal MAX_AMOUNT = new BigDecimal("9999999999.99");
+
     private final UserMapper userMapper;
     private final AccountLedgerMapper accountLedgerMapper;
 
     @Transactional(rollbackFor = Exception.class)
-    public void credit(Long userId, BigDecimal amount, String bizType, String bizNo, String remark, boolean countRecharge) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "金额必须大于0");
-        }
-        if (exists(userId, bizType, bizNo, 1)) {
-            log.info("账本入账已存在，跳过：userId={}, bizType={}, bizNo={}", userId, bizType, bizNo);
+    public void credit(Long userId, BigDecimal amount, String bizType, String bizNo,
+                       String remark, boolean countRecharge) {
+        BigDecimal normalizedAmount = validate(userId, amount, bizType, bizNo);
+
+        // 先锁账户，再检查幂等键。相同用户的所有资金操作因此严格串行。
+        User user = requireLockedUser(userId);
+        AccountLedger existing = accountLedgerMapper.selectByBizKey(userId, bizType, bizNo, 1);
+        if (existing != null) {
+            requireSameAmount(existing, normalizedAmount);
+            log.info("账本入账已存在，幂等返回：userId={}, bizType={}, bizNo={}", userId, bizType, bizNo);
             return;
         }
-        User user = userMapper.selectById(userId);
-        if (user == null) {
-            throw new BusinessException(ResultCode.USER_NOT_FOUND);
-        }
-        BigDecimal before = user.getBalance() == null ? BigDecimal.ZERO : user.getBalance();
-        int updated = userMapper.increaseBalance(userId, amount, countRecharge ? 1 : 0);
+
+        BigDecimal before = balanceOf(user);
+        BigDecimal after = before.add(normalizedAmount);
+        int updated = userMapper.increaseBalance(userId, normalizedAmount, countRecharge ? 1 : 0);
         if (updated != 1) {
             throw new BusinessException(ResultCode.ERROR.getCode(), "余额更新失败");
         }
-        insertLedger(userId, bizType, bizNo, 1, amount, before, before.add(amount), remark);
+        insertLedger(userId, bizType, bizNo, 1, normalizedAmount, before, after, remark);
     }
 
     @Transactional(rollbackFor = Exception.class)
     public void debit(Long userId, BigDecimal amount, String bizType, String bizNo, String remark) {
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "金额必须大于0");
-        }
-        if (exists(userId, bizType, bizNo, -1)) {
-            log.info("账本出账已存在，跳过：userId={}, bizType={}, bizNo={}", userId, bizType, bizNo);
+        BigDecimal normalizedAmount = validate(userId, amount, bizType, bizNo);
+
+        User user = requireLockedUser(userId);
+        AccountLedger existing = accountLedgerMapper.selectByBizKey(userId, bizType, bizNo, -1);
+        if (existing != null) {
+            requireSameAmount(existing, normalizedAmount);
+            log.info("账本出账已存在，幂等返回：userId={}, bizType={}, bizNo={}", userId, bizType, bizNo);
             return;
         }
-        User user = userMapper.selectById(userId);
-        if (user == null) {
-            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+
+        BigDecimal before = balanceOf(user);
+        if (before.compareTo(normalizedAmount) < 0) {
+            throw new BusinessException(ResultCode.BALANCE_INSUFFICIENT);
         }
-        BigDecimal before = user.getBalance() == null ? BigDecimal.ZERO : user.getBalance();
-        int updated = userMapper.decreaseBalance(userId, amount);
+        BigDecimal after = before.subtract(normalizedAmount);
+        int updated = userMapper.decreaseBalance(userId, normalizedAmount);
         if (updated != 1) {
             throw new BusinessException(ResultCode.BALANCE_INSUFFICIENT);
         }
-        insertLedger(userId, bizType, bizNo, -1, amount, before, before.subtract(amount), remark);
+        insertLedger(userId, bizType, bizNo, -1, normalizedAmount, before, after, remark);
     }
 
-    private boolean exists(Long userId, String bizType, String bizNo, int direction) {
-        Long count = accountLedgerMapper.selectCount(new LambdaQueryWrapper<AccountLedger>()
-                .eq(AccountLedger::getUserId, userId)
-                .eq(AccountLedger::getBizType, bizType)
-                .eq(AccountLedger::getBizNo, bizNo)
-                .eq(AccountLedger::getDirection, direction));
-        return count != null && count > 0;
+    private User requireLockedUser(Long userId) {
+        User user = userMapper.selectByIdForUpdate(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        return user;
+    }
+
+    private BigDecimal validate(Long userId, BigDecimal amount, String bizType, String bizNo) {
+        if (userId == null || userId <= 0) {
+            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "用户ID无效");
+        }
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0 || amount.compareTo(MAX_AMOUNT) > 0) {
+            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "金额必须大于0且不超过9999999999.99");
+        }
+        if (amount.stripTrailingZeros().scale() > 2) {
+            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "金额最多保留两位小数");
+        }
+        if (!ALLOWED_BIZ_TYPES.contains(bizType)) {
+            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "资金业务类型无效");
+        }
+        if (bizNo == null || bizNo.isBlank() || bizNo.length() > 64) {
+            throw new BusinessException(ResultCode.PARAM_ERROR.getCode(), "资金业务单号无效");
+        }
+        return amount.setScale(2, RoundingMode.UNNECESSARY);
+    }
+
+    private BigDecimal balanceOf(User user) {
+        return user.getBalance() == null ? BigDecimal.ZERO.setScale(2) : user.getBalance().setScale(2);
+    }
+
+    private void requireSameAmount(AccountLedger existing, BigDecimal amount) {
+        if (existing.getAmount() == null || existing.getAmount().compareTo(amount) != 0) {
+            throw new BusinessException(ResultCode.ERROR.getCode(), "资金幂等键冲突");
+        }
     }
 
     private void insertLedger(Long userId, String bizType, String bizNo, int direction,
@@ -94,11 +132,11 @@ public class AccountLedgerServiceImpl {
         ledger.setAmount(amount);
         ledger.setBalanceBefore(before);
         ledger.setBalanceAfter(after);
-        ledger.setRemark(remark);
-        try {
-            accountLedgerMapper.insert(ledger);
-        } catch (DuplicateKeyException e) {
-            log.warn("账本唯一键冲突，视为已处理：{} {} {}", bizType, bizNo, userId);
+        ledger.setRemark(remark == null ? null : remark.substring(0, Math.min(remark.length(), 255)));
+
+        // 不吞唯一键或其他写入异常：任何失败都必须回滚同事务中的余额更新。
+        if (accountLedgerMapper.insert(ledger) != 1) {
+            throw new BusinessException(ResultCode.ERROR.getCode(), "资金流水写入失败");
         }
     }
 }

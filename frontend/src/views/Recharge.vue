@@ -269,8 +269,8 @@ const handleCardRecharge = async () => {
     return;
   }
 
-  if (cardForm.value.cardPassword.length !== 8) {
-    ElMessage.warning("卡密必须为8位字符");
+  if (cardForm.value.cardPassword.length < 8 || cardForm.value.cardPassword.length > 64) {
+    ElMessage.warning("卡密长度必须为8到64位字符");
     return;
   }
 
@@ -353,12 +353,9 @@ const handleAlipayRecharge = async () => {
   recharging.value = true;
 
   try {
-    const returnUrl = `${window.location.origin}/payment/callback`;
-
     const res = await createPayment({
       amount: alipayForm.value.amount,
       paymentType: alipayForm.value.paymentType,
-      returnUrl,
       subject: "账户充值",
       body: `在线网课平台账户充值${alipayForm.value.amount}元`,
     });

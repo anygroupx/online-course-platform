@@ -145,7 +145,11 @@ public class UserServiceImpl implements UserService {
             user.setInviteRate(request.getInviteRate());
         }
 
-        userMapper.updateById(user);
+        String nickname = StrUtil.isNotBlank(request.getNickname()) ? request.getNickname() : null;
+        if (userMapper.updateProfileFields(user.getId(), nickname, request.getRate(),
+                request.getStatus(), request.getInviteRate()) != 1) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
 
         operationLogService.log(operatorId, "修改用户",
                 String.format("修改用户：%s", user.getUsername()),
@@ -275,10 +279,9 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException("不能使用默认弱密码");
         }
 
-        user.setPassword(passwordEncoder.encode(newPassword));
-        user.setMustChangePassword(0);
-        user.setPasswordChangedAt(LocalDateTime.now());
-        userMapper.updateById(user);
+        if (userMapper.updatePassword(userId, passwordEncoder.encode(newPassword), 0, LocalDateTime.now()) != 1) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
 
         operationLogService.log(userId, "修改密码", "修改密码成功", BigDecimal.ZERO, null);
         log.info("修改密码成功：userId={}", userId);
@@ -296,10 +299,10 @@ public class UserServiceImpl implements UserService {
         }
 
         String newPassword = RandomUtil.randomString(12);
-        targetUser.setPassword(passwordEncoder.encode(newPassword));
-        targetUser.setMustChangePassword(1);
-        targetUser.setPasswordChangedAt(LocalDateTime.now());
-        userMapper.updateById(targetUser);
+        if (userMapper.updatePassword(targetUser.getId(), passwordEncoder.encode(newPassword), 1,
+                LocalDateTime.now()) != 1) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
 
         operationLogService.log(operatorId, "重置密码",
                 String.format("重置用户[%s]密码", targetUser.getUsername()),
@@ -319,8 +322,9 @@ public class UserServiceImpl implements UserService {
 
         User user = requireUserByUid(userUid);
 
-        user.setStatus(status);
-        userMapper.updateById(user);
+        if (userMapper.updateStatus(user.getId(), status) != 1) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
 
         String action = status == SystemVariableCache.getStatusValue("user_status", "normal") ? "启用" : "禁用";
         operationLogService.log(operatorId, action + "用户",

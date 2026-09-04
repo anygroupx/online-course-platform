@@ -5,6 +5,7 @@ import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.entity.CourseOrder;
 import com.course.platform.domain.entity.PaymentConfig;
 import com.course.platform.domain.entity.RefreshToken;
+import com.course.platform.domain.entity.RechargeCard;
 import com.course.platform.domain.entity.User;
 import com.course.platform.domain.vo.UserInfoResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,6 +42,12 @@ class DataLeakageSerializationTest {
                 .tokenFamilyId("family-secret").replacedBy("replacement-secret").build();
         assertNoSecrets(mapper.writeValueAsString(refreshToken));
 
+        RechargeCard card = new RechargeCard();
+        card.setCardNo("1234567890123456");
+        card.setCardPassword("card-password-secret");
+        card.setPasswordHash("card-password-hash");
+        assertNoSecrets(mapper.writeValueAsString(card));
+
         CourseOrder order = new CourseOrder();
         order.setStudentPassword("student-password-secret");
         assertNoSecrets(mapper.writeValueAsString(SensitiveDataMasker.toOrderVO(order)));
@@ -59,7 +66,7 @@ class DataLeakageSerializationTest {
                 "mfa-secret", "provider-password-secret", "provider-token-secret", "provider-key-secret",
                 "provider-cookie-secret", "payment-private-key-secret", "payment-public-key", "refresh-token-secret",
                 "token-hash", "family-secret", "replacement-secret", "student-password-secret",
-                "progress-password-secret"}) {
+                "progress-password-secret", "card-password-secret", "card-password-hash"}) {
             assertFalse(json.contains(value), () -> "serialized secret: " + value + " in " + json);
         }
         assertFalse(json.contains("studentPassword"));

@@ -25,6 +25,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -86,7 +87,7 @@ class AuthServiceImplTest {
         when(jwtUtil.generateToken(USER_UID, "admin")).thenReturn("access-token");
         when(jwtUtil.generateRefreshToken(USER_UID, "admin")).thenReturn("refresh-token");
         when(systemConfigService.getConfigValueAsInteger("refresh_token_expire_days", 7)).thenReturn(7);
-        when(userMapper.updateById(any(User.class))).thenReturn(1);
+        when(userMapper.updateLoginMetadata(anyLong(), any(LocalDateTime.class), anyString(), anyInt())).thenReturn(1);
         when(refreshTokenMapper.insert(any(RefreshToken.class))).thenReturn(1);
 
         LoginRequest request = new LoginRequest();
@@ -113,7 +114,7 @@ class AuthServiceImplTest {
         when(passwordEncoder.matches("123456", "encoded")).thenReturn(true);
         when(mfaService.isEnabled(user)).thenReturn(true);
         when(mfaService.createChallenge(user)).thenReturn("challenge-abc");
-        when(userMapper.updateById(any(User.class))).thenReturn(1);
+        when(userMapper.updateLoginMetadata(anyLong(), any(LocalDateTime.class), anyString(), anyInt())).thenReturn(1);
 
         LoginRequest request = new LoginRequest();
         request.setUsername("admin");

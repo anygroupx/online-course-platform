@@ -154,8 +154,9 @@ public class RegisterServiceImpl implements RegisterService {
         }
 
         // 更新邀请费率
-        user.setInviteRate(request.getInviteRate());
-        userMapper.updateById(user);
+        if (userMapper.updateInviteSettings(userId, inviteCode, request.getInviteRate()) != 1) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
 
         // 记录日志
         operationLogService.log(userId, "设置邀请码",
@@ -196,4 +197,3 @@ public class RegisterServiceImpl implements RegisterService {
         return code;
     }
 }
-

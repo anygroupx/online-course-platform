@@ -19,6 +19,11 @@ public class CourseOrder implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
+    /** 金融订单只允许逻辑归档，禁止物理删除审计证据。 */
+    @TableLogic(value = "0", delval = "1")
+    @TableField("is_deleted")
+    private Integer isDeleted;
+
     /**
      * 订单ID
      */

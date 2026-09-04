@@ -36,7 +36,13 @@ public class RechargeCard implements Serializable {
      * 卡密
      */
     @TableField("card_password")
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String cardPassword;
+
+    /** SHA-256 hash of the high-entropy card secret; never serialized. */
+    @TableField("password_hash")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String passwordHash;
 
     /**
      * 面额

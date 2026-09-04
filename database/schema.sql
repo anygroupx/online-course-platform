@@ -253,6 +253,7 @@ CREATE TABLE `course_order` (
   `create_ip` VARCHAR(50) DEFAULT NULL COMMENT '下单IP',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `is_deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑归档：0-否 1-是',
   
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_order_no` (`order_no`),
@@ -260,6 +261,7 @@ CREATE TABLE `course_order` (
   KEY `idx_platform_id` (`platform_id`),
   KEY `idx_order_status` (`order_status`),
   KEY `idx_dock_status` (`dock_status`),
+  KEY `idx_course_order_deleted` (`is_deleted`),
   KEY `idx_create_time` (`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课程订单表';
 
@@ -336,7 +338,8 @@ DROP TABLE IF EXISTS `recharge_card`;
 CREATE TABLE `recharge_card` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '卡密ID',
   `card_no` VARCHAR(32) NOT NULL COMMENT '卡号',
-  `card_password` VARCHAR(32) NOT NULL COMMENT '卡密',
+  `card_password` VARCHAR(32) DEFAULT NULL COMMENT '历史明文字段（必须为空）',
+  `password_hash` CHAR(64) NOT NULL COMMENT '卡密 SHA-256（高熵密钥）',
   `amount` DECIMAL(10,2) NOT NULL COMMENT '面额',
   `status` TINYINT DEFAULT 0 COMMENT '状态：0-未使用 1-已使用 2-已禁用',
   `used_by` BIGINT DEFAULT NULL COMMENT '使用者ID',
