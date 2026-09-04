@@ -20,11 +20,9 @@ public final class SensitiveDataMasker {
         if (user == null) {
             return null;
         }
-        boolean apiEnabled = StringUtils.hasText(user.getApiKeyHash())
-                || (StringUtils.hasText(user.getApiKey()) && !"0".equals(user.getApiKey()));
+        boolean apiEnabled = StringUtils.hasText(user.getApiKeyHash());
         return UserVO.builder()
-                .id(user.getId())
-                .parentId(user.getParentId())
+                .uid(user.getUid())
                 .username(user.getUsername())
                 .nickname(user.getNickname())
                 .avatar(user.getAvatar())
@@ -46,21 +44,22 @@ public final class SensitiveDataMasker {
     }
 
     public static CourseOrderVO toOrderVO(CourseOrder order) {
+        return toOrderVO(order, null);
+    }
+
+    public static CourseOrderVO toOrderVO(CourseOrder order, String userUid) {
         if (order == null) {
             return null;
         }
         return CourseOrderVO.builder()
                 .id(order.getId())
                 .orderNo(order.getOrderNo())
-                .userId(order.getUserId())
+                .userUid(userUid)
                 .platformId(order.getPlatformId())
                 .platformName(order.getPlatformName())
                 .schoolName(order.getSchoolName())
                 .studentName(order.getStudentName())
                 .studentAccount(order.getStudentAccount())
-                // 订单控制器已完成归属或管理员校验，允许前端通过 HTTPS 展示学生密码。
-                .studentPassword(order.getStudentPassword())
-                .hasStudentPassword(StringUtils.hasText(order.getStudentPassword()))
                 .studentPhoneMasked(maskPhone(order.getStudentPhone()))
                 .courseId(order.getCourseId())
                 .courseName(order.getCourseName())

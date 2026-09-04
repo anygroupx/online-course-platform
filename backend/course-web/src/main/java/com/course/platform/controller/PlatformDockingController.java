@@ -1,5 +1,6 @@
 package com.course.platform.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.course.platform.common.result.Result;
 import com.course.platform.application.service.platform.PlatformDockingService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,6 +18,7 @@ import java.util.Map;
  */
 @Slf4j
 @Tag(name = "平台对接管理", description = "平台对接相关的管理接口")
+@PreAuthorize("hasAuthority('order:update')")
 @RestController
 @RequestMapping("/admin/docking")
 @RequiredArgsConstructor

@@ -71,13 +71,15 @@ public class UserInfoController {
 
         // 构建响应
         UserInfoResponse response = UserInfoResponse.builder()
-                .userId(user.getId())
+                .uid(user.getUid())
                 .username(user.getUsername())
                 .nickname(user.getNickname())
                 .avatar(user.getAvatar())
                 .balance(user.getBalance())
                 .rate(user.getRate())
-                .apiKey(user.getApiKey())
+                .apiEnabled(user.getApiKeyHash() != null && !user.getApiKeyHash().isBlank())
+                .apiKeyPrefix(user.getApiKeyPrefix())
+                .apiKeyExpiresAt(user.getApiKeyExpireTime())
                 .inviteCode(user.getInviteCode())
                 .inviteRate(user.getInviteRate())
                 .totalOrders(totalOrders)

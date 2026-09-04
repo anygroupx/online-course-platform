@@ -43,5 +43,13 @@ public interface ApiProviderService {
      * @return 接口分页数据
      */
     IPage<ApiProvider> queryApiProviders(String keyword, Integer status, Integer page, Integer pageSize);
+
+    /**
+     * 按 ID 加载并解密运行时凭据。返回值只允许用于第三方对接，不得回写数据库。
+     *
+     * @param id 接口ID
+     * @return 已解密的接口配置，不存在时返回 null
+     */
+    ApiProvider loadDecrypted(Long id);
 }
 

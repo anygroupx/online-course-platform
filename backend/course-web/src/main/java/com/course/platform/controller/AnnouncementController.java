@@ -33,7 +33,7 @@ public class AnnouncementController {
     private final OperationLogService operationLogService;
 
     @PostMapping("/create")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('announcement:create')")
     @Operation(summary = "创建公告", description = "管理员创建新公告")
     public Result<Long> createAnnouncement(@RequestBody AnnouncementCreateDTO createDTO) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -44,7 +44,7 @@ public class AnnouncementController {
     }
 
     @PutMapping("/update")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('announcement:update')")
     @Operation(summary = "更新公告", description = "管理员更新公告信息")
     public Result<Boolean> updateAnnouncement(@RequestBody AnnouncementUpdateDTO updateDTO) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -55,7 +55,7 @@ public class AnnouncementController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('announcement:delete')")
     @Operation(summary = "删除公告", description = "管理员删除公告")
     public Result<Boolean> deleteAnnouncement(@PathVariable Long id) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -66,7 +66,7 @@ public class AnnouncementController {
     }
 
     @PostMapping("/{id}/publish")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('announcement:publish')")
     @Operation(summary = "发布公告", description = "管理员发布公告")
     public Result<Boolean> publishAnnouncement(@PathVariable Long id) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -77,7 +77,7 @@ public class AnnouncementController {
     }
 
     @PostMapping("/{id}/offline")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('announcement:publish')")
     @Operation(summary = "下线公告", description = "管理员下线公告")
     public Result<Boolean> offlineAnnouncement(@PathVariable Long id) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -88,7 +88,7 @@ public class AnnouncementController {
     }
 
     @GetMapping("/page")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('announcement:update')")
     @Operation(summary = "分页查询公告列表", description = "管理员分页查询公告列表")
     public Result<IPage<AnnouncementVO>> getAnnouncementPage(
             @Parameter(description = "页码") @RequestParam(defaultValue = "1") Integer current,

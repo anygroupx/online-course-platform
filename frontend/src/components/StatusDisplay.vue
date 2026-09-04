@@ -98,75 +98,26 @@ const icon = computed(() => {
   return variableStore.getVariableIcon(props.type, props.value);
 });
 
-/**
- * 计算颜色亮度（感知亮度公式）
- * @param {string} color - 十六进制颜色值
- * @returns {number} 0-255 的亮度值
- */
-const getBrightness = (color) => {
-  if (!color) return 255;
-
-  // 移除 # 符号
-  color = color.replace("#", "");
-
-  // 转换为 RGB
-  const r = parseInt(color.substr(0, 2), 16);
-  const g = parseInt(color.substr(2, 2), 16);
-  const b = parseInt(color.substr(4, 2), 16);
-
-  // 使用感知亮度公式 (ITU-R BT.709)
-  return r * 0.2126 + g * 0.7152 + b * 0.0722;
-};
-
-/**
- * 根据背景色自动选择文字颜色
- * @param {string} bgColor - 背景色
- * @returns {string} 文字颜色
- */
-const getTextColor = (bgColor) => {
-  const brightness = getBrightness(bgColor);
-  // 亮度 > 128 使用深色文字，否则使用浅色文字
-  return brightness > 128 ? "#303133" : "#ffffff";
-};
-
-// 计算自定义样式
+// 计算自定义样式。color-mix 同时支持十六进制色和 CSS 变量，避免拼接透明度导致无效颜色。
 const customStyle = computed(() => {
   if (!useCustomColor.value) {
     return {};
   }
 
-  const bgColor = customColor.value;
-  const textColor = getTextColor(bgColor);
+  const accentColor = customColor.value;
+  const backgroundColor = `color-mix(in srgb, ${accentColor} 12%, var(--surface-solid))`;
+  const borderColor = `color-mix(in srgb, ${accentColor} 52%, var(--border-color-light))`;
+  const textColor = `color-mix(in srgb, ${accentColor} 72%, var(--text-primary))`;
 
-  // light 效果：浅色背景 + 自适应文字
-  if (actualEffect.value === "light") {
-    return {
-      "--el-tag-bg-color": `${bgColor}20`, // 背景透明度 12.5%
-      "--el-tag-border-color": bgColor,
-      "--el-tag-text-color": bgColor,
-      "border-color": bgColor,
-    };
-  }
-
-  // dark 效果：深色背景 + 自适应文字
-  if (actualEffect.value === "dark") {
-    return {
-      "--el-tag-bg-color": bgColor,
-      "--el-tag-border-color": bgColor,
-      "--el-tag-text-color": textColor,
-      color: textColor,
-    };
-  }
-
-  // plain 效果：白色背景 + 彩色边框
   return {
-    "--el-tag-bg-color": "#ffffff",
-    "--el-tag-border-color": bgColor,
-    "--el-tag-text-color": bgColor,
-    "border-color": bgColor,
-    color: bgColor,
+    "--el-tag-bg-color": backgroundColor,
+    "--el-tag-border-color": borderColor,
+    "--el-tag-text-color": textColor,
+    "border-color": borderColor,
+    color: textColor,
   };
 });
+
 </script>
 
 <style scoped>

@@ -72,10 +72,10 @@ public interface CustomerServiceService {
      * 分配客服
      *
      * @param sessionId 会话ID
-     * @param customerServiceId 客服ID
+     * @param customerServiceUid 客服 UUID
      * @return 是否成功
      */
-    Boolean assignCustomerService(String sessionId, Long customerServiceId);
+    Boolean assignCustomerService(String sessionId, String customerServiceUid);
 
     /**
      * 获取所有会话列表（管理端）
@@ -89,7 +89,7 @@ public interface CustomerServiceService {
      * 客服接入会话
      *
      * @param sessionId 会话ID
-     * @param customerServiceId 客服ID
+     * @param customerServiceUid 客服 UUID
      * @return 是否成功
      */
     Boolean takeSession(String sessionId, Long customerServiceId);

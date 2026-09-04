@@ -5,7 +5,7 @@
         <!-- 支付成功 -->
         <div v-if="success" class="success-result">
           <div class="icon-wrapper">
-            <el-icon :size="80" color="#63c56e">
+            <el-icon :size="80" color="var(--color-success)">
               <SuccessFilled />
             </el-icon>
           </div>
@@ -23,7 +23,7 @@
         <!-- 支付失败 -->
         <div v-else-if="failed" class="failed-result">
           <div class="icon-wrapper">
-            <el-icon :size="80" color="#f06565">
+            <el-icon :size="80" color="var(--color-danger)">
               <CircleCloseFilled />
             </el-icon>
           </div>
@@ -40,7 +40,7 @@
         <!-- 处理中 -->
         <div v-else class="pending-result">
           <div class="icon-wrapper">
-            <el-icon :size="80" color="#f7a62f">
+            <el-icon :size="80" color="var(--color-warning)">
               <WarningFilled />
             </el-icon>
           </div>
@@ -185,7 +185,7 @@ export default {
 h2 {
   font-size: 28px;
   margin: 0 0 24px 0;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .order-info,
@@ -193,7 +193,7 @@ h2 {
 .pending-info {
   margin: 24px 0;
   padding: 20px;
-  background: #f5f7fa;
+  background: color-mix(in srgb, var(--brand-primary) 4%, var(--surface-solid));
   border-radius: 8px;
 }
 
@@ -202,7 +202,7 @@ h2 {
 .pending-info p {
   margin: 8px 0;
   font-size: 15px;
-  color: #606266;
+  color: var(--text-regular);
 }
 
 .amount {
@@ -214,7 +214,7 @@ h2 {
 
 .tip {
   font-size: 13px;
-  color: #909399 !important;
+  color: var(--text-placeholder) !important;
 }
 
 .actions {

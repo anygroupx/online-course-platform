@@ -55,11 +55,11 @@ export function endSession(sessionId) {
 }
 
 // 分配客服（管理员接口）
-export function assignCustomerService(sessionId, customerServiceId) {
+export function assignCustomerService(sessionId, customerServiceUid) {
   return request({
     url: `/customer-service/session/${sessionId}/assign`,
     method: 'post',
-    params: { customerServiceId }
+    params: { customerServiceUid }
   })
 }
 

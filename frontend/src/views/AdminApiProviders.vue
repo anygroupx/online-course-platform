@@ -16,7 +16,7 @@
         <el-table-column prop="name" label="接口名称" width="150" />
         <el-table-column prop="providerType" label="接口类型" width="120" />
         <el-table-column prop="apiUrl" label="API地址" show-overflow-tooltip />
-        <el-table-column prop="username" label="账号" width="120" />
+        <el-table-column prop="usernameMasked" label="账号" width="120" />
         <el-table-column prop="balance" label="余额" width="100">
           <template #default="scope">
             <el-tag type="success">¥{{ scope.row.balance || 0 }}</el-tag>
@@ -91,7 +91,8 @@
           <el-select v-model="form.providerType" placeholder="请选择接口类型">
             <el-option label="27平台 (Benz)" value="27" />
             <el-option label="Oligei (2022)" value="oligei" />
-            <el-option label="29同系统" value="29" />
+            <el-option label="Daytime（推荐）" value="Daytime" />
+            <el-option label="29同系统（兼容）" value="29" />
             <el-option label="暗网 (yjdj)" value="yjdj" />
             <el-option label="Ikun" value="ikun" />
             <el-option label="网课联盟Cookie" value="wklmcookie" />
@@ -110,25 +111,33 @@
           <el-input v-model="form.apiUrl" placeholder="请输入API地址" />
         </el-form-item>
         <el-form-item label="账号">
-          <el-input v-model="form.username" placeholder="请输入账号" />
+          <el-input
+            v-model="form.username"
+            :placeholder="form.id && form.hasUsername ? '留空则保持原账号' : '请输入账号'"
+          />
         </el-form-item>
         <el-form-item label="密码">
           <el-input
             v-model="form.password"
             type="password"
-            placeholder="请输入密码"
+            :placeholder="form.id && form.hasPassword ? '已配置，留空则保持不变' : '请输入密码'"
             show-password
           />
         </el-form-item>
         <el-form-item label="API Key">
-          <el-input v-model="form.apiKey" placeholder="请输入API Key" />
+          <el-input
+            v-model="form.apiKey"
+            type="password"
+            show-password
+            :placeholder="form.id && form.hasApiKey ? '已配置，留空则保持不变' : '请输入API Key'"
+          />
         </el-form-item>
         <el-form-item label="Token">
           <el-input
             v-model="form.token"
             type="textarea"
             :rows="2"
-            placeholder="请输入Token"
+            :placeholder="form.id && form.hasToken ? '已配置，留空则保持不变' : '请输入Token'"
           />
         </el-form-item>
         <el-form-item label="Cookie">
@@ -136,7 +145,7 @@
             v-model="form.cookie"
             type="textarea"
             :rows="3"
-            placeholder="请输入Cookie"
+            :placeholder="form.id && form.hasCookie ? '已配置，留空则保持不变' : '请输入Cookie'"
           />
         </el-form-item>
         <el-form-item label="状态">
@@ -217,17 +226,45 @@ const handleCreate = () => {
 
 const handleEdit = (row) => {
   dialogTitle.value = "编辑接口";
-  form.value = { ...row };
+  form.value = {
+    id: row.id,
+    name: row.name,
+    providerType: row.providerType,
+    apiUrl: row.apiUrl,
+    username: "",
+    password: "",
+    apiKey: "",
+    token: "",
+    cookie: "",
+    status: row.status,
+    hasUsername: Boolean(row.usernameMasked),
+    hasPassword: row.hasPassword,
+    hasApiKey: row.hasApiKey,
+    hasToken: row.hasToken,
+    hasCookie: row.hasCookie,
+  };
   dialogVisible.value = true;
 };
 
 const handleSubmit = async () => {
   try {
+    const payload = {
+      id: form.value.id,
+      name: form.value.name,
+      providerType: form.value.providerType,
+      apiUrl: form.value.apiUrl,
+      username: form.value.username,
+      password: form.value.password,
+      apiKey: form.value.apiKey,
+      token: form.value.token,
+      cookie: form.value.cookie,
+      status: form.value.status,
+    };
     if (form.value.id) {
-      await axios.put("/admin/api-providers", form.value);
+      await axios.put("/admin/api-providers", payload);
       ElMessage.success("更新成功");
     } else {
-      await axios.post("/admin/api-providers", form.value);
+      await axios.post("/admin/api-providers", payload);
       ElMessage.success("创建成功");
     }
     dialogVisible.value = false;

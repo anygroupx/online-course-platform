@@ -15,7 +15,7 @@ export const statisticsConfig = [
     value: 0,
     icon: Document,
     iconClass: "primary",
-    color: "#4e8cff",
+    color: "var(--brand-primary)",
   },
   {
     key: "completed",
@@ -23,7 +23,7 @@ export const statisticsConfig = [
     value: 0,
     icon: Check,
     iconClass: "success",
-    color: "#63c56e",
+    color: "var(--color-success)",
   },
   {
     key: "totalAmount",
@@ -31,7 +31,7 @@ export const statisticsConfig = [
     value: 0,
     icon: Money,
     iconClass: "warning",
-    color: "#f7a62f",
+    color: "var(--color-warning)",
     extra: "元",
   },
   {
@@ -40,7 +40,7 @@ export const statisticsConfig = [
     value: 0,
     icon: Calendar,
     iconClass: "info",
-    color: "#8b95a7",
+    color: "var(--color-info)",
   },
 ];
 
@@ -68,7 +68,7 @@ export const filterConfig = {
       width: "150px",
       optionsKey: "platformList", // 从父组件 options 中获取
       labelKey: "platformName",
-      valueKey: "id",
+      valueKey: "uid",
     },
     {
       key: "orderStatus",
@@ -112,7 +112,7 @@ export const filterConfig = {
       ],
     },
     {
-      key: "userId",
+      key: "userUid",
       label: "代理账号",
       type: "select",
       placeholder: "请选择代理账号",
@@ -120,7 +120,7 @@ export const filterConfig = {
       width: "150px",
       optionsKey: "agentList",
       labelKey: "username",
-      valueKey: "id",
+      valueKey: "uid",
     },
     {
       key: "dateRange",

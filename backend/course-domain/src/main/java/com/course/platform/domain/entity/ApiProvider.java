@@ -1,6 +1,7 @@
 package com.course.platform.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -50,31 +51,31 @@ public class ApiProvider implements Serializable {
     private String username;
 
     /**
-     * 密码（禁止默认序列化）
+     * 密码（请求可写、响应不序列化）
      */
     @TableField("password")
-    @com.fasterxml.jackson.annotation.JsonIgnore
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
 
     /**
-     * Token（禁止默认序列化）
+     * Token（请求可写、响应不序列化）
      */
     @TableField("token")
-    @com.fasterxml.jackson.annotation.JsonIgnore
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String token;
 
     /**
-     * API Key（禁止默认序列化）
+     * API Key（请求可写、响应不序列化）
      */
     @TableField("api_key")
-    @com.fasterxml.jackson.annotation.JsonIgnore
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String apiKey;
 
     /**
-     * Cookie（禁止默认序列化）
+     * Cookie（请求可写、响应不序列化）
      */
     @TableField("cookie")
-    @com.fasterxml.jackson.annotation.JsonIgnore
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String cookie;
 
     /**

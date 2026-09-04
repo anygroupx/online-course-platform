@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.*;
  * @since 2025-01-17
  */
 @Tag(name = "课程平台管理", description = "课程平台增删改查接口（管理员）")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAuthority('platform:update')")
 @RequestMapping("/admin/platforms")
 @RequiredArgsConstructor
 @RestController
@@ -38,7 +38,7 @@ public class CoursePlatformManageController {
      * 验证管理员权限
      */
     private void checkAdmin(Long userId) {
-        SecurityUtils.requireAdmin();
+        SecurityUtils.requireAuthority("platform:update");
     }
 
     /**

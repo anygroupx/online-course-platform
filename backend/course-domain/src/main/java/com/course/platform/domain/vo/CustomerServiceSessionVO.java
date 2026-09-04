@@ -17,19 +17,12 @@ public class CustomerServiceSessionVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 主键ID
-     */
-    private Long id;
-
-    /**
      * 会话标识
      */
     private String sessionId;
 
-    /**
-     * 用户ID
-     */
-    private Long userId;
+    /** 用户公开 UUID */
+    private String userUid;
 
     /**
      * 用户昵称
@@ -42,13 +35,11 @@ public class CustomerServiceSessionVO implements Serializable {
     private String userAccount;
 
     /**
-     * 客服ID
-     */
-    private Long customerServiceId;
-
-    /**
      * 客服昵称
      */
+    /** 客服公开 UUID */
+    private String customerServiceUid;
+
     private String customerServiceName;
 
     /**

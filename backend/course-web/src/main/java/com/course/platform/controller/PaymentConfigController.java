@@ -22,7 +22,7 @@ import java.util.List;
 @Tag(name = "支付配置管理", description = "支付配置管理接口(仅管理员)")
 @RestController
 @RequestMapping("/payment/config")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAuthority('payment:config')")
 public class PaymentConfigController {
 
     @Autowired

@@ -58,13 +58,13 @@ public class AqksDockingStrategy implements PlatformDockingStrategy {
         String studentAccount = request.getStudentAccount();
         String studentPassword = request.getStudentPassword();
         
-        log.info("[AQKS查课] platform={}, account={}", platform.getName(), studentAccount);
+        log.info("[AQKS查课] platform={}", platform.getName());
         
         // 登录获取用户信息
         AqksLoginResult loginResult = aqksApiClient.login(studentAccount, studentPassword);
         
         if (!loginResult.isSuccess()) {
-            log.warn("[AQKS查课] 登录失败: {}", loginResult.getErrorMessage());
+            log.warn("[AQKS查课] 登录失败，已省略第三方错误详情");
             throw new RuntimeException("AQKS登录失败: " + loginResult.getErrorMessage());
         }
         
@@ -114,10 +114,10 @@ public class AqksDockingStrategy implements PlatformDockingStrategy {
                 courses.add(examCourse);
             }
         } catch (Exception e) {
-            log.warn("[AQKS查课] 获取考试信息失败: {}", e.getMessage());
+            log.warn("[AQKS查课] 获取考试信息失败: exceptionType={}", e.getClass().getSimpleName());
         }
         
-        log.info("[AQKS查课] 成功: 学生={}, 进度={}", loginResult.getName(), progress);
+        log.info("[AQKS查课] 成功: 进度={}", progress);
         
         return courses;
     }
@@ -136,14 +136,14 @@ public class AqksDockingStrategy implements PlatformDockingStrategy {
         );
         
         if (!loginResult.isSuccess()) {
-            log.warn("[AQKS下单] 账号验证失败: {}", loginResult.getErrorMessage());
+            log.warn("[AQKS下单] 账号验证失败，已省略第三方错误详情");
             return DockResult.fail("账号验证失败: " + loginResult.getErrorMessage());
         }
         
         // 保存用户ID到备注（用于后续刷时长）
         String thirdOrderId = loginResult.getUserId();
         
-        log.info("[AQKS下单] 成功: userId={}, 当前进度={}%", thirdOrderId, loginResult.calculateProgress());
+        log.info("[AQKS下单] 成功，当前进度={}%", loginResult.calculateProgress());
         
         return DockResult.success("自营订单创建成功", thirdOrderId);
     }
@@ -153,7 +153,7 @@ public class AqksDockingStrategy implements PlatformDockingStrategy {
      */
     @Override
     public OrderProgressResult queryOrderProgress(CourseOrder order, CoursePlatform platform, ApiProvider apiProvider) {
-        log.info("[AQKS查进度] orderId={}, account={}", order.getId(), order.getStudentAccount());
+        log.info("[AQKS查进度] orderId={}", order.getId());
         
         // 登录获取最新状态
         AqksLoginResult loginResult = aqksApiClient.login(
@@ -162,7 +162,7 @@ public class AqksDockingStrategy implements PlatformDockingStrategy {
         );
         
         if (!loginResult.isSuccess()) {
-            log.warn("[AQKS查进度] 登录失败: {}", loginResult.getErrorMessage());
+            log.warn("[AQKS查进度] 登录失败，已省略第三方错误详情");
             return OrderProgressResult.builder()
                     .progress(order.getProgress())
                     .orderStatus(order.getOrderStatus())
@@ -194,7 +194,7 @@ public class AqksDockingStrategy implements PlatformDockingStrategy {
                     orderStatus = SystemVariableCache.getStatusValue("order_status", "processing");
                 }
             } catch (Exception e) {
-                log.warn("[AQKS查进度] 获取考试状态失败: {}", e.getMessage());
+                log.warn("[AQKS查进度] 获取考试状态失败: exceptionType={}", e.getClass().getSimpleName());
             }
         }
         
@@ -218,7 +218,7 @@ public class AqksDockingStrategy implements PlatformDockingStrategy {
      */
     @Override
     public DockResult retryOrder(CourseOrder order, CoursePlatform platform, ApiProvider apiProvider) {
-        log.info("[AQKS补单] orderId={}, account={}", order.getId(), order.getStudentAccount());
+        log.info("[AQKS补单] orderId={}", order.getId());
         
         // 先登录获取Cookie
         AqksLoginResult loginResult = aqksApiClient.login(
@@ -227,7 +227,7 @@ public class AqksDockingStrategy implements PlatformDockingStrategy {
         );
         
         if (!loginResult.isSuccess()) {
-            log.warn("[AQKS补单] 登录失败: {}", loginResult.getErrorMessage());
+            log.warn("[AQKS补单] 登录失败，已省略第三方错误详情");
             return DockResult.fail("登录失败: " + loginResult.getErrorMessage());
         }
         

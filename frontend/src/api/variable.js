@@ -29,6 +29,17 @@ export function updateVariable(data) {
 }
 
 /**
+ * 原子批量更新主题颜色变量
+ */
+export function updateThemeVariables(data) {
+  return request({
+    url: '/admin/variables/theme',
+    method: 'put',
+    data
+  })
+}
+
+/**
  * 删除系统变量
  */
 export function deleteVariable(id) {
@@ -96,6 +107,16 @@ export function setDefaultVariable(id) {
 export function getVariableTypes() {
   return request({
     url: '/admin/variables/types',
+    method: 'get'
+  })
+}
+
+/**
+ * 获取客户端可用的主题颜色变量（公开只读）
+ */
+export function getThemeVariables() {
+  return request({
+    url: '/theme/variables',
     method: 'get'
   })
 }

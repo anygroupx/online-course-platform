@@ -35,7 +35,7 @@ import java.util.List;
  */
 @Slf4j
 @Tag(name = "订单批量操作", description = "批量修改订单状态等操作（管理员）")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAuthority('order:update')")
 @RequestMapping("/admin/orders/batch")
 @RequiredArgsConstructor
 @RestController
@@ -49,7 +49,7 @@ public class OrderBatchController {
      * 验证管理员权限
      */
     private void checkAdmin(Long userId) {
-        SecurityUtils.requireAdmin();
+        SecurityUtils.requireAuthority("order:update");
     }
 
     /**

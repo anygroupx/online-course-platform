@@ -42,8 +42,8 @@
           <p>欢迎使用在线客服，有什么可以帮助您的吗？</p>
         </div>
         <div
-          v-for="message in messages"
-          :key="message.id"
+          v-for="(message, index) in messages"
+          :key="`${message.createTime}-${index}`"
           class="message-item"
           :class="{ 'message-right': message.senderType === 1 }"
         >
@@ -121,10 +121,6 @@ import {
   getUnreadCount,
   endSession,
 } from "@/api/customerService";
-import { useUserStore } from "@/stores/user";
-
-// Source: AURA-X-KYS 用户状态管理集成
-const userStore = useUserStore();
 
 // 响应式数据
 const chatVisible = ref(false);
@@ -208,15 +204,8 @@ const loadMessages = async () => {
 };
 
 // 发送消息
-// Source: AURA-X-KYS 使用真实用户ID发送消息
 const handleSendMessage = async () => {
   if (!inputMessage.value.trim() || !sessionId.value) return;
-
-  // 检查用户是否登录
-  // if (!userStore.userInfo || !userStore.userInfo.id) {
-  //   ElMessage.warning("请先登录");
-  //   return;
-  // }
 
   sending.value = true;
 
@@ -224,9 +213,7 @@ const handleSendMessage = async () => {
     const response = await sendMessage({
       sessionId: sessionId.value,
       content: inputMessage.value.trim(),
-      senderType: 1, // 用户
       messageType: 1, // 文本
-      senderId: userStore.userInfo.id, // 使用真实用户ID
     });
 
     if (response.code === 1) {
@@ -392,13 +379,13 @@ onUnmounted(() => {
 }
 
 .service-button .el-icon {
-  color: white;
+  color: var(--text-on-brand);
   font-size: 20px;
   margin-bottom: 2px;
 }
 
 .service-button span {
-  color: white;
+  color: var(--text-on-brand);
   font-size: 10px;
   font-weight: 500;
 }
@@ -428,7 +415,7 @@ onUnmounted(() => {
 /* 聊天头部 */
 .chat-header {
   background: var(--primary-gradient);
-  color: white;
+  color: var(--text-on-brand);
   padding: 12px 16px;
   display: flex;
   justify-content: space-between;
@@ -457,13 +444,13 @@ onUnmounted(() => {
 .header-actions .el-button {
   padding: 4px;
   min-height: auto;
-  background: rgba(255, 255, 255, 0.2);
+  background: color-mix(in srgb, var(--text-on-brand) 20%, transparent);
   border: none;
-  color: white;
+  color: var(--text-on-brand);
 }
 
 .header-actions .el-button:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: color-mix(in srgb, var(--text-on-brand) 30%, transparent);
 }
 
 /* 消息列表 */
@@ -515,7 +502,7 @@ onUnmounted(() => {
 
 .message-right .message-content {
   background: var(--brand-primary);
-  color: white;
+  color: var(--text-on-brand);
 }
 
 .message-header {
@@ -532,7 +519,7 @@ onUnmounted(() => {
 }
 
 .message-right .sender-name {
-  color: rgba(255, 255, 255, 0.8);
+  color: color-mix(in srgb, var(--text-on-brand) 80%, transparent);
 }
 
 .message-time {
@@ -541,7 +528,7 @@ onUnmounted(() => {
 }
 
 .message-right .message-time {
-  color: rgba(255, 255, 255, 0.6);
+  color: color-mix(in srgb, var(--text-on-brand) 60%, transparent);
 }
 
 .message-text {
@@ -587,7 +574,7 @@ onUnmounted(() => {
 }
 
 .minimized-chat .el-icon {
-  color: white;
+  color: var(--text-on-brand);
   font-size: 18px;
 }
 
@@ -639,17 +626,17 @@ html.dark .chat-window {
 }
 
 html.dark .message-list {
-  background: #121212;
+  background: var(--bg-body);
 }
 
 html.dark .message-content {
-  background: #2d2d2d;
+  background: var(--surface-solid);
   color: var(--text-primary);
 }
 
 html.dark .message-right .message-content {
   background: var(--brand-primary);
-  color: white;
+  color: var(--text-on-brand);
 }
 
 html.dark .input-area {

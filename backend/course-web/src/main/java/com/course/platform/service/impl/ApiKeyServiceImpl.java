@@ -1,12 +1,14 @@
 package com.course.platform.service.impl;
 
 import cn.hutool.core.util.IdUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.course.platform.application.service.auth.ApiKeyService;
 import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.application.service.support.OperationLogService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
 import com.course.platform.common.security.TokenHashUtil;
+import com.course.platform.common.util.PublicUidUtil;
 import com.course.platform.domain.entity.User;
 import com.course.platform.infra.persistence.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -40,11 +42,11 @@ public class ApiKeyServiceImpl implements ApiKeyService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public String enableApiKey(Long userId, Integer type, Long targetUserId) {
+    public String enableApiKey(Long userId, Integer type, String targetUserUid) {
         if (type == 1) {
             return enableForSelf(userId);
         } else if (type == 2) {
-            return enableForSubordinate(userId, targetUserId);
+            return enableForSubordinate(userId, targetUserUid);
         }
         throw new BusinessException("开通类型错误");
     }
@@ -82,15 +84,17 @@ public class ApiKeyServiceImpl implements ApiKeyService {
         return plain;
     }
 
-    private String enableForSubordinate(Long operatorId, Long targetUserId) {
-        if (targetUserId == null) {
-            throw new BusinessException("目标用户ID不能为空");
+    private String enableForSubordinate(Long operatorId, String targetUserUid) {
+        if (!PublicUidUtil.isValid(targetUserUid)) {
+            throw new BusinessException("目标用户 UUID 格式错误");
         }
         User operator = userMapper.selectById(operatorId);
         if (operator == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
-        User target = userMapper.selectById(targetUserId);
+        User target = userMapper.selectOne(new LambdaQueryWrapper<User>()
+                .eq(User::getUid, PublicUidUtil.normalize(targetUserUid))
+                .last("LIMIT 1"));
         if (target == null) {
             throw new BusinessException("目标用户不存在");
         }
@@ -106,7 +110,7 @@ public class ApiKeyServiceImpl implements ApiKeyService {
                 operatorId,
                 cost,
                 AccountLedgerServiceImpl.BIZ_API_FEE,
-                "API-SUB-" + targetUserId + "-" + System.currentTimeMillis(),
+                "API-SUB-" + target.getUid() + "-" + System.currentTimeMillis(),
                 String.format("给下级[%s]开通API", target.getUsername())
         );
         operator = userMapper.selectById(operatorId);
@@ -114,21 +118,18 @@ public class ApiKeyServiceImpl implements ApiKeyService {
         String plain = generatePlainApiKey();
         storeApiKey(target, plain, "上级开通");
         securityAuditService.record("KEY_CHANGE", "WARN", operatorId, operator.getUsername(),
-                "/api-key/enable", "POST", "上级为下级开通 API Key", "targetUserId=" + targetUserId);
+                "/api-key/enable", "POST", "上级为下级开通 API Key", "targetUserUid=" + target.getUid());
         operationLogService.log(operatorId, "开通API",
                 String.format("给下级用户[%s]开通API接口，扣费%s元", target.getUsername(), cost),
                 cost.negate(), operator.getBalance());
-        operationLogService.log(targetUserId, "开通API",
+        operationLogService.log(target.getId(), "开通API",
                 String.format("上级[%s]为你开通API接口", operator.getUsername()),
                 BigDecimal.ZERO, null);
         return plain;
     }
 
     private boolean hasActiveApiKey(User user) {
-        if (StringUtils.hasText(user.getApiKeyHash())) {
-            return true;
-        }
-        return StringUtils.hasText(user.getApiKey()) && !"0".equals(user.getApiKey());
+        return StringUtils.hasText(user.getApiKeyHash());
     }
 
     private String generatePlainApiKey() {
@@ -145,7 +146,7 @@ public class ApiKeyServiceImpl implements ApiKeyService {
         user.setApiKey(null); // 不再保存明文
         user.setApiKeyHash(TokenHashUtil.sha256(plain));
         user.setApiKeyPrefix(prefix);
-        user.setApiKeyScopes("orders:read,orders:write,platforms:read");
+        user.setApiKeyScopes("balance:read,orders:read,orders:write,platforms:read");
         user.setApiKeyExpireTime(LocalDateTime.now().plusYears(1));
         userMapper.updateById(user);
         log.info("API Key 已生成并哈希存储：userId={}, prefix={}, source={}", user.getId(), prefix, source);

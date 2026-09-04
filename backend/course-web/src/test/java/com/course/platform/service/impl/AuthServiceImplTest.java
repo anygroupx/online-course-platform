@@ -15,6 +15,7 @@ import com.course.platform.domain.vo.LoginResponse;
 import com.course.platform.infra.persistence.mapper.RefreshTokenMapper;
 import com.course.platform.infra.persistence.mapper.UserMapper;
 import com.course.platform.shared.util.JwtUtil;
+import com.course.platform.security.UserAuthorityService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +36,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class AuthServiceImplTest {
 
+    private static final String USER_UID = "550e8400-e29b-41d4-a716-446655440000";
+
     @Mock
     private UserMapper userMapper;
     @Mock
@@ -51,6 +54,8 @@ class AuthServiceImplTest {
     private MfaService mfaService;
     @Mock
     private SecurityAuditService securityAuditService;
+    @Mock
+    private UserAuthorityService userAuthorityService;
 
     @InjectMocks
     private AuthServiceImpl authService;
@@ -58,6 +63,7 @@ class AuthServiceImplTest {
     private User buildUser(Long id, String username, int status) {
         User user = new User();
         user.setId(id);
+        user.setUid(USER_UID);
         user.setUsername(username);
         user.setPassword("encoded");
         user.setNickname("昵称");
@@ -65,6 +71,8 @@ class AuthServiceImplTest {
         user.setRate(new BigDecimal("1.00"));
         user.setStatus(status);
         user.setRole(id != null && id == 1L ? SecurityRoles.ADMIN : SecurityRoles.USER);
+        lenient().when(userAuthorityService.getPrimaryRole(id))
+                .thenReturn(id != null && id == 1L ? "SUPER_ADMIN" : "USER");
         return user;
     }
 
@@ -75,8 +83,8 @@ class AuthServiceImplTest {
         when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(user);
         when(passwordEncoder.matches("123456", "encoded")).thenReturn(true);
         when(mfaService.isEnabled(user)).thenReturn(false);
-        when(jwtUtil.generateToken(1L, "admin")).thenReturn("access-token");
-        when(jwtUtil.generateRefreshToken(1L, "admin")).thenReturn("refresh-token");
+        when(jwtUtil.generateToken(USER_UID, "admin")).thenReturn("access-token");
+        when(jwtUtil.generateRefreshToken(USER_UID, "admin")).thenReturn("refresh-token");
         when(systemConfigService.getConfigValueAsInteger("refresh_token_expire_days", 7)).thenReturn(7);
         when(userMapper.updateById(any(User.class))).thenReturn(1);
         when(refreshTokenMapper.insert(any(RefreshToken.class))).thenReturn(1);
@@ -89,7 +97,7 @@ class AuthServiceImplTest {
 
         assertEquals("access-token", response.getToken());
         assertEquals("refresh-token", response.getRefreshToken());
-        assertEquals(1L, response.getUserId());
+        assertEquals(USER_UID, response.getUid());
         assertTrue(response.getIsAdmin());
         assertFalse(Boolean.TRUE.equals(response.getMfaRequired()));
         verify(operationLogService).log(eq(1L), eq("登录"), anyString(), isNull(), eq(user.getBalance()));
@@ -117,7 +125,7 @@ class AuthServiceImplTest {
         assertEquals("challenge-abc", response.getMfaChallengeId());
         assertNull(response.getToken());
         assertNull(response.getRefreshToken());
-        verify(jwtUtil, never()).generateToken(anyLong(), anyString());
+        verify(jwtUtil, never()).generateToken(anyString(), anyString());
         verify(refreshTokenMapper, never()).insert(any(RefreshToken.class));
     }
 
@@ -148,7 +156,7 @@ class AuthServiceImplTest {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> authService.login(request));
         assertEquals(ResultCode.USERNAME_OR_PASSWORD_ERROR.getCode(), ex.getCode());
-        verify(jwtUtil, never()).generateToken(anyLong(), anyString());
+        verify(jwtUtil, never()).generateToken(anyString(), anyString());
     }
 
     @Test
@@ -165,6 +173,6 @@ class AuthServiceImplTest {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> authService.login(request));
         assertEquals(ResultCode.ACCOUNT_DISABLED.getCode(), ex.getCode());
-        verify(jwtUtil, never()).generateToken(anyLong(), anyString());
+        verify(jwtUtil, never()).generateToken(anyString(), anyString());
     }
 }

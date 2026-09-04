@@ -399,8 +399,12 @@ onMounted(() => {
 
 .balance-card {
   margin-bottom: 20px;
-  background: var(--primary-gradient);
-  color: white;
+  background: var(--primary-gradient) !important;
+  color: var(--text-on-brand);
+}
+
+.balance-card :deep(.el-card__body) {
+  color: inherit;
 }
 
 .balance-info {
@@ -496,21 +500,21 @@ onMounted(() => {
 }
 
 .amount-option:hover {
-  border-color: var(--color-primary);
+  border-color: var(--brand-primary);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(78, 140, 255, 0.15);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--brand-primary) 15%, transparent);
 }
 
 .amount-option.active {
-  border-color: var(--color-primary);
-  background: var(--brand-blue-soft);
+  border-color: var(--brand-primary);
+  background: color-mix(in srgb, var(--brand-primary) 12%, var(--surface-solid));
 }
 
 .amount-value {
   display: block;
   font-size: 24px;
   font-weight: bold;
-  color: var(--color-primary);
+  color: var(--brand-primary);
 }
 
 .amount-unit {
@@ -532,16 +536,16 @@ onMounted(() => {
 
 /* Dark Mode Overrides */
 html.dark .contact-info {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
 }
 
 html.dark .amount-option {
-  background-color: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.1);
+  background-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  border-color: var(--border-color-light);
 }
 
 html.dark .amount-option.active {
-  background-color: rgba(78, 140, 255, 0.1);
+  background-color: color-mix(in srgb, var(--brand-primary) 10%, transparent);
 }
 
 @media (max-width: 768px) {

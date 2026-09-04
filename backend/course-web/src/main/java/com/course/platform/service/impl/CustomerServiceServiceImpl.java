@@ -4,7 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.course.platform.application.service.support.CustomerServiceService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
-import com.course.platform.common.security.SecurityRoles;
+import com.course.platform.common.security.SecurityAuthorities;
+import com.course.platform.common.util.PublicUidUtil;
 import com.course.platform.domain.dto.CustomerServiceMessageDTO;
 import com.course.platform.domain.entity.CustomerServiceMessage;
 import com.course.platform.domain.entity.CustomerServiceSession;
@@ -15,6 +16,7 @@ import com.course.platform.infra.persistence.mapper.CustomerServiceMessageMapper
 import com.course.platform.infra.persistence.mapper.CustomerServiceSessionMapper;
 import com.course.platform.infra.persistence.mapper.UserMapper;
 import com.course.platform.security.SecurityUtils;
+import com.course.platform.security.ResourceAuthorizationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +37,7 @@ public class CustomerServiceServiceImpl implements CustomerServiceService {
     private final CustomerServiceSessionMapper sessionMapper;
     private final CustomerServiceMessageMapper messageMapper;
     private final UserMapper userMapper;
+    private final ResourceAuthorizationService authorizationService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -113,10 +116,19 @@ public class CustomerServiceServiceImpl implements CustomerServiceService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Boolean assignCustomerService(String sessionId, Long customerServiceId) {
-        SecurityUtils.requireCustomerService();
+    public Boolean assignCustomerService(String sessionId, String customerServiceUid) {
+        SecurityUtils.requireAuthority(SecurityAuthorities.CUSTOMER_SERVICE_ASSIGN);
+        if (!PublicUidUtil.isValid(customerServiceUid)) {
+            throw new BusinessException("客服 UUID 格式错误");
+        }
+        User customerService = userMapper.selectOne(new LambdaQueryWrapper<User>()
+                .eq(User::getUid, PublicUidUtil.normalize(customerServiceUid))
+                .last("LIMIT 1"));
+        if (customerService == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
         CustomerServiceSession session = requireSession(sessionId);
-        session.setCustomerServiceId(customerServiceId);
+        session.setCustomerServiceId(customerService.getId());
         if (session.getStatus() != null && session.getStatus() == 1) {
             session.setStatus(2);
         }
@@ -126,14 +138,14 @@ public class CustomerServiceServiceImpl implements CustomerServiceService {
 
     @Override
     public List<CustomerServiceSessionVO> getAllSessions(Integer status) {
-        SecurityUtils.requireCustomerService();
+        SecurityUtils.requireAuthority(SecurityAuthorities.CUSTOMER_SERVICE_READ);
         return sessionMapper.selectAllSessionsWithInfo(status);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean takeSession(String sessionId, Long customerServiceId) {
-        SecurityUtils.requireCustomerService();
+        SecurityUtils.requireAuthority(SecurityAuthorities.CUSTOMER_SERVICE_TAKE);
         CustomerServiceSession session = requireSession(sessionId);
         session.setCustomerServiceId(customerServiceId);
         session.setStatus(2);
@@ -152,36 +164,19 @@ public class CustomerServiceServiceImpl implements CustomerServiceService {
     }
 
     private void assertCanAccessSession(CustomerServiceSession session, Long userId) {
-        if (userId == null) {
+        if (userId == null || !userId.equals(SecurityUtils.getCurrentUserId())) {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
-        if (userId.equals(session.getUserId())) {
-            return;
-        }
-        if (session.getCustomerServiceId() != null && userId.equals(session.getCustomerServiceId())) {
-            return;
-        }
-        if (SecurityUtils.isCustomerService()) {
-            return;
-        }
-        throw new BusinessException(ResultCode.FORBIDDEN);
+        authorizationService.requireCanAccessCustomerServiceSession(session);
     }
 
     private int resolveSenderType(CustomerServiceSession session, Long userId) {
         if (userId.equals(session.getUserId())) {
             return 1; // 用户
         }
-        if (SecurityUtils.isCustomerService()
-                || (session.getCustomerServiceId() != null && userId.equals(session.getCustomerServiceId()))) {
-            return 2; // 客服
-        }
-        // 兜底再查角色
-        User user = userMapper.selectById(userId);
-        if (user != null && user.getRole() != null) {
-            String role = user.getRole().toUpperCase();
-            if (SecurityRoles.ADMIN.equals(role) || SecurityRoles.CS.equals(role)) {
-                return 2;
-            }
+        if ((session.getCustomerServiceId() != null && userId.equals(session.getCustomerServiceId()))
+                || SecurityUtils.hasAuthority(SecurityAuthorities.CUSTOMER_SERVICE_READ_ANY)) {
+            return 2; // 客服身份完全由已分配关系/服务端权限决定
         }
         throw new BusinessException(ResultCode.FORBIDDEN);
     }

@@ -1,5 +1,6 @@
 package com.course.platform.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.course.platform.common.result.Result;
 import com.course.platform.domain.entity.CountdownConfig;
 import com.course.platform.application.service.course.CountdownConfigService;
@@ -17,6 +18,7 @@ import java.util.Map;
  * @since 2025-01-17
  */
 @Slf4j
+@PreAuthorize("hasAuthority('order:update')")
 @RestController
 @RequestMapping("/admin/countdown-config")
 @RequiredArgsConstructor

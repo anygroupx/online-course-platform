@@ -172,8 +172,8 @@ const routes = [
       {
         path: "theme-config",
         name: "ThemeConfig",
-        component: () => import("@/views/ThemeConfig.vue"),
-        meta: { title: "主题配置", requiresAuth: true },
+        redirect: { path: "/admin/variables", query: { type: "theme_color_light" } },
+        meta: { title: "主题配置", requiresAuth: true, adminOnly: true },
       },
       {
         path: "payment/callback",

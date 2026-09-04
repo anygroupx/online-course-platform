@@ -4,7 +4,7 @@ import com.course.platform.application.service.system.SystemConfigService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.Result;
 import com.course.platform.common.result.ResultCode;
-import com.course.platform.common.security.SecurityRoles;
+import com.course.platform.common.security.SecurityAuthorities;
 import com.course.platform.domain.entity.SystemConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,9 +41,9 @@ class SystemConfigControllerTest {
         SecurityContextHolder.clearContext();
     }
 
-    private Authentication authWithRoles(Long userId, String... roles) {
-        List<SimpleGrantedAuthority> authorities = java.util.Arrays.stream(roles)
-                .map(role -> new SimpleGrantedAuthority(SecurityRoles.toSpringRole(role)))
+    private Authentication authWithAuthorities(Long userId, String... names) {
+        List<SimpleGrantedAuthority> authorities = java.util.Arrays.stream(names)
+                .map(SimpleGrantedAuthority::new)
                 .toList();
         Authentication authentication = new UsernamePasswordAuthenticationToken(userId, null, authorities);
         SecurityContextHolder.getContext().setAuthentication(authentication);
@@ -53,7 +53,7 @@ class SystemConfigControllerTest {
     @Test
     @DisplayName("管理员可重置单个配置")
     void resetConfig_adminAllowed() {
-        Authentication authentication = authWithRoles(1L, SecurityRoles.ADMIN);
+        Authentication authentication = authWithAuthorities(1L, SecurityAuthorities.SYSTEM_CONFIG_UPDATE);
 
         Result<Void> result = systemConfigController.resetConfig("site_name", authentication);
 
@@ -64,7 +64,7 @@ class SystemConfigControllerTest {
     @Test
     @DisplayName("非管理员重置配置应拒绝")
     void resetConfig_nonAdminForbidden() {
-        Authentication authentication = authWithRoles(2L, SecurityRoles.USER);
+        Authentication authentication = authWithAuthorities(2L, SecurityAuthorities.ROLE_USER);
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> systemConfigController.resetConfig("site_name", authentication));
@@ -75,7 +75,7 @@ class SystemConfigControllerTest {
     @Test
     @DisplayName("管理员可重置全部配置")
     void resetAllConfigs_adminAllowed() {
-        Authentication authentication = authWithRoles(1L, SecurityRoles.ADMIN);
+        Authentication authentication = authWithAuthorities(1L, SecurityAuthorities.SYSTEM_CONFIG_UPDATE);
         when(systemConfigService.resetAllConfigs()).thenReturn(11);
 
         Result<Map<String, Object>> result = systemConfigController.resetAllConfigs(authentication);

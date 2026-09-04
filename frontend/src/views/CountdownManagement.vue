@@ -2824,12 +2824,12 @@ onUnmounted(() => {
 
 .header-content > div:first-child h2 {
   margin: 0 0 8px 0;
-  color: -var(--color-primary);
+  color: var(--text-primary);
 }
 
 .header-content > div:first-child p {
   margin: 0;
-  color: -var(--color-secondary);
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
@@ -2855,18 +2855,18 @@ onUnmounted(() => {
 .stat-value {
   font-size: 24px;
   font-weight: bold;
-  color: #303133;
+  color: var(--text-primary);
   margin-bottom: 8px;
 }
 
 .stat-label {
   font-size: 14px;
-  color: -var(--text-secondary);
+  color: var(--text-secondary);
 }
 
 .stat-icon {
   font-size: 32px;
-  color: var(--color-primary);
+  color: var(--brand-primary);
   margin-top: 10px;
 }
 
@@ -2879,7 +2879,7 @@ onUnmounted(() => {
 }
 
 .stat-icon.info {
-  color: #909399;
+  color: var(--text-placeholder);
 }
 
 .operation-card {
@@ -2976,10 +2976,10 @@ onUnmounted(() => {
   }
 
   :deep(.el-collapse-item__header) {
-    background-color: #f5f7fa;
+    background-color: color-mix(in srgb, var(--brand-primary) 6%, var(--surface-solid));
     padding: 12px 15px;
     font-weight: 600;
-    color: #303133;
+    color: var(--text-primary);
   }
 
   :deep(.el-collapse-item__content) {
@@ -3214,7 +3214,7 @@ onUnmounted(() => {
 }
 
 .column-item:hover {
-  background: var(--bg-body-darker);
+  background: color-mix(in srgb, var(--brand-primary) 8%, var(--bg-body));
   box-shadow: var(--shadow-sm);
 }
 
@@ -3242,7 +3242,7 @@ onUnmounted(() => {
 
 .sortable-ghost {
   opacity: 0.4;
-  background: var(--color-primary);
+  background: var(--brand-primary);
 }
 
 /* 配置表单优化 */
@@ -3258,22 +3258,22 @@ onUnmounted(() => {
 
 /* 目标行高亮样式 */
 .target-row-highlight {
-  background-color: var(--color-warning-light-9) !important;
+  background-color: color-mix(in srgb, var(--color-warning) 12%, var(--surface-solid)) !important;
   border: 2px solid var(--color-warning) !important;
   animation: highlight-pulse 2s ease-in-out;
 }
 
 @keyframes highlight-pulse {
   0% {
-    background-color: var(--color-warning-light-9);
+    background-color: color-mix(in srgb, var(--color-warning) 12%, var(--surface-solid));
     transform: scale(1);
   }
   50% {
-    background-color: var(--color-warning-light-7);
+    background-color: color-mix(in srgb, var(--color-warning) 28%, var(--surface-solid));
     transform: scale(1.02);
   }
   100% {
-    background-color: var(--color-warning-light-9);
+    background-color: color-mix(in srgb, var(--color-warning) 12%, var(--surface-solid));
     transform: scale(1);
   }
 }
@@ -3291,12 +3291,12 @@ onUnmounted(() => {
 
 /* 倒计时状态优化 */
 .countdown-status-pending {
-  background: var(--color-warning-light-9);
+  background: color-mix(in srgb, var(--color-warning) 12%, var(--surface-solid));
   border-color: var(--color-warning);
 }
 
 .countdown-status-expired {
-  background: var(--color-danger-light-9);
+  background: color-mix(in srgb, var(--color-danger) 12%, var(--surface-solid));
   border-color: var(--color-danger);
 }
 
@@ -3325,7 +3325,7 @@ onUnmounted(() => {
 
 .operation-buttons .el-button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-sm);
 }
 
 /* 过期订单特殊样式 */
@@ -3339,14 +3339,15 @@ onUnmounted(() => {
 }
 
 .expired-actions .el-button--success {
-  background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+  background: var(--color-success);
   border: none;
+  color: var(--text-on-brand);
 }
 
 .expired-actions .el-button--warning {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  background: var(--color-warning);
   border: none;
-  color: white;
+  color: var(--text-on-brand);
 }
 
 /* 统计卡片优化 */
@@ -3370,36 +3371,36 @@ onUnmounted(() => {
 
 /* Dark Mode Overrides */
 html.dark .stat-card {
-  background: #1e1e1e;
-  border-color: #404040;
+  background: var(--surface-solid);
+  border-color: var(--border-color);
 }
 
 html.dark .column-item {
-  background: #1e1e1e;
-  border-color: #404040;
+  background: var(--surface-solid);
+  border-color: var(--border-color);
 }
 
 html.dark .column-item:hover {
-  background: #2a2a2a;
+  background: var(--bg-card-hover);
 }
 
 html.dark .filter-card {
-  background: #1e1e1e;
-  border-color: #404040;
+  background: var(--surface-solid);
+  border-color: var(--border-color);
 }
 
 html.dark .target-row-highlight {
-  background-color: rgba(247, 166, 47, 0.2) !important;
+  background-color: color-mix(in srgb, var(--color-warning) 20%, var(--surface-solid)) !important;
   border-color: var(--color-warning) !important;
 }
 
 html.dark .countdown-status-pending {
-  background: rgba(247, 166, 47, 0.2);
+  background: color-mix(in srgb, var(--color-warning) 20%, var(--surface-solid));
   border-color: var(--color-warning);
 }
 
 html.dark .countdown-status-expired {
-  background: rgba(240, 101, 101, 0.2);
+  background: color-mix(in srgb, var(--color-danger) 20%, var(--surface-solid));
   border-color: var(--color-danger);
 }
 </style>

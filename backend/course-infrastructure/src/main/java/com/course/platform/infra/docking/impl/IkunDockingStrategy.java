@@ -71,7 +71,7 @@ public class IkunDockingStrategy implements PlatformDockingStrategy {
         // 如果没有 get 方法，我需要去添加。
         // 先写在这里，等会去检查 ApiHttpClient。
         String response = apiHttpClient.getForString(url, null); 
-        log.info("Ikun下单响应: {}", response);
+        log.debug("Ikun下单响应已接收: length={}", response == null ? 0 : response.length());
 
         JSONObject json = JSONUtil.parseObj(response);
         if (json.getInt("code") == 1) {

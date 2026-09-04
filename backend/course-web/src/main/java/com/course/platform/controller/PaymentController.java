@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.course.platform.common.result.Result;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.course.platform.domain.dto.CreatePaymentRequest;
 import com.course.platform.domain.dto.PaymentOrderResponse;
 import com.course.platform.domain.entity.PaymentOrder;
@@ -117,7 +118,7 @@ public class PaymentController {
 
     @Operation(summary = "查询订单状态", description = "根据订单号查询支付订单状态")
     @GetMapping("/query/{orderNo}")
-    public Result<PaymentOrder> queryOrder(@PathVariable String orderNo,
+    public Result<PaymentOrderResponse> queryOrder(@PathVariable String orderNo,
                                            Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
 
@@ -127,12 +128,12 @@ public class PaymentController {
             return Result.error("订单不存在");
         }
 
-        return Result.success(order);
+        return Result.success(toPaymentOrderResponse(order));
     }
 
     @Operation(summary = "同步订单状态", description = "主动查询支付宝并同步订单状态（幂等入账）")
     @PostMapping("/sync/{orderNo}")
-    public Result<PaymentOrder> syncOrder(@PathVariable String orderNo,
+    public Result<PaymentOrderResponse> syncOrder(@PathVariable String orderNo,
                                           Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         PaymentOrder order = paymentOrderService.getByOrderNoAndUserId(orderNo, userId);
@@ -142,12 +143,12 @@ public class PaymentController {
         // 统一走幂等入账逻辑，避免与异步回调竞态重复加余额
         alipayService.syncPaidOrder(orderNo);
         order = paymentOrderService.getByOrderNoAndUserId(orderNo, userId);
-        return Result.success(order);
+        return Result.success(toPaymentOrderResponse(order));
     }
 
     @Operation(summary = "我的支付订单", description = "分页查询当前用户的支付订单列表")
     @GetMapping("/orders")
-    public Result<Page<PaymentOrder>> getMyOrders(
+    public Result<Page<PaymentOrderResponse>> getMyOrders(
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize,
@@ -156,12 +157,14 @@ public class PaymentController {
         Long userId = (Long) authentication.getPrincipal();
 
         Page<PaymentOrder> page = paymentOrderService.getUserOrders(userId, status, pageNum, pageSize);
-
-        return Result.success(page);
+        Page<PaymentOrderResponse> responsePage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
+        responsePage.setRecords(page.getRecords().stream().map(this::toPaymentOrderResponse).toList());
+        return Result.success(responsePage);
     }
 
     @Operation(summary = "申请退款", description = "对已支付的订单申请退款")
     @PostMapping("/refund/{orderNo}")
+    @PreAuthorize("hasAuthority('payment:refund')")
     public Result<String> refund(
             @PathVariable String orderNo,
             @RequestParam(required = false) String refundReason,
@@ -182,6 +185,23 @@ public class PaymentController {
         } else {
             return Result.error("退款失败");
         }
+    }
+
+    private PaymentOrderResponse toPaymentOrderResponse(PaymentOrder order) {
+        if (order == null) {
+            return null;
+        }
+        return PaymentOrderResponse.builder()
+                .orderNo(order.getOrderNo())
+                .amount(order.getAmount())
+                .subject(order.getSubject())
+                .paymentType(order.getPaymentType())
+                .status(order.getStatus())
+                .alipayTradeNo(order.getAlipayTradeNo())
+                .buyerLogonId(order.getBuyerLogonId())
+                .paidTime(order.getPaidTime())
+                .createTime(order.getCreateTime())
+                .build();
     }
 
     /**

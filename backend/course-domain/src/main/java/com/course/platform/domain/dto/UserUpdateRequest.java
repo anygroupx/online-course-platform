@@ -14,9 +14,9 @@ import java.math.BigDecimal;
 public class UserUpdateRequest {
 
     /**
-     * 用户ID
+     * 对外用户 UUID
      */
-    private Long id;
+    private String uid;
 
     /**
      * 昵称

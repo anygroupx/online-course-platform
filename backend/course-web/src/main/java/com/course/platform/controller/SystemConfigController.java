@@ -26,7 +26,7 @@ import java.util.Map;
  * @since 2025-01-17
  */
 @Tag(name = "系统配置", description = "系统参数配置接口")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAuthority('system-config:update')")
 @RequestMapping("/system/config")
 @RequiredArgsConstructor
 @RestController
@@ -83,6 +83,6 @@ public class SystemConfigController {
 
     private void requireAdmin(Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        SecurityUtils.requireAdmin();
+        SecurityUtils.requireAuthority("system-config:update");
     }
 }

@@ -32,11 +32,11 @@ public class RegisterController {
      */
     @Operation(summary = "用户注册", description = "通过邀请码注册新用户")
     @PostMapping
-    public Result<Long> register(@Valid @RequestBody RegisterRequest request) {
+    public Result<String> register(@Valid @RequestBody RegisterRequest request) {
         // 注册入库前强制完成服务端验证，前端组件本身不能作为安全判据。
         turnstileVerifier.verify(request.getTurnstileToken(), "register");
-        Long userId = registerService.register(request);
-        return Result.success("注册成功", userId);
+        String uid = registerService.register(request);
+        return Result.success("注册成功", uid);
     }
 
     /**

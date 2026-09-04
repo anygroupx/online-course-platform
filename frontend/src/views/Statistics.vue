@@ -110,7 +110,7 @@ onMounted(() => {
 
 .stat-card:hover {
   transform: translateY(-8px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-lg);
 }
 
 .stat-card:hover::before {
@@ -118,19 +118,19 @@ onMounted(() => {
 }
 
 .purple-card::before {
-  background: var(--brand-primary);
+  background: var(--brand-violet);
 }
 
 .blue-card::before {
-  background: #4facfe;
+  background: var(--brand-primary);
 }
 
 .green-card::before {
-  background: #43e97b;
+  background: var(--color-success);
 }
 
 .orange-card::before {
-  background: #f093fb;
+  background: var(--color-warning);
 }
 
 :deep(.el-card__body) {
@@ -144,36 +144,36 @@ onMounted(() => {
 }
 
 .purple-card .stat-icon {
-  color: var(--brand-primary);
+  color: var(--brand-violet);
 }
 
 .blue-card .stat-icon {
-  color: #4facfe;
+  color: var(--brand-primary);
 }
 
 .green-card .stat-icon {
-  color: #43e97b;
+  color: var(--color-success);
 }
 
 .orange-card .stat-icon {
-  color: #f093fb;
+  color: var(--color-warning);
 }
 
 .stat-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--text-secondary);
   margin-bottom: 8px;
 }
 
 .stat-value {
   font-size: 32px;
   font-weight: bold;
-  color: #303133;
+  color: var(--text-primary);
   margin-bottom: 8px;
 }
 
 .stat-trend {
   font-size: 13px;
-  color: #67C23A;
+  color: var(--color-success);
 }
 </style>

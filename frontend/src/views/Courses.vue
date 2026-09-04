@@ -318,7 +318,7 @@
             border-radius: 4px;
           "
         >
-          <div class="selection-info-text" style="font-size: 13px; color: var(--color-primary)">
+          <div class="selection-info-text" style="font-size: 13px; color: var(--brand-primary)">
              已选择 {{ accountData.selectedCourses.length }} 门课程
           </div>
         </div>

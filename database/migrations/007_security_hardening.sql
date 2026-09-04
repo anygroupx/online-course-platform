@@ -11,7 +11,7 @@ ALTER TABLE `sys_user`
   ADD COLUMN `api_key_scopes` VARCHAR(255) DEFAULT NULL COMMENT 'API Key作用域,逗号分隔' AFTER `api_key_prefix`,
   ADD COLUMN `api_key_expire_time` DATETIME DEFAULT NULL COMMENT 'API Key过期时间' AFTER `api_key_scopes`;
 
-UPDATE `sys_user` SET `role` = 'ADMIN', `must_change_password` = 1 WHERE `id` = 1;
+-- 不根据自增 ID 推断管理员；角色由后续规范化 RBAC 迁移按受控的现有角色值导入。
 
 -- Refresh Token 表增强
 ALTER TABLE `refresh_token`

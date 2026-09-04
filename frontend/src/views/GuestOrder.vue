@@ -2,7 +2,7 @@
   <div class="guest-order-container">
     <!-- Particle Background -->
     <canvas id="particle-canvas" ref="canvasRef"></canvas>
-    
+
     <!-- Ambient Glows -->
     <div class="glow-spot spot-1"></div>
     <div class="glow-spot spot-2"></div>
@@ -30,7 +30,7 @@
               <div class="select-trigger" @click="toggleSelect">
                 <div class="trigger-content">
                   <span v-if="selectedPlatform" class="selected-text">
-                    {{ selectedPlatform.name }} 
+                    {{ selectedPlatform.name }}
                     <span class="price-tag">¥{{ (selectedPlatform.basePrice * personalPriceMultiplier).toFixed(2) }}</span>
                   </span>
                   <span v-else class="placeholder">请选择网课平台</span>
@@ -40,9 +40,9 @@
                 </i>
               </div>
               <div class="select-options" v-show="isSelectOpen">
-                <div 
-                  v-for="platform in platformList" 
-                  :key="platform.id" 
+                <div
+                  v-for="platform in platformList"
+                  :key="platform.id"
                   class="option-item"
                   @click="selectPlatform(platform)"
                 >
@@ -130,7 +130,7 @@
             <div class="loader" v-if="isLoading"></div>
           </button>
         </form>
-        
+
         <div class="card-footer">
           <a href="/login" class="login-link">已有账号？<span class="highlight">去登录</span></a>
         </div>
@@ -182,7 +182,7 @@ class Particle {
     this.vx = (Math.random() - 0.5) * 0.5;
     this.vy = (Math.random() - 0.5) * 0.5;
     this.size = Math.random() * 2 + 1;
-    this.color = Math.random() > 0.5 ? 'rgba(168, 85, 247, ' : 'rgba(34, 211, 238, '; 
+    this.color = Math.random() > 0.5 ? 'rgba(168, 85, 247, ' : 'rgba(34, 211, 238, ';
   }
 
   update() {
@@ -204,13 +204,13 @@ class Particle {
 const initParticles = () => {
   const canvas = canvasRef.value;
   if (!canvas) return;
-  
+
   const ctx = canvas.getContext('2d');
   const resize = () => {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
   };
-  
+
   window.addEventListener('resize', resize);
   resize();
 
@@ -247,19 +247,19 @@ const initParticles = () => {
 const handleMouseMove = (e) => {
   mouseX.value = e.clientX;
   mouseY.value = e.clientY;
-  
+
   // Simple avoidance calculation
   const moveSpot = (spotRef, speed) => {
     if (!spotRef) return;
     const rect = spotRef.getBoundingClientRect();
     const spotX = rect.left + rect.width / 2;
     const spotY = rect.top + rect.height / 2;
-    
+
     const dx = mouseX.value - spotX;
     const dy = mouseY.value - spotY;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const maxDist = 400;
-    
+
     if (dist < maxDist) {
       const force = (maxDist - dist) / maxDist;
       const moveX = -dx * force * speed;
@@ -324,7 +324,7 @@ const handleSubmit = async () => {
     return;
   }
   if (isLoading.value) return;
-  
+
   isLoading.value = true;
   setTimeout(() => {
     isLoading.value = false;
@@ -338,29 +338,28 @@ const handleSubmit = async () => {
 </script>
 
 <style scoped lang="scss">
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-:root {
-  --primary: #a78bfa; /* Lighter Violet */
+.guest-order-container {
+  /* Scoped styles cannot safely define variables on :root. Keep this fixed dark-stage palette on the page root. */
+  --primary: #a78bfa;
+  --primary-hover: #c4b5fd;
   --primary-glow: rgba(167, 139, 250, 0.5);
-  --accent: #22d3ee; /* Cyan 400 */
-  --bg-dark: #0f172a; 
+  --accent: #22d3ee;
+  --bg-dark: #0f172a;
   --card-bg: rgba(15, 23, 42, 0.6);
   --input-bg: rgba(30, 41, 59, 0.4);
+  --menu-bg: #1e293b;
+  --scrollbar-thumb: #475569;
   --border-color: rgba(255, 255, 255, 0.15);
-  --text-main: #f8fafc; /* Slate 50 */
-  --text-sub: #cbd5e1; /* Slate 300 - Much lighter than before */
-  --text-label: #94a3b8; /* Slate 400 */
-}
-
-.guest-order-container {
+  --text-main: #f8fafc;
+  --text-sub: #cbd5e1;
+  --text-label: #94a3b8;
   position: relative;
   width: 100vw;
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
   background: radial-gradient(ellipse at bottom, #1e1b4b 0%, #020617 100%);
-  font-family: 'Inter', sans-serif;
+  font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
   color: var(--text-main);
   display: flex;
   justify-content: center;
@@ -418,7 +417,7 @@ const handleSubmit = async () => {
   border-top: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 24px;
   padding: 40px;
-  box-shadow: 
+  box-shadow:
     0 25px 50px -12px rgba(0, 0, 0, 0.5),
     0 0 0 1px rgba(255, 255, 255, 0.05) inset;
   opacity: 0;
@@ -433,7 +432,7 @@ const handleSubmit = async () => {
 .card-header {
   text-align: center;
   margin-bottom: 36px;
-  
+
   .logo-wrapper {
     display: inline-flex;
     padding: 12px;
@@ -454,7 +453,7 @@ const handleSubmit = async () => {
     font-size: 30px;
     font-weight: 700;
     margin: 0 0 10px;
-    background: linear-gradient(to right, #fff, #e2e8f0);
+    background: linear-gradient(to right, var(--text-main), var(--text-sub));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     letter-spacing: -0.5px;
@@ -482,7 +481,7 @@ const handleSubmit = async () => {
 
 .input-wrapper {
   position: relative;
-  
+
   input {
     width: 100%;
     background: var(--input-bg);
@@ -491,15 +490,15 @@ const handleSubmit = async () => {
     padding: 18px 16px 6px; /* Adjusted padding */
     height: 56px;
     font-size: 15px;
-    color: #fff;
+    color: var(--text-main);
     outline: none;
     transition: all 0.2s;
-    
+
     &:focus {
       background: rgba(30, 41, 59, 0.8);
       border-color: var(--primary);
     }
-    
+
     &:not(:placeholder-shown) + label,
     &:focus + label {
       transform: translateY(-12px) scale(0.85);
@@ -517,7 +516,7 @@ const handleSubmit = async () => {
     transition: all 0.2s ease;
     transform-origin: left top;
   }
-  
+
   .focus-border {
     position: absolute;
     bottom: 0;
@@ -528,7 +527,7 @@ const handleSubmit = async () => {
     transition: all 0.3s ease;
     transform: translateX(-50%);
   }
-  
+
   input:focus ~ .focus-border {
     width: 100%;
     box-shadow: 0 0 10px var(--primary-glow);
@@ -539,7 +538,7 @@ const handleSubmit = async () => {
 .custom-select {
   position: relative;
   z-index: 20;
-  
+
   .select-trigger {
     background: var(--input-bg);
     border: 1px solid var(--border-color);
@@ -551,13 +550,13 @@ const handleSubmit = async () => {
     justify-content: space-between;
     cursor: pointer;
     transition: all 0.2s;
-    
+
     &:hover {
       border-color: rgba(255, 255, 255, 0.3);
       background: rgba(30, 41, 59, 0.6);
     }
   }
-  
+
   &.open .select-trigger {
     border-color: var(--primary);
     background: rgba(30, 41, 59, 0.8);
@@ -569,13 +568,13 @@ const handleSubmit = async () => {
     flex-direction: column;
     justify-content: center;
     width: 100%;
-    
+
     .placeholder { color: var(--text-label); font-size: 15px; }
-    .selected-text { 
-      color: #fff; 
-      font-weight: 500; 
-      display: flex; 
-      align-items: center; 
+    .selected-text {
+      color: var(--text-main);
+      font-weight: 500;
+      display: flex;
+      align-items: center;
       gap: 8px;
       width: 100%;
     }
@@ -588,7 +587,7 @@ const handleSubmit = async () => {
       margin-left: auto; /* Push to right */
     }
   }
-  
+
   .arrow-icon {
     color: var(--text-label);
     transition: transform 0.3s;
@@ -601,7 +600,7 @@ const handleSubmit = async () => {
     top: calc(100% + 8px);
     left: 0;
     width: 100%;
-    background: #1e293b;
+    background: var(--menu-bg);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
     box-shadow: 0 20px 40px rgba(0,0,0,0.5);
@@ -609,9 +608,9 @@ const handleSubmit = async () => {
     overflow-y: auto;
     z-index: 100;
     animation: fadeIn 0.2s ease;
-    
+
     &::-webkit-scrollbar { width: 4px; }
-    &::-webkit-scrollbar-thumb { background: #475569; border-radius: 2px; }
+    &::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px; }
   }
 
   .option-item {
@@ -622,12 +621,12 @@ const handleSubmit = async () => {
     cursor: pointer;
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
     transition: background 0.2s;
-    
+
     &:hover {
       background: rgba(167, 139, 250, 0.1);
     }
-    
-    .platform-name { color: #e2e8f0; font-size: 14px; }
+
+    .platform-name { color: var(--text-main); font-size: 14px; }
     .platform-price { color: var(--accent); font-weight: 600; font-size: 14px; }
   }
 }
@@ -659,7 +658,7 @@ const handleSubmit = async () => {
   position: relative;
   cursor: pointer;
   input { display: none; }
-  
+
   .option-content {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--border-color);
@@ -671,25 +670,25 @@ const handleSubmit = async () => {
     gap: 10px;
     transition: all 0.3s;
     height: 60px;
-    
-    span { font-size: 15px; font-weight: 500; color: #e2e8f0; }
-    
+
+    span { font-size: 15px; font-weight: 500; color: var(--text-main); }
+
     .icon-box {
       width: 28px; height: 28px;
       display: flex; align-items: center; justify-content: center;
       border-radius: 6px;
-      
+
       &.alipay { color: #1677ff; }
       &.wechat { color: #07c160; }
     }
   }
-  
+
   &.active .option-content {
     background: rgba(167, 139, 250, 0.15);
     border-color: var(--primary);
     box-shadow: 0 0 0 1px var(--primary-glow);
   }
-  
+
   &:hover .option-content {
     background: rgba(255, 255, 255, 0.08);
   }
@@ -703,14 +702,14 @@ const handleSubmit = async () => {
   border: none;
   border-radius: 12px;
   background: linear-gradient(135deg, var(--primary), #8b5cf6);
-  color: white;
+  color: var(--text-main);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   overflow: hidden;
   transition: all 0.3s;
   box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
-  
+
   .btn-content {
     display: flex;
     align-items: center;
@@ -718,13 +717,13 @@ const handleSubmit = async () => {
     gap: 8px;
     transition: transform 0.3s;
   }
-  
+
   &:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 20px rgba(139, 92, 246, 0.4);
     .btn-content { transform: translateX(4px); }
   }
-  
+
   &.loading {
     opacity: 0.8;
     pointer-events: none;
@@ -737,8 +736,8 @@ const handleSubmit = async () => {
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
   width: 24px; height: 24px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
+  border: 2px solid color-mix(in srgb, var(--text-main) 30%, transparent);
+  border-top-color: var(--text-main);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -750,20 +749,20 @@ const handleSubmit = async () => {
   text-align: center;
   font-size: 14px;
   color: var(--text-sub);
-  
+
   .login-link {
     color: inherit;
     text-decoration: none;
-    
+
     .highlight {
       color: var(--primary);
       font-weight: 500;
       margin-left: 4px;
       transition: color 0.2s;
     }
-    
+
     &:hover .highlight {
-      color: #c4b5fd;
+      color: var(--primary-hover);
       text-decoration: underline;
     }
   }

@@ -4,6 +4,7 @@ import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.course.platform.common.exception.BusinessException;
+import com.course.platform.infra.docking.DockingLogSanitizer;
 import com.course.platform.infra.external.ApiHttpClient;
 import com.course.platform.domain.dto.DockResult;
 import com.course.platform.domain.dto.OrderProgressResult;
@@ -57,9 +58,9 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         params.put("pass", request.getStudentPassword());
         params.put("kcid", ""); // QueryCourseRequest 中没有 courseId 字段
 
-        log.info("暗网查课请求: url={}, params={}", url, params);
+        log.info("暗网查课请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
-        log.info("暗网查课响应: {}", response);
+        log.debug("暗网查课响应已接收: length={}", response == null ? 0 : response.length());
         
         JSONObject json = JSONUtil.parseObj(response);
         if (json.getInt("code") == -1) {
@@ -105,9 +106,9 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         // score: 暂不支持分数设置，传空字符串
         params.put("score", "");
 
-        log.info("暗网下单请求: url={}, params={}", url, params);
+        log.info("暗网下单请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
-        log.info("暗网下单响应: {}", response);
+        log.debug("暗网下单响应已接收: length={}", response == null ? 0 : response.length());
 
         JSONObject json = JSONUtil.parseObj(response);
         if (json.getInt("code") == 0) {
@@ -130,9 +131,9 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         params.put("username", order.getStudentAccount());
         params.put("cid", platform.getDockParam());
 
-        log.info("暗网进度查询请求: url={}, params={}", url, params);
-        String response = apiHttpClient.getForString(url, params);
-        log.info("暗网进度查询响应: {}", response);
+        log.info("暗网进度查询请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
+        String response = apiHttpClient.getForString(url, DockingLogSanitizer.sanitize(params));
+        log.debug("暗网进度查询响应已接收: length={}", response == null ? 0 : response.length());
 
         JSONObject json = JSONUtil.parseObj(response);
         
@@ -198,9 +199,9 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         params.put("key", apiProvider.getApiKey());
         params.put("id", order.getThirdOrderId());
 
-        log.info("暗网补刷请求: url={}, params={}", url, params);
+        log.info("暗网补刷请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
-        log.info("暗网补刷响应: {}", response);
+        log.debug("暗网补刷响应已接收: length={}", response == null ? 0 : response.length());
 
         JSONObject json = JSONUtil.parseObj(response);
         if (json.getInt("code") == 0) {
@@ -219,9 +220,9 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         params.put("uid", apiProvider.getUsername());
         params.put("key", apiProvider.getApiKey());
 
-        log.info("暗网一键导入请求: url={}, params={}", url, params);
+        log.info("暗网一键导入请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
-        log.info("暗网一键导入响应: {}", response);
+        log.debug("暗网一键导入响应已接收: length={}", response == null ? 0 : response.length());
 
         JSONObject json = JSONUtil.parseObj(response);
         if (json.getInt("code") != 1) {

@@ -27,10 +27,10 @@
       <!-- API密钥管理 -->
       <div class="api-key-section">
         <el-form :inline="true" :model="credentials">
-          <el-form-item label="用户ID (UID)">
+          <el-form-item label="用户 UUID (UID)">
             <el-input
               v-model="credentials.uid"
-              placeholder="请输入用户ID"
+              placeholder="请输入用户 UUID"
               style="width: 200px"
             />
           </el-form-item>
@@ -161,7 +161,7 @@ print(response.json())</code></pre>
 // 方式一：独立调用
 $api_url = "{{ apiBaseUrl }}/api/external/getmoney";
 $data = array(
-    "uid" => "YOUR_UID",      // 二开台为您分配的用户ID
+    "uid" => "YOUR_UID",      // 平台为您分配的用户 UUID
     "key" => "YOUR_API_KEY"   // 二开台为您分配的API密钥
 );
 
@@ -295,7 +295,7 @@ print(response.json())</code></pre>
 
 $api_url = "{{ apiBaseUrl }}/api/external/get-platforms";
 $data = array(
-    "uid" => "YOUR_UID",      // 二开台用户ID
+    "uid" => "YOUR_UID",      // 平台用户 UUID
     "key" => "YOUR_API_KEY"   // 二开台API密钥
 );
 
@@ -773,7 +773,7 @@ print(response.json())</code></pre>
 
 $api_url = "{{ apiBaseUrl }}/api/external/chadan";
 $data = array(
-    "uid" => "YOUR_UID",      // 二开台用户ID
+    "uid" => "YOUR_UID",      // 平台用户 UUID
     "key" => "YOUR_API_KEY",  // 二开台API密钥
     "username" => $username   // 学生账号
 );
@@ -1221,17 +1221,9 @@ elseif ($type == "erk")
     return $result;
 }</code></pre>
 
-            <div
-              style="
-                margin-top: 20px;
-                padding: 15px;
-                background: #fff3cd;
-                border-left: 4px solid #ffc107;
-                border-radius: 4px;
-              "
-            >
-              <h4 style="margin-top: 0; color: #856404">⚠️ 重要提示</h4>
-              <ul style="margin: 10px 0; color: #856404; line-height: 1.8">
+            <div class="important-notice">
+              <h4>⚠️ 重要提示</h4>
+              <ul>
                 <li>
                   <strong>参数映射</strong>：$a["user"] 和 $a["pass"]
                   是您在二开台后台配置的UID和API密钥
@@ -1357,17 +1349,17 @@ const testForms = reactive({
 
 // API参数定义
 const getMoneyParams = [
-  { name: "uid", type: "String", required: true, description: "用户ID" },
+  { name: "uid", type: "String", required: true, description: "平台分配的用户 UUID" },
   { name: "key", type: "String", required: true, description: "API密钥" },
 ];
 
 const getPlatformsParams = [
-  { name: "uid", type: "String", required: true, description: "用户ID" },
+  { name: "uid", type: "String", required: true, description: "平台分配的用户 UUID" },
   { name: "key", type: "String", required: true, description: "API密钥" },
 ];
 
 const queryCoursesParams = [
-  { name: "uid", type: "String", required: true, description: "用户ID" },
+  { name: "uid", type: "String", required: true, description: "平台分配的用户 UUID" },
   { name: "key", type: "String", required: true, description: "API密钥" },
   { name: "platform", type: "String", required: true, description: "平台ID" },
   { name: "school", type: "String", required: false, description: "学校名称" },
@@ -1376,7 +1368,7 @@ const queryCoursesParams = [
 ];
 
 const addOrderParams = [
-  { name: "uid", type: "String", required: true, description: "用户ID" },
+  { name: "uid", type: "String", required: true, description: "平台分配的用户 UUID" },
   { name: "key", type: "String", required: true, description: "API密钥" },
   { name: "platform", type: "String", required: true, description: "平台ID" },
   { name: "school", type: "String", required: false, description: "学校名称" },
@@ -1387,13 +1379,13 @@ const addOrderParams = [
 ];
 
 const chadanParams = [
-  { name: "uid", type: "String", required: true, description: "用户ID" },
+  { name: "uid", type: "String", required: true, description: "平台分配的用户 UUID" },
   { name: "key", type: "String", required: true, description: "API密钥" },
   { name: "username", type: "String", required: true, description: "学生账号" },
 ];
 
 const queryProgressParams = [
-  { name: "uid", type: "String", required: true, description: "用户ID" },
+  { name: "uid", type: "String", required: true, description: "平台分配的用户 UUID" },
   { name: "key", type: "String", required: true, description: "API密钥" },
   {
     name: "orderNo",
@@ -1404,7 +1396,7 @@ const queryProgressParams = [
 ];
 
 const budanParams = [
-  { name: "uid", type: "String", required: true, description: "用户ID" },
+  { name: "uid", type: "String", required: true, description: "平台分配的用户 UUID" },
   { name: "key", type: "String", required: true, description: "API密钥" },
   {
     name: "orderNo",
@@ -1736,7 +1728,7 @@ const testBudan = async () => {
   font-size: 16px;
   font-weight: 600;
   padding-left: 10px;
-  border-left: 4px solid var(--color-primary);
+  border-left: 4px solid var(--brand-primary);
 }
 
 .api-description p {
@@ -1769,6 +1761,28 @@ const testBudan = async () => {
   font-size: 13px;
   line-height: 1.6;
   color: var(--text-primary);
+}
+
+.important-notice {
+  margin-top: 20px;
+  padding: 15px;
+  border-left: 4px solid var(--color-warning);
+  border-radius: var(--radius-xs);
+  color: var(--text-regular);
+  background: color-mix(in srgb, var(--color-warning) 12%, var(--surface-solid));
+}
+
+.api-content .important-notice h4 {
+  margin-top: 0;
+  padding-left: 0;
+  border-left: 0;
+  color: var(--text-primary);
+}
+
+.important-notice ul {
+  margin: 10px 0;
+  color: var(--text-regular);
+  line-height: 1.8;
 }
 
 .api-examples {

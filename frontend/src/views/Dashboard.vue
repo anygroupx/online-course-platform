@@ -553,7 +553,7 @@ onMounted(() => {
   margin: 0 0 14px;
   font-size: clamp(32px, 4vw, 52px);
   line-height: 1.08;
-  color: #1f2937;
+  color: var(--text-primary);
   letter-spacing: 0;
 }
 
@@ -561,7 +561,7 @@ onMounted(() => {
   margin: 0;
   font-size: 17px;
   line-height: 1.75;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 .hero-visual {
@@ -750,7 +750,7 @@ button.content-panel:hover,
   min-width: 0;
   font-size: 18px;
   font-weight: 700;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .panel-icon {
@@ -797,7 +797,7 @@ button.content-panel:hover,
   gap: 4px;
   padding: 0;
   background: transparent;
-  color: #6b7280;
+  color: var(--text-secondary);
   font-size: 15px;
   font-weight: 600;
 }
@@ -838,12 +838,12 @@ button.content-panel:hover,
   white-space: nowrap;
   font-size: 16px;
   line-height: 1.4;
-  color: #374151;
+  color: var(--text-regular);
 }
 
 .announcement-date {
   font-size: 15px;
-  color: #9ca3af;
+  color: var(--text-placeholder);
 }
 
 .panel-empty {
@@ -851,7 +851,7 @@ button.content-panel:hover,
   align-items: center;
   justify-content: center;
   min-height: 102px;
-  color: #9ca3af;
+  color: var(--text-placeholder);
   font-size: 15px;
 }
 
@@ -888,14 +888,14 @@ button.content-panel:hover,
   margin-top: 14px;
   font-size: 14px;
   line-height: 1.6;
-  color: #94a3b8;
+  color: var(--text-secondary);
 }
 
 .panel-watermark {
   position: absolute;
   right: 20px;
   bottom: 14px;
-  color: rgba(126, 164, 223, 0.12);
+  color: color-mix(in srgb, var(--brand-primary) 12%, transparent);
   pointer-events: none;
 }
 
@@ -914,7 +914,7 @@ button.content-panel:hover,
 
 .stat-label {
   font-size: 16px;
-  color: #6b7280;
+  color: var(--text-secondary);
 }
 
 .action-panel {
@@ -941,7 +941,7 @@ button.content-panel:hover,
   font-size: clamp(22px, 2vw, 34px);
   line-height: 1.2;
   font-weight: 700;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .action-arrow {
@@ -973,7 +973,7 @@ button.content-panel:hover,
   margin-bottom: 24px;
   font-size: 18px;
   font-weight: 700;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .quick-actions {
@@ -1009,7 +1009,7 @@ button.content-panel:hover,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--text-on-brand);
   box-shadow: 0 10px 22px rgba(148, 163, 184, 0.2);
 }
 
@@ -1044,7 +1044,7 @@ button.content-panel:hover,
 .quick-action-label {
   font-size: 16px;
   line-height: 1.4;
-  color: #374151;
+  color: var(--text-regular);
   text-align: center;
 }
 
@@ -1067,7 +1067,7 @@ button.content-panel:hover,
 
 .agent-overview-label {
   font-size: 13px;
-  color: #94a3b8;
+  color: var(--text-secondary);
 }
 
 .agent-overview-value {
@@ -1077,7 +1077,7 @@ button.content-panel:hover,
 }
 
 .tone-default {
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .tone-success {
@@ -1103,7 +1103,7 @@ button.content-panel:hover,
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
@@ -1346,7 +1346,7 @@ button.content-panel:hover,
 :global(html.dark) .panel-title,
 :global(html.dark) .action-panel-text,
 :global(html.dark) .quick-panel-title {
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 :global(html.dark) .hero-copy p,
@@ -1355,13 +1355,13 @@ button.content-panel:hover,
 :global(html.dark) .metric-subtext,
 :global(html.dark) .agent-overview-label,
 :global(html.dark) .announcement-dialog-meta {
-  color: #94a3b8;
+  color: var(--text-secondary);
 }
 
 :global(html.dark) .announcement-text,
 :global(html.dark) .quick-action-label,
 :global(html.dark) .stat-label {
-  color: #e2e8f0;
+  color: var(--text-regular);
 }
 
 :global(html.dark) .announcement-row,
@@ -1381,7 +1381,7 @@ button.content-panel:hover,
 }
 
 :global(html.dark) .panel-watermark {
-  color: rgba(148, 163, 184, 0.08);
+  color: color-mix(in srgb, var(--text-placeholder) 8%, transparent);
 }
 
 :global(html.dark) .action-panel {
@@ -1396,7 +1396,7 @@ button.content-panel:hover,
 
 :global(html.dark) .panel-empty,
 :global(html.dark) .announcement-dialog-content {
-  color: #cbd5e1;
+  color: var(--text-regular);
 }
 </style>
 

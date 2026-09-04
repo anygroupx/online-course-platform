@@ -3,6 +3,10 @@ package com.course.platform.controller;
 import com.course.platform.common.result.Result;
 import com.course.platform.domain.dto.LoginRequest;
 import com.course.platform.domain.vo.LoginResponse;
+import com.course.platform.domain.entity.User;
+import com.course.platform.infra.persistence.mapper.UserMapper;
+import com.course.platform.common.exception.BusinessException;
+import com.course.platform.common.result.ResultCode;
 import com.course.platform.application.service.auth.AuthService;
 import com.course.platform.security.TurnstileVerifier;
 import io.swagger.v3.oas.annotations.Operation;
@@ -26,6 +30,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final TurnstileVerifier turnstileVerifier;
+    private final UserMapper userMapper;
 
     /**
      * 用户登录
@@ -52,9 +57,13 @@ public class AuthController {
 
     @Operation(summary = "获取当前用户信息", description = "获取当前登录用户的基本信息")
     @GetMapping("/current")
-    public Result<Long> getCurrentUser(Authentication authentication) {
+    public Result<String> getCurrentUser(Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        return Result.success(userId);
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        return Result.success(user.getUid());
     }
 
     /**

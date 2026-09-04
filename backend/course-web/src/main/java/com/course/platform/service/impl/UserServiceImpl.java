@@ -6,14 +6,15 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.course.platform.infra.cache.SystemVariableCache;
-import com.course.platform.common.constant.Constants;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
+import com.course.platform.common.util.PublicUidUtil;
 import com.course.platform.domain.dto.RechargeRequest;
 import com.course.platform.domain.dto.UserCreateRequest;
 import com.course.platform.domain.dto.UserUpdateRequest;
 import com.course.platform.domain.entity.User;
 import com.course.platform.infra.persistence.mapper.UserMapper;
+import com.course.platform.infra.persistence.mapper.UserAuthorityMapper;
 import com.course.platform.application.service.support.OperationLogService;
 import com.course.platform.application.service.user.UserService;
 import com.course.platform.service.impl.AccountLedgerServiceImpl;
@@ -40,6 +41,7 @@ import java.math.BigDecimal;
 public class UserServiceImpl implements UserService {
 
     private final UserMapper userMapper;
+    private final UserAuthorityMapper userAuthorityMapper;
     private final PasswordEncoder passwordEncoder;
     private final OperationLogService operationLogService;
     private final AccountLedgerServiceImpl accountLedgerService;
@@ -49,7 +51,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Long createUser(UserCreateRequest request, Long operatorId) {
+    public String createUser(UserCreateRequest request, Long operatorId) {
         // 1. 检查操作人权限和余额
         User operator = userMapper.selectById(operatorId);
         if (operator == null) {
@@ -74,6 +76,7 @@ public class UserServiceImpl implements UserService {
 
         // 4. 创建用户
         User user = new User();
+        user.setUid(PublicUidUtil.generate());
         user.setParentId(operatorId);
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
@@ -86,6 +89,9 @@ public class UserServiceImpl implements UserService {
         user.setMustChangePassword(0);
 
         userMapper.insert(user);
+        if (userAuthorityMapper.assignRole(user.getId(), "USER") != 1) {
+            throw new IllegalStateException("默认 USER 角色不存在，拒绝创建无权限边界的账号");
+        }
 
         // 5. 扣除开户费
         String openBizNo = "OPEN-" + request.getUsername() + "-" + System.currentTimeMillis();
@@ -105,19 +111,19 @@ public class UserServiceImpl implements UserService {
 
         log.info("用户创建成功：userId={}, username={}, operatorId={}", user.getId(), user.getUsername(), operatorId);
 
-        return user.getId();
+        return user.getUid();
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateUser(UserUpdateRequest request, Long operatorId) {
-        User user = userMapper.selectById(request.getId());
+        User user = requireUserByUid(request.getUid());
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
 
         // 检查权限：只能修改自己的下级
-        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(operatorId)) && !user.getParentId().equals(operatorId)) {
+        if (!(SecurityUtils.isAdmin()) && !user.getParentId().equals(operatorId)) {
             throw new BusinessException(ResultCode.FORBIDDEN);
         }
 
@@ -155,7 +161,7 @@ public class UserServiceImpl implements UserService {
         LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
 
         // 非管理员只能查看自己的下级
-        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(operatorId))) {
+        if (!(SecurityUtils.isAdmin())) {
             queryWrapper.eq(User::getParentId, operatorId);
         }
 
@@ -176,14 +182,11 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public User getUserById(Long userId, Long operatorId) {
-        User user = userMapper.selectById(userId);
-        if (user == null) {
-            throw new BusinessException(ResultCode.USER_NOT_FOUND);
-        }
+    public User getUserByUid(String userUid, Long operatorId) {
+        User user = requireUserByUid(userUid);
 
         // 检查权限
-        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(operatorId)) &&
+        if (!(SecurityUtils.isAdmin()) &&
             !user.getId().equals(operatorId) &&
             !user.getParentId().equals(operatorId)) {
             throw new BusinessException(ResultCode.FORBIDDEN);
@@ -203,12 +206,9 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
 
-        User targetUser = userMapper.selectById(request.getTargetUserId());
-        if (targetUser == null) {
-            throw new BusinessException(ResultCode.USER_NOT_FOUND);
-        }
+        User targetUser = requireUserByUid(request.getTargetUserUid());
 
-        boolean isAdmin = SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(operatorId);
+        boolean isAdmin = SecurityUtils.isAdmin();
         if (!isAdmin && (targetUser.getParentId() == null || !targetUser.getParentId().equals(operatorId))) {
             throw new BusinessException("只能给自己的下级充值");
         }
@@ -217,10 +217,10 @@ public class UserServiceImpl implements UserService {
                 .multiply(operator.getRate())
                 .divide(targetUser.getRate(), 2, java.math.RoundingMode.HALF_UP);
 
-        String bizNo = "RCH-" + request.getTargetUserId() + "-" + System.currentTimeMillis();
+        String bizNo = "RCH-" + targetUser.getUid() + "-" + System.currentTimeMillis();
 
         // 超级管理员可直接给下级加款；其他角色必须先原子扣减自身余额
-        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(operatorId))) {
+        if (!(SecurityUtils.isAdmin())) {
             accountLedgerService.debit(
                     operatorId,
                     actualCost,
@@ -231,7 +231,7 @@ public class UserServiceImpl implements UserService {
         }
 
         accountLedgerService.credit(
-                request.getTargetUserId(),
+                targetUser.getId(),
                 request.getAmount(),
                 AccountLedgerServiceImpl.BIZ_RECHARGE,
                 bizNo + "-IN",
@@ -240,19 +240,19 @@ public class UserServiceImpl implements UserService {
         );
 
         operator = userMapper.selectById(operatorId);
-        targetUser = userMapper.selectById(request.getTargetUserId());
+        targetUser = userMapper.selectById(targetUser.getId());
 
         operationLogService.log(operatorId, "充值",
                 String.format("给用户[%s]充值%s元，实际扣费%s元", targetUser.getUsername(), request.getAmount(), actualCost),
-                Constants.DEFAULT_ADMIN_ID.equals(operatorId) ? BigDecimal.ZERO : actualCost.negate(),
+                SecurityUtils.isAdmin() ? BigDecimal.ZERO : actualCost.negate(),
                 operator.getBalance());
 
-        operationLogService.log(request.getTargetUserId(), "充值",
+        operationLogService.log(targetUser.getId(), "充值",
                 String.format("上级[%s]充值%s元", operator.getUsername(), request.getAmount()),
                 request.getAmount(), targetUser.getBalance());
 
-        log.info("充值成功：operatorId={}, targetUserId={}, amount={}, actualCost={}",
-                operatorId, request.getTargetUserId(), request.getAmount(), actualCost);
+        log.info("充值成功：operatorId={}, targetUserUid={}, amount={}, actualCost={}",
+                operatorId, targetUser.getUid(), request.getAmount(), actualCost);
     }
 
     @Override
@@ -287,13 +287,10 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public String resetPassword(Long targetUserId, Long operatorId) {
-        User targetUser = userMapper.selectById(targetUserId);
-        if (targetUser == null) {
-            throw new BusinessException(ResultCode.USER_NOT_FOUND);
-        }
+    public String resetPassword(String targetUserUid, Long operatorId) {
+        User targetUser = requireUserByUid(targetUserUid);
 
-        boolean isAdmin = SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(operatorId);
+        boolean isAdmin = SecurityUtils.isAdmin();
         if (!isAdmin && (targetUser.getParentId() == null || !targetUser.getParentId().equals(operatorId))) {
             throw new BusinessException(ResultCode.FORBIDDEN);
         }
@@ -307,23 +304,20 @@ public class UserServiceImpl implements UserService {
         operationLogService.log(operatorId, "重置密码",
                 String.format("重置用户[%s]密码", targetUser.getUsername()),
                 BigDecimal.ZERO, null);
-        log.info("重置密码成功：targetUserId={}, operatorId={}", targetUserId, operatorId);
+        log.info("重置密码成功：targetUserUid={}, operatorId={}", targetUser.getUid(), operatorId);
         return newPassword;
     }
 
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void changeUserStatus(Long userId, Integer status, Long operatorId) {
+    public void changeUserStatus(String userUid, Integer status, Long operatorId) {
         // 只有管理员可以禁用用户
-        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(operatorId))) {
+        if (!(SecurityUtils.isAdmin())) {
             throw new BusinessException(ResultCode.FORBIDDEN);
         }
 
-        User user = userMapper.selectById(userId);
-        if (user == null) {
-            throw new BusinessException(ResultCode.USER_NOT_FOUND);
-        }
+        User user = requireUserByUid(userUid);
 
         user.setStatus(status);
         userMapper.updateById(user);
@@ -333,7 +327,20 @@ public class UserServiceImpl implements UserService {
                 String.format("%s用户：%s", action, user.getUsername()),
                 BigDecimal.ZERO, null);
 
-        log.info("{}用户成功：userId={}, operatorId={}", action, userId, operatorId);
+        log.info("{}用户成功：userUid={}, operatorId={}", action, user.getUid(), operatorId);
+    }
+
+    private User requireUserByUid(String uid) {
+        if (!PublicUidUtil.isValid(uid)) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        User user = userMapper.selectOne(new LambdaQueryWrapper<User>()
+                .eq(User::getUid, PublicUidUtil.normalize(uid))
+                .last("LIMIT 1"));
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        return user;
     }
 
     private void validatePasswordStrength(String password) {

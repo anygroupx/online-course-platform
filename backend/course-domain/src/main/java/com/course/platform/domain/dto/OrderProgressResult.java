@@ -55,6 +55,7 @@ public class OrderProgressResult {
     /**
      * 学生密码（用于批量更新时匹配订单）
      */
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String studentPassword;
 
     /**

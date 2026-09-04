@@ -1,6 +1,7 @@
 package com.course.platform.config;
 
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
+import com.course.platform.common.util.PublicUidUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.reflection.MetaObject;
 import org.springframework.stereotype.Component;
@@ -26,6 +27,11 @@ public class MyMetaObjectHandler implements MetaObjectHandler {
     @Override
     public void insertFill(MetaObject metaObject) {
         log.debug("开始插入填充...");
+
+        // 仅 User 等声明了 uid 字段的实体会被填充，作为所有用户创建路径的统一兜底。
+        if (metaObject.hasSetter("uid") && getFieldValByName("uid", metaObject) == null) {
+            this.setFieldValByName("uid", PublicUidUtil.generate(), metaObject);
+        }
         
         // 填充创建时间
         this.strictInsertFill(metaObject, "createTime", LocalDateTime.class, LocalDateTime.now());

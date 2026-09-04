@@ -6,6 +6,7 @@ import com.course.platform.domain.dto.SystemVariableUpdateRequest;
 import com.course.platform.domain.entity.SystemVariable;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 系统变量管理服务接口
@@ -34,6 +35,11 @@ public interface SystemVariableService {
     void updateVariable(SystemVariableUpdateRequest request, Long operatorId);
 
     /**
+     * 原子批量更新主题变量，避免多次请求造成部分发布。
+     */
+    void updateThemeVariables(List<SystemVariableUpdateRequest> requests, Long operatorId);
+
+    /**
      * 删除系统变量
      * 
      * @param variableId 变量ID
@@ -57,7 +63,7 @@ public interface SystemVariableService {
      * @param pageSize 每页数量
      * @return 变量分页数据
      */
-    IPage<SystemVariable> queryVariables(String variableType, Integer page, Integer pageSize);
+    IPage<SystemVariable> queryVariables(String variableType, String keyword, Integer page, Integer pageSize);
 
     /**
      * 获取变量详情
@@ -66,6 +72,13 @@ public interface SystemVariableService {
      * @return 变量详情
      */
     SystemVariable getVariableById(Long variableId);
+
+    /**
+     * 获取面向客户端的已启用主题颜色配置。
+     *
+     * @return light/dark -> 变量键 -> 色值
+     */
+    Map<String, Map<String, String>> getEnabledThemeVariables();
 
     /**
      * 启用/禁用变量

@@ -3,7 +3,6 @@ package com.course.platform.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.course.platform.common.constant.Constants;
 import com.course.platform.security.SecurityUtils;
 import com.course.platform.domain.document.OperationLogDocument;
 import com.course.platform.domain.entity.OperationLog;
@@ -83,7 +82,7 @@ public class OperationLogServiceImpl implements OperationLogService {
         LambdaQueryWrapper<OperationLog> queryWrapper = new LambdaQueryWrapper<>();
 
         // 非管理员只能查看自己的日志
-        if (!(SecurityUtils.isAdmin() || Constants.DEFAULT_ADMIN_ID.equals(userId))) {
+        if (!(SecurityUtils.isAdmin())) {
             queryWrapper.eq(OperationLog::getUserId, userId);
         }
 

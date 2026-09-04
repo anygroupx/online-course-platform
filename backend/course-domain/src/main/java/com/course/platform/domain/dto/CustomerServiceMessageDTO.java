@@ -26,14 +26,4 @@ public class CustomerServiceMessageDTO {
      * 消息类型：1-文本 2-图片 3-文件
      */
     private Integer messageType = 1;
-
-    /**
-     * 发送者类型：1-用户 2-客服
-     */
-    private Integer senderType;
-
-    /**
-     * 发送者ID
-     */
-    private Long senderId;
 }

@@ -111,7 +111,7 @@
           <span
             style="
               font-size: 12px;
-              color: var(--color-text-secondary);
+              color: var(--text-secondary);
               margin-left: 10px;
             "
             >最多100张</span
@@ -126,7 +126,7 @@
           <span
             style="
               font-size: 12px;
-              color: var(--color-text-secondary);
+              color: var(--text-secondary);
               margin-left: 10px;
             "
             >单位：元</span

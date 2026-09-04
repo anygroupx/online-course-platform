@@ -1,7 +1,6 @@
 package com.course.platform.service.impl;
 
 import com.course.platform.infra.cache.SystemVariableCache;
-import com.course.platform.common.constant.Constants;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.infra.external.AqksApiClient;
 import com.course.platform.domain.dto.aqks.AqksLoginResult;
@@ -510,7 +509,7 @@ public class AqksStudyServiceImpl implements AqksStudyService {
         courseOrderMapper.updateById(order);
         
         // 记录操作日志
-        operationLogService.log(Constants.DEFAULT_ADMIN_ID, "AQKS考试检查",
+        operationLogService.log(order.getUserId(), "AQKS考试检查",
                 String.format("订单号: %s, 考试%s, 分数: %d, %s", 
                         order.getOrderNo(),
                         Boolean.TRUE.equals(examInfo.getIsPassed()) ? "通过" : "未通过",

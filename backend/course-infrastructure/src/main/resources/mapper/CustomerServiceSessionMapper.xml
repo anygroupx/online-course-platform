@@ -33,12 +33,11 @@
     <!-- 查询所有会话（带用户信息和最后消息） -->
     <select id="selectAllSessionsWithInfo" resultType="com.course.platform.domain.vo.CustomerServiceSessionVO">
         SELECT 
-            s.id,
             s.session_id,
-            s.user_id,
+            u.uid AS userUid,
             u.nickname as userName,
             u.username as userAccount,
-            s.customer_service_id,
+            cs.uid AS customerServiceUid,
             cs.nickname as customerServiceName,
             s.status,
             s.start_time,

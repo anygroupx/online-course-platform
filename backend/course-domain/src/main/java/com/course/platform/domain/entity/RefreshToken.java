@@ -35,16 +35,19 @@ public class RefreshToken {
     /**
      * Refresh Token 明文（兼容旧数据，逐步废弃）
      */
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String token;
 
     /**
      * Token 哈希
      */
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String tokenHash;
 
     /**
      * Token 家族 ID
      */
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String tokenFamilyId;
 
     /**
@@ -60,6 +63,7 @@ public class RefreshToken {
     /**
      * 被替换后的 token 哈希
      */
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String replacedBy;
 
     /**

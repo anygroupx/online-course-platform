@@ -25,9 +25,9 @@ public class LoginResponse {
     private String token;
 
     /**
-     * 用户ID
+     * 对外用户 UUID
      */
-    private Long userId;
+    private String uid;
 
     /**
      * 用户名

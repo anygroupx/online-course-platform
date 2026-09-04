@@ -84,8 +84,8 @@ const emit = defineEmits([
   height: 36px; /* 调整高度与容器协调 */
   padding: 0 12px;
   margin-right: 8px;
-  background: rgba(255, 255, 255, 0.7); /* 提高背景透明度 */
-  border: 1px solid rgba(0, 0, 0, 0.1); /* 增强边框 */
+  background: var(--surface-acrylic);
+  border: 1px solid var(--border-color-light);
   border-radius: 8px; /* 增加圆角 */
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -97,22 +97,24 @@ const emit = defineEmits([
   min-width: 80px;
   max-width: 200px;
   /* 添加微妙的阴影 */
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-sm);
 }
 
 .tag-item:hover {
-  background: rgba(255, 255, 255, 0.8);
-  border-color: rgba(78, 140, 255, 0.3);
+  background: var(--bg-card-hover);
+  border-color: color-mix(in srgb, var(--brand-primary) 30%, var(--border-color));
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
 }
 
 .tag-item.active {
-  background: linear-gradient(135deg,
-    rgba(78, 140, 255, 0.15) 0%,
-    rgba(78, 140, 255, 0.1) 100%);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--brand-primary) 15%, var(--surface-solid)) 0%,
+    color-mix(in srgb, var(--brand-primary) 10%, var(--surface-solid)) 100%
+  );
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
   font-weight: 500;
 }
 
@@ -123,25 +125,25 @@ const emit = defineEmits([
   top: 0;
   bottom: 0;
   width: 3px;
-  background: linear-gradient(180deg, var(--color-primary) 0%, var(--color-success) 100%);
+  background: linear-gradient(180deg, var(--brand-primary) 0%, var(--color-success) 100%);
   border-radius: 0 2px 2px 0;
 }
 
 .tag-item.fixed {
-  background: rgba(99, 197, 110, 0.1);
-  border-color: rgba(99, 197, 110, 0.3);
+  background: color-mix(in srgb, var(--color-success) 10%, var(--surface-solid));
+  border-color: color-mix(in srgb, var(--color-success) 30%, var(--border-color));
 }
 
 .tag-item.fixed:hover {
-  background: rgba(99, 197, 110, 0.15);
-  border-color: rgba(99, 197, 110, 0.5);
+  background: color-mix(in srgb, var(--color-success) 15%, var(--surface-solid));
+  border-color: color-mix(in srgb, var(--color-success) 50%, var(--border-color));
 }
 
 .tag-item.dragging {
   opacity: 0.6;
   transform: rotate(5deg) scale(1.05);
   z-index: 1000;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-lg);
 }
 
 .tag-icon {
@@ -171,7 +173,7 @@ const emit = defineEmits([
 
 .tag-close:hover {
   color: var(--color-danger);
-  background: rgba(240, 101, 101, 0.1);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
   transform: scale(1.1);
 }
 

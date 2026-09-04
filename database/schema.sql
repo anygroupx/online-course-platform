@@ -14,6 +14,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS `sys_user`;
 CREATE TABLE `sys_user` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '用户ID',
+  `uid` CHAR(36) NOT NULL COMMENT '对外公开的随机UUID v4',
   `parent_id` BIGINT DEFAULT 0 COMMENT '上级代理ID',
   `username` VARCHAR(50) NOT NULL COMMENT '用户账号',
   `password` VARCHAR(255) NOT NULL COMMENT '密码（加密）',
@@ -23,16 +24,28 @@ CREATE TABLE `sys_user` (
   `balance` DECIMAL(10,2) DEFAULT 0.00 COMMENT '账户余额',
   `total_recharge` DECIMAL(10,2) DEFAULT 0.00 COMMENT '总充值金额',
   `rate` DECIMAL(5,2) DEFAULT 1.00 COMMENT '费率倍数',
-  `api_key` VARCHAR(64) DEFAULT NULL COMMENT 'API密钥',
+  `api_key` VARCHAR(64) DEFAULT NULL COMMENT 'API密钥（兼容历史数据，禁止接口返回）',
+  `api_key_hash` VARCHAR(128) DEFAULT NULL COMMENT 'API Key SHA-256哈希',
+  `api_key_prefix` VARCHAR(32) DEFAULT NULL COMMENT 'API Key可展示前缀',
+  `api_key_scopes` VARCHAR(255) DEFAULT NULL COMMENT 'API Key作用域',
+  `api_key_expire_time` DATETIME DEFAULT NULL COMMENT 'API Key过期时间',
   `invite_code` VARCHAR(20) DEFAULT NULL COMMENT '邀请码',
   `invite_rate` DECIMAL(5,2) DEFAULT NULL COMMENT '邀请费率',
   `notice` TEXT COMMENT '代理公告',
   `status` TINYINT DEFAULT 1 COMMENT '状态：0-禁用 1-正常',
+  `role` VARCHAR(32) NOT NULL DEFAULT 'USER' COMMENT '历史角色镜像（授权以RBAC关系表为准）',
+  `must_change_password` TINYINT NOT NULL DEFAULT 0 COMMENT '是否必须修改密码',
+  `password_changed_at` DATETIME DEFAULT NULL COMMENT '密码最后修改时间',
+  `mfa_enabled` TINYINT NOT NULL DEFAULT 0 COMMENT '是否启用MFA',
+  `mfa_secret` VARCHAR(128) DEFAULT NULL COMMENT '加密的TOTP密钥',
+  `mfa_enabled_at` DATETIME DEFAULT NULL COMMENT 'MFA启用时间',
+  `mfa_backup_codes_hash` VARCHAR(512) DEFAULT NULL COMMENT '备用码哈希',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `last_login_time` DATETIME DEFAULT NULL COMMENT '最后登录时间',
   `last_login_ip` VARCHAR(50) DEFAULT NULL COMMENT '最后登录IP',
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_uid` (`uid`),
   UNIQUE KEY `uk_username` (`username`),
   UNIQUE KEY `uk_invite_code` (`invite_code`),
   KEY `idx_parent_id` (`parent_id`),
@@ -41,6 +54,79 @@ CREATE TABLE `sys_user` (
 
 -- 安全说明：开源初始化脚本不创建默认管理员或 API 密钥。
 -- 管理员账号应在部署后通过受控流程创建，并使用随机密码和唯一 API 密钥。
+
+-- =============================================
+-- 1.1 P0 RBAC（授权以服务端关系表为唯一可信来源）
+-- =============================================
+DROP TABLE IF EXISTS `sys_role_permission`;
+DROP TABLE IF EXISTS `sys_user_role`;
+DROP TABLE IF EXISTS `sys_permission`;
+DROP TABLE IF EXISTS `sys_role`;
+
+CREATE TABLE `sys_role` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `role_code` VARCHAR(64) NOT NULL,
+  `role_name` VARCHAR(128) NOT NULL,
+  `enabled` TINYINT NOT NULL DEFAULT 1,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_sys_role_code` (`role_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='RBAC角色';
+
+CREATE TABLE `sys_permission` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `permission_code` VARCHAR(128) NOT NULL,
+  `permission_name` VARCHAR(128) NOT NULL,
+  `enabled` TINYINT NOT NULL DEFAULT 1,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_sys_permission_code` (`permission_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='RBAC权限';
+
+CREATE TABLE `sys_user_role` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `user_id` BIGINT NOT NULL,
+  `role_id` BIGINT NOT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_sys_user_role` (`user_id`,`role_id`), KEY `idx_sys_user_role_role` (`role_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户角色关系';
+
+CREATE TABLE `sys_role_permission` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `role_id` BIGINT NOT NULL,
+  `permission_id` BIGINT NOT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_sys_role_permission` (`role_id`,`permission_id`), KEY `idx_sys_role_permission_permission` (`permission_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色权限关系';
+
+INSERT INTO `sys_role` (`role_code`,`role_name`) VALUES
+('SUPER_ADMIN','超级管理员'),('OPERATOR','运营'),('FINANCE','财务'),
+('CUSTOMER_SERVICE','客服'),('USER','普通用户'),('AUDITOR','审计员');
+
+INSERT INTO `sys_permission` (`permission_code`,`permission_name`) VALUES
+('user:read','读取用户'),('user:update','更新用户'),('order:read','读取订单'),('order:update','更新订单'),
+('payment:read','读取支付'),('payment:refund','支付退款'),('payment:config','支付配置'),('payment:reconcile','执行支付对账'),
+('announcement:create','创建公告'),('announcement:update','更新公告'),('announcement:delete','删除公告'),('announcement:publish','发布/下线公告'),
+('customer-service:read','读取客服会话'),('customer-service:assign','分配客服会话'),('customer-service:take','接管客服会话'),
+('customer-service:read:any','读取任意客服会话'),('api-provider:read','读取API供应商'),('api-provider:update','更新API供应商'),
+('security:event:read','读取安全事件'),('system-config:read','读取系统配置'),('system-config:update','更新系统配置'),
+('platform:read','读取平台配置'),('platform:update','更新平台配置'),('mfa:manage','管理MFA'),('rbac:manage','管理RBAC角色');
+
+INSERT INTO `sys_role_permission` (`role_id`,`permission_id`)
+SELECT r.id,p.id FROM sys_role r CROSS JOIN sys_permission p WHERE r.role_code='SUPER_ADMIN';
+INSERT INTO `sys_role_permission` (`role_id`,`permission_id`)
+SELECT r.id,p.id FROM sys_role r JOIN sys_permission p ON p.permission_code IN
+('user:read','user:update','order:read','order:update','announcement:create','announcement:update','announcement:delete','announcement:publish',
+'api-provider:read','api-provider:update','system-config:read','system-config:update','platform:read','platform:update') WHERE r.role_code='OPERATOR';
+INSERT INTO `sys_role_permission` (`role_id`,`permission_id`)
+SELECT r.id,p.id FROM sys_role r JOIN sys_permission p ON p.permission_code IN
+('user:read','order:read','payment:read','payment:refund','payment:config','payment:reconcile') WHERE r.role_code='FINANCE';
+INSERT INTO `sys_role_permission` (`role_id`,`permission_id`)
+SELECT r.id,p.id FROM sys_role r JOIN sys_permission p ON p.permission_code IN
+('user:read','order:read','customer-service:read','customer-service:take') WHERE r.role_code='CUSTOMER_SERVICE';
+INSERT INTO `sys_role_permission` (`role_id`,`permission_id`)
+SELECT r.id,p.id FROM sys_role r JOIN sys_permission p ON p.permission_code IN
+('user:read','order:read','payment:read','api-provider:read','security:event:read','system-config:read','platform:read') WHERE r.role_code='AUDITOR';
 
 -- =============================================
 -- 2. 课程平台表 (course_platform)
@@ -146,7 +232,7 @@ CREATE TABLE `course_order` (
   `dock_param` VARCHAR(50) DEFAULT NULL COMMENT '对接参数',
   `is_fast_mode` TINYINT DEFAULT 0 COMMENT '是否秒刷：0-否 1-是',
   `retry_count` INT DEFAULT 0 COMMENT '补刷次数',
-  `order_status` TINYINT DEFAULT 0 COMMENT '订单状态：0-待处理 1-进行中 2-已完成 3-已取消 4-失败',
+  `order_status` TINYINT DEFAULT 0 COMMENT '订单状态：0-待处理 1-进行中 2-已完成 3-已取消 4-失败 5-待考试 6-考试中 7-考试完成 8-等待退款',
   `dock_status` TINYINT DEFAULT 0 COMMENT '对接状态：0-待对接 1-对接成功 2-对接失败 3-重复订单 4-已取消',
   `login_status` VARCHAR(50) DEFAULT NULL COMMENT '登录状态',
   `remarks` VARCHAR(500) DEFAULT NULL COMMENT '备注',
@@ -345,7 +431,7 @@ CREATE TABLE `system_variable` (
   `sort_order` INT DEFAULT 0 COMMENT '排序',
   `is_default` TINYINT DEFAULT 0 COMMENT '是否默认值：0-否 1-是',
   `is_enabled` TINYINT DEFAULT 1 COMMENT '是否启用：0-禁用 1-启用',
-  `color` VARCHAR(20) DEFAULT NULL COMMENT '显示颜色（前端使用）',
+  `color` VARCHAR(100) DEFAULT NULL COMMENT '显示颜色（前端使用）',
   `icon` VARCHAR(50) DEFAULT NULL COMMENT '图标（前端使用）',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -355,6 +441,69 @@ CREATE TABLE `system_variable` (
   KEY `idx_is_enabled` (`is_enabled`),
   KEY `idx_sort_order` (`sort_order`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统变量配置表';
+
+-- 补齐 Daytime 对接所需的退款中状态
+INSERT IGNORE INTO `system_variable`
+  (`variable_key`, `variable_name`, `variable_type`, `variable_value`, `variable_label`, `sort_order`, `is_default`, `is_enabled`, `color`, `icon`) VALUES
+('refund_pending', '等待退款', 'order_status', '8', '第三方已退款，等待本地退款处理', 9, 0, 1, '#d97706', 'refresh-cw');
+
+-- 插入默认浅色/深色主题语义颜色（复合渐变由前端根据起止色派生）
+INSERT IGNORE INTO `system_variable`
+  (`variable_key`, `variable_name`, `variable_type`, `variable_value`, `variable_label`, `sort_order`, `is_default`, `is_enabled`, `color`, `icon`) VALUES
+('brand_primary', '品牌主色', 'theme_color_light', '#0f6cbd', '主按钮、选中态和主要链接', 10, 0, 1, NULL, NULL),
+('brand_primary_hover', '主色悬停', 'theme_color_light', '#115ea3', '主要操作的悬停状态', 20, 0, 1, NULL, NULL),
+('brand_primary_pressed', '主色按下', 'theme_color_light', '#0c3b5e', '主要操作的按下状态', 30, 0, 1, NULL, NULL),
+('brand_cyan', '品牌青色', 'theme_color_light', '#00b7c3', '辅助品牌色和渐变终点', 40, 0, 1, NULL, NULL),
+('brand_violet', '品牌紫色', 'theme_color_light', '#7160e8', '强调装饰和数据视觉辅助色', 50, 0, 1, NULL, NULL),
+('primary_gradient_start', '渐变起点', 'theme_color_light', '#0f6cbd', '主品牌渐变的起始颜色', 60, 0, 1, NULL, NULL),
+('primary_gradient_end', '渐变终点', 'theme_color_light', '#00b7c3', '主品牌渐变的结束颜色', 70, 0, 1, NULL, NULL),
+('color_success', '成功色', 'theme_color_light', '#107c10', '成功、完成和正常状态', 110, 0, 1, NULL, NULL),
+('color_warning', '警告色', 'theme_color_light', '#f7630c', '提醒、等待和风险状态', 120, 0, 1, NULL, NULL),
+('color_danger', '危险色', 'theme_color_light', '#c50f1f', '失败、删除和高风险状态', 130, 0, 1, NULL, NULL),
+('color_info', '信息色', 'theme_color_light', '#0078d4', '一般信息和辅助提示', 140, 0, 1, NULL, NULL),
+('bg_body', '页面背景', 'theme_color_light', '#eef4fb', '应用主内容区的底色', 210, 0, 1, NULL, NULL),
+('bg_card', '卡片背景', 'theme_color_light', 'rgba(255, 255, 255, 0.78)', '常规卡片和容器背景', 220, 0, 1, NULL, NULL),
+('bg_card_hover', '卡片悬停', 'theme_color_light', 'rgba(255, 255, 255, 0.94)', '可交互卡片的悬停背景', 230, 0, 1, NULL, NULL),
+('bg_overlay', '遮罩背景', 'theme_color_light', 'rgba(244, 248, 253, 0.78)', '浮层后方的半透明遮罩', 240, 0, 1, NULL, NULL),
+('surface_solid', '实色表面', 'theme_color_light', '#ffffff', '输入框、弹层等不透明表面', 250, 0, 1, NULL, NULL),
+('surface_mica', '云母表面', 'theme_color_light', 'rgba(242, 247, 252, 0.82)', '页面级柔和半透明材质', 260, 0, 1, NULL, NULL),
+('surface_acrylic', '亚克力表面', 'theme_color_light', 'rgba(255, 255, 255, 0.68)', '浮动卡片和导航半透明材质', 270, 0, 1, NULL, NULL),
+('text_primary', '主要文字', 'theme_color_light', '#17202b', '标题和高强调正文', 310, 0, 1, NULL, NULL),
+('text_regular', '常规文字', 'theme_color_light', '#354052', '正文和表单内容', 320, 0, 1, NULL, NULL),
+('text_secondary', '次要文字', 'theme_color_light', '#5c6675', '说明、辅助信息和元数据', 330, 0, 1, NULL, NULL),
+('text_placeholder', '占位文字', 'theme_color_light', '#737d8c', '输入提示和弱化内容', 340, 0, 1, NULL, NULL),
+('text_on_brand', '品牌色上文字', 'theme_color_light', '#ffffff', '主色按钮与品牌色背景上的文字', 350, 0, 1, NULL, NULL),
+('border_color', '主要边框', 'theme_color_light', 'rgba(74, 91, 113, 0.22)', '控件和卡片的常规描边', 360, 0, 1, NULL, NULL),
+('border_color_light', '弱边框', 'theme_color_light', 'rgba(74, 91, 113, 0.12)', '分隔线和低强调描边', 370, 0, 1, NULL, NULL),
+('stroke_highlight', '表面高光', 'theme_color_light', 'rgba(255, 255, 255, 0.92)', '半透明表面的顶部高光', 380, 0, 1, NULL, NULL),
+('focus_ring', '焦点光环', 'theme_color_light', 'rgba(15, 108, 189, 0.32)', '键盘操作时的可访问性焦点提示', 390, 0, 1, NULL, NULL),
+('brand_primary', '品牌主色', 'theme_color_dark', '#479ef5', '主按钮、选中态和主要链接', 10, 0, 1, NULL, NULL),
+('brand_primary_hover', '主色悬停', 'theme_color_dark', '#62abf5', '主要操作的悬停状态', 20, 0, 1, NULL, NULL),
+('brand_primary_pressed', '主色按下', 'theme_color_dark', '#2886de', '主要操作的按下状态', 30, 0, 1, NULL, NULL),
+('brand_cyan', '品牌青色', 'theme_color_dark', '#38d5de', '辅助品牌色和渐变终点', 40, 0, 1, NULL, NULL),
+('brand_violet', '品牌紫色', 'theme_color_dark', '#9c89ff', '强调装饰和数据视觉辅助色', 50, 0, 1, NULL, NULL),
+('primary_gradient_start', '渐变起点', 'theme_color_dark', '#479ef5', '主品牌渐变的起始颜色', 60, 0, 1, NULL, NULL),
+('primary_gradient_end', '渐变终点', 'theme_color_dark', '#38d5de', '主品牌渐变的结束颜色', 70, 0, 1, NULL, NULL),
+('color_success', '成功色', 'theme_color_dark', '#54b054', '成功、完成和正常状态', 110, 0, 1, NULL, NULL),
+('color_warning', '警告色', 'theme_color_dark', '#f9a825', '提醒、等待和风险状态', 120, 0, 1, NULL, NULL),
+('color_danger', '危险色', 'theme_color_dark', '#f1707b', '失败、删除和高风险状态', 130, 0, 1, NULL, NULL),
+('color_info', '信息色', 'theme_color_dark', '#62abf5', '一般信息和辅助提示', 140, 0, 1, NULL, NULL),
+('bg_body', '页面背景', 'theme_color_dark', '#07111f', '应用主内容区的底色', 210, 0, 1, NULL, NULL),
+('bg_card', '卡片背景', 'theme_color_dark', 'rgba(14, 29, 48, 0.76)', '常规卡片和容器背景', 220, 0, 1, NULL, NULL),
+('bg_card_hover', '卡片悬停', 'theme_color_dark', 'rgba(20, 40, 64, 0.90)', '可交互卡片的悬停背景', 230, 0, 1, NULL, NULL),
+('bg_overlay', '遮罩背景', 'theme_color_dark', 'rgba(7, 17, 31, 0.80)', '浮层后方的半透明遮罩', 240, 0, 1, NULL, NULL),
+('surface_solid', '实色表面', 'theme_color_dark', '#101d2e', '输入框、弹层等不透明表面', 250, 0, 1, NULL, NULL),
+('surface_mica', '云母表面', 'theme_color_dark', 'rgba(11, 24, 41, 0.86)', '页面级柔和半透明材质', 260, 0, 1, NULL, NULL),
+('surface_acrylic', '亚克力表面', 'theme_color_dark', 'rgba(17, 35, 57, 0.68)', '浮动卡片和导航半透明材质', 270, 0, 1, NULL, NULL),
+('text_primary', '主要文字', 'theme_color_dark', '#f5f8fc', '标题和高强调正文', 310, 0, 1, NULL, NULL),
+('text_regular', '常规文字', 'theme_color_dark', '#d6e0ec', '正文和表单内容', 320, 0, 1, NULL, NULL),
+('text_secondary', '次要文字', 'theme_color_dark', '#a8b5c5', '说明、辅助信息和元数据', 330, 0, 1, NULL, NULL),
+('text_placeholder', '占位文字', 'theme_color_dark', '#8391a3', '输入提示和弱化内容', 340, 0, 1, NULL, NULL),
+('text_on_brand', '品牌色上文字', 'theme_color_dark', '#ffffff', '主色按钮与品牌色背景上的文字', 350, 0, 1, NULL, NULL),
+('border_color', '主要边框', 'theme_color_dark', 'rgba(157, 192, 231, 0.24)', '控件和卡片的常规描边', 360, 0, 1, NULL, NULL),
+('border_color_light', '弱边框', 'theme_color_dark', 'rgba(157, 192, 231, 0.13)', '分隔线和低强调描边', 370, 0, 1, NULL, NULL),
+('stroke_highlight', '表面高光', 'theme_color_dark', 'rgba(209, 231, 255, 0.20)', '半透明表面的顶部高光', 380, 0, 1, NULL, NULL),
+('focus_ring', '焦点光环', 'theme_color_dark', 'rgba(71, 158, 245, 0.40)', '键盘操作时的可访问性焦点提示', 390, 0, 1, NULL, NULL);
 
 -- =============================================
 -- 13. 倒计时配置表 (countdown_config)

@@ -419,7 +419,7 @@ html.dark .login-box {
   align-items: center;
   justify-content: center;
   font-size: 36px;
-  color: white;
+  color: var(--text-on-brand);
   box-shadow: 0 10px 30px color-mix(in srgb, var(--brand-primary) 40%, transparent);
   animation: pulse 2s ease-in-out infinite;
 }

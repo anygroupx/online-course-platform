@@ -252,7 +252,7 @@
             </li>
           </ol>
           <p>
-            如需了解具体隐私与数据保护，请查看<router-link to="/privacy-policy" style="color: var(--color-primary); text-decoration: none;">《隐私与数据保护协议》</router-link>。
+            如需了解具体隐私与数据保护，请查看<router-link to="/privacy-policy" style="color: var(--brand-primary); text-decoration: none;">《隐私与数据保护协议》</router-link>。
           </p>
         </section>
 
@@ -382,7 +382,7 @@
 <style scoped>
 .service-agreement-page {
   min-height: 100vh;
-  background-color: #f5f7fa;
+  background-color: var(--bg-body);
   padding: 40px 20px;
   display: flex;
   justify-content: center;
@@ -391,38 +391,38 @@
 .agreement-container {
   max-width: 900px;
   width: 100%;
-  background: #fff;
+  background: var(--surface-solid);
   padding: 40px;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 
 .header {
   text-align: center;
   margin-bottom: 40px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--border-color-light);
   padding-bottom: 20px;
 }
 
 .header h1 {
   font-size: 28px;
-  color: #303133;
+  color: var(--text-primary);
   margin-bottom: 10px;
 }
 
 .update-time {
-  color: #909399;
+  color: var(--text-placeholder);
   font-size: 14px;
 }
 
 .content {
-  color: #606266;
+  color: var(--text-regular);
   line-height: 1.8;
   font-size: 15px;
 }
 
 .important-notice {
-  background-color: #fdf6ec;
+  background-color: color-mix(in srgb, var(--color-warning) 10%, var(--surface-solid));
   padding: 20px;
   border-radius: 4px;
   margin-bottom: 30px;
@@ -441,10 +441,10 @@ section {
 
 section h2 {
   font-size: 18px;
-  color: #303133;
+  color: var(--text-primary);
   margin-bottom: 15px;
   font-weight: 600;
-  border-left: 4px solid var(--color-primary);
+  border-left: 4px solid var(--brand-primary);
   padding-left: 10px;
 }
 
@@ -463,14 +463,14 @@ li {
 
 strong {
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .footer-actions {
   margin-top: 40px;
   text-align: center;
   padding-top: 20px;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--border-color-light);
 }
 
 @media (max-width: 768px) {

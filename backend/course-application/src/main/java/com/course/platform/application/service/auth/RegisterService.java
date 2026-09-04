@@ -15,9 +15,9 @@ public interface RegisterService {
      * 用户注册（通过邀请码）
      * 
      * @param request 注册请求
-     * @return 用户ID
+     * @return 对外用户 UUID
      */
-    Long register(RegisterRequest request);
+    String register(RegisterRequest request);
 
     /**
      * 生成/设置邀请码

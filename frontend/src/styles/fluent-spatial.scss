@@ -83,7 +83,6 @@ html.dark {
   .settings-card,
   .main-card,
   .operation-card,
-  .info-card,
   .result-card,
   .order-list-card,
   .theme-config-card,
@@ -256,6 +255,21 @@ html.dark {
   -webkit-backdrop-filter: blur(28px) saturate(1.32);
 }
 
+/*
+ * 表格 show-overflow-tooltip 默认使用 is-dark，并将文字固定成白色。
+ * 弹层背景已统一为随主题变化的亚克力表面，因此文字和箭头也必须使用主题语义色。
+ */
+.el-popper.is-dark,
+.el-popper.is-light {
+  color: var(--text-primary) !important;
+}
+
+.el-popper.is-dark > .el-popper__arrow::before,
+.el-popper.is-light > .el-popper__arrow::before {
+  background: var(--surface-acrylic) !important;
+  border-color: var(--border-color-light);
+}
+
 .el-dialog,
 .el-message-box {
   border: 1px solid var(--border-color-light);
@@ -337,7 +351,11 @@ html:not(.dark) .el-drawer {
 }
 
 /* 业务统计卡通过同一材质和色条获得一致性。 */
-.statistics-cards,
+.statistics-cards {
+  /* el-row/el-col 的 gutter 已提供水平间距，这里只保留换行后的垂直间距。 */
+  row-gap: 16px;
+}
+
 .stats-grid {
   gap: 16px;
 }

@@ -23,7 +23,6 @@ import java.time.LocalDate;
 @Tag(name = "安全运维", description = "审计日志与支付对账")
 @RestController
 @RequestMapping("/admin/security")
-@PreAuthorize("hasRole('ADMIN')")
 @RequiredArgsConstructor
 public class SecurityAdminController {
 
@@ -31,28 +30,31 @@ public class SecurityAdminController {
     private final PaymentReconcileService paymentReconcileService;
 
     @GetMapping("/audit-logs")
+    @PreAuthorize("hasAuthority('security:event:read')")
     @Operation(summary = "分页查询安全审计日志")
     public Result<IPage<SecurityAuditLog>> auditLogs(@RequestParam(required = false) String eventType,
                                                      @RequestParam(required = false) String severity,
                                                      @RequestParam(defaultValue = "1") Integer page,
                                                      @RequestParam(defaultValue = "20") Integer pageSize) {
-        SecurityUtils.requireAdmin();
+        SecurityUtils.requireAuthority("security:event:read");
         return Result.success(securityAuditService.query(eventType, severity, page, pageSize));
     }
 
     @PostMapping("/reconcile")
+    @PreAuthorize("hasAuthority('payment:reconcile')")
     @Operation(summary = "手动触发支付日终对账")
     public Result<PaymentReconcileReport> reconcile(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate bizDate) {
-        SecurityUtils.requireAdmin();
+        SecurityUtils.requireAuthority("payment:reconcile");
         return Result.success(paymentReconcileService.reconcile(bizDate));
     }
 
     @GetMapping("/reconcile/reports")
+    @PreAuthorize("hasAuthority('payment:read')")
     @Operation(summary = "查询对账报告")
     public Result<IPage<PaymentReconcileReport>> reports(@RequestParam(defaultValue = "1") Integer page,
                                                          @RequestParam(defaultValue = "20") Integer pageSize) {
-        SecurityUtils.requireAdmin();
+        SecurityUtils.requireAuthority("payment:read");
         return Result.success(paymentReconcileService.page(page, pageSize));
     }
 }

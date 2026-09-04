@@ -744,24 +744,23 @@ onUnmounted(() => {
 }
 
 .footer-link {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   text-decoration: none;
   transition: color 0.3s;
-  color: var(--text-primary);
 }
 
 .footer-link:hover {
-  color: #fff;
+  color: var(--brand-primary);
 }
 
 .divider {
   margin: 0 8px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--text-placeholder);
 }
 
 .copyright {
   font-size: 12px;
-  font-family: var(--font-family);
+  font-family: inherit;
   color: var(--text-secondary);
   transform: scale(0.9);
 }
@@ -824,7 +823,7 @@ onUnmounted(() => {
 }
 
 .logo h2 {
-  color: #fff;
+  color: var(--text-on-brand);
   font-size: 22px;
   margin: 0;
   font-weight: 600;
@@ -925,11 +924,11 @@ html.dark .menu :deep(.el-sub-menu__title) {
 html.dark .menu .el-menu-item:hover,
 html.dark .menu :deep(.el-sub-menu__title:hover) {
   background-color: rgba(255, 255, 255, 0.05) !important;
-  color: #fff !important;
+  color: var(--text-primary) !important;
 }
 
 html.dark .menu .el-menu-item.is-active {
-  color: #fff !important;
+  color: var(--text-primary) !important;
   background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
@@ -944,14 +943,14 @@ html.dark .menu .el-menu-item.is-active {
 
 .menu .el-menu-item:hover {
   background: rgba(0, 0, 0, 0.08) !important;
-  color: rgba(0, 0, 0, 0.95) !important;
+  color: var(--text-primary) !important;
   transform: translateX(4px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .menu .el-menu-item.is-active {
   background: transparent !important;
-  color: rgba(0, 0, 0, 0.95) !important;
+  color: var(--text-primary) !important;
   position: relative;
   z-index: 3;
 }
@@ -994,7 +993,7 @@ html.dark .menu .el-menu-item.is-active {
 
 /* 子菜单样式优化 */
 .menu .el-sub-menu .el-sub-menu__title {
-  color: rgba(0, 0, 0, 0.8) !important;
+  color: var(--text-secondary) !important;
   font-weight: 500;
   margin: 4px 8px;
   border-radius: 8px;
@@ -1004,7 +1003,7 @@ html.dark .menu .el-menu-item.is-active {
 
 .menu .el-sub-menu .el-sub-menu__title:hover {
   background: rgba(0, 0, 0, 0.08) !important;
-  color: rgba(0, 0, 0, 0.95) !important;
+  color: var(--text-primary) !important;
   transform: translateX(4px);
 }
 
@@ -1052,7 +1051,7 @@ html.dark .menu .el-menu-item.is-active {
 /* 子菜单项悬停效果 */
 .menu .el-sub-menu .el-menu-item:hover {
   background: rgba(0, 0, 0, 0.08) !important;
-  color: rgba(0, 0, 0, 0.95) !important;
+  color: var(--text-primary) !important;
   transform: translateX(4px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
@@ -1156,7 +1155,7 @@ html.dark .menu .el-menu-item.is-active {
 
 .collapse-btn {
   font-size: 18px;
-  color: #606266;
+  color: var(--text-regular);
   padding: 8px;
   border-radius: 4px;
   transition: all 0.3s;
@@ -1164,13 +1163,13 @@ html.dark .menu .el-menu-item.is-active {
 
 .collapse-btn:hover {
   background-color: #f5f7fa;
-  color: #409eff;
+  color: var(--brand-primary);
 }
 
 /* 移动端菜单按钮样式 */
 .mobile-menu-btn {
   font-size: 18px;
-  color: rgb(229, 237, 253);
+  color: var(--text-regular);
   padding: 8px;
   border-radius: 4px;
   transition: all 0.3s;
@@ -1179,7 +1178,7 @@ html.dark .menu .el-menu-item.is-active {
 
 .mobile-menu-btn:hover {
   background-color: #f5f7fa;
-  color: #409eff;
+  color: var(--brand-primary);
 }
 
 .breadcrumb {
@@ -1400,24 +1399,24 @@ html.dark .menu .el-menu-item.is-active {
   gap: 12px;
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--border-color-light);
 }
 
 .announcement-header .el-icon {
   font-size: 20px;
-  color: #409eff;
+  color: var(--brand-primary);
 }
 
 .announcement-header h3 {
   margin: 0;
-  color: #303133;
+  color: var(--text-primary);
   font-size: 18px;
   font-weight: 600;
 }
 
 .announcement-content {
   line-height: 1.6;
-  color: #606266;
+  color: var(--text-regular);
   margin-bottom: 16px;
   white-space: pre-wrap;
   min-height: 60px;
@@ -1428,11 +1427,11 @@ html.dark .menu .el-menu-item.is-active {
   align-items: center;
   justify-content: space-between;
   padding-top: 12px;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--border-color-light);
 }
 
 .publish-time {
-  color: #909399;
+  color: var(--text-placeholder);
   font-size: 12px;
 }
 
@@ -1478,15 +1477,15 @@ html.dark .main-content {
 
 /* Dark Mode 公告弹窗 */
 html.dark .announcement-header h3 {
-  color: #e5e7eb;
+  color: var(--text-primary);
 }
 
 html.dark .announcement-content {
-  color: #d1d5db;
+  color: var(--text-regular);
 }
 
 html.dark .user-info {
-  color: #e5e7eb;
+  color: var(--text-primary);
 }
 
 html.dark .user-info:hover {

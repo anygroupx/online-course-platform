@@ -287,7 +287,7 @@
 <style scoped>
 .privacy-policy-page {
   min-height: 100vh;
-  background-color: #f5f7fa;
+  background-color: var(--bg-body);
   padding: 40px 20px;
   display: flex;
   justify-content: center;
@@ -296,32 +296,32 @@
 .policy-container {
   max-width: 900px;
   width: 100%;
-  background: #fff;
+  background: var(--surface-solid);
   padding: 40px;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 
 .header {
   text-align: center;
   margin-bottom: 40px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--border-color-light);
   padding-bottom: 20px;
 }
 
 .header h1 {
   font-size: 28px;
-  color: #303133;
+  color: var(--text-primary);
   margin-bottom: 10px;
 }
 
 .update-time {
-  color: #909399;
+  color: var(--text-placeholder);
   font-size: 14px;
 }
 
 .content {
-  color: #606266;
+  color: var(--text-regular);
   line-height: 1.8;
   font-size: 15px;
 }
@@ -337,10 +337,10 @@ section {
 
 section h2 {
   font-size: 18px;
-  color: #303133;
+  color: var(--text-primary);
   margin-bottom: 15px;
   font-weight: 600;
-  border-left: 4px solid var(--color-primary);
+  border-left: 4px solid var(--brand-primary);
   padding-left: 10px;
 }
 
@@ -359,27 +359,27 @@ li {
 
 strong {
   font-weight: 600;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .tip-box {
-  background-color: #f4f4f5;
+  background-color: color-mix(in srgb, var(--text-secondary) 8%, var(--surface-solid));
   padding: 15px;
   border-radius: 4px;
   margin: 15px 0;
-  border-left: 4px solid #909399;
-  color: #606266;
+  border-left: 4px solid var(--text-placeholder);
+  color: var(--text-regular);
 }
 
 .footer-actions {
   margin-top: 40px;
   text-align: center;
   padding-top: 20px;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--border-color-light);
 }
 
 a {
-  color: var(--color-primary);
+  color: var(--brand-primary);
   text-decoration: none;
 }
 

@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.*;
  * 第三方API接口管理控制器
  */
 @Tag(name = "API接口管理", description = "第三方API接口配置管理（管理员）")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAuthority('api-provider:update')")
 @RestController
 @RequestMapping("/admin/api-providers")
 @RequiredArgsConstructor
@@ -31,7 +31,7 @@ public class ApiProviderController {
     private final OperationLogService operationLogService;
 
     private void checkAdmin(Long userId) {
-        SecurityUtils.requireAdmin();
+        SecurityUtils.requireAuthority("api-provider:update");
     }
 
     @Operation(summary = "创建API接口", description = "添加新的第三方API接口")

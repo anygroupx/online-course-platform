@@ -1,7 +1,7 @@
 package com.course.platform.security;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.course.platform.common.constant.Constants;
-import com.course.platform.common.security.SecurityRoles;
 import com.course.platform.domain.entity.User;
 import com.course.platform.infra.persistence.mapper.UserMapper;
 import com.course.platform.shared.util.JwtUtil;
@@ -13,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
@@ -21,8 +20,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * JWT认证过滤器（附带角色权限）
@@ -34,6 +31,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
     private final UserMapper userMapper;
+    private final UserAuthorityService userAuthorityService;
 
     @Override
     protected void doFilterInternal(
@@ -44,48 +42,39 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             String token = getTokenFromRequest(request);
             if (StringUtils.hasText(token) && jwtUtil.validateToken(token)) {
-                Long userId = jwtUtil.getUserIdFromToken(token);
+                String uid = jwtUtil.getUserUidFromToken(token);
                 String username = jwtUtil.getUsernameFromToken(token);
+                User user = userMapper.selectOne(new LambdaQueryWrapper<User>()
+                        .eq(User::getUid, uid)
+                        .last("LIMIT 1"));
 
-                List<SimpleGrantedAuthority> authorities = new ArrayList<>();
-                String role = SecurityRoles.USER;
-                if (userId != null) {
-                    User user = userMapper.selectById(userId);
-                    if (user != null) {
-                        if (user.getStatus() != null && user.getStatus() == Constants.USER_STATUS_DISABLED) {
-                            SecurityContextHolder.clearContext();
-                            filterChain.doFilter(request, response);
-                            return;
-                        }
-                        role = resolveRole(user);
-                    } else if (Constants.DEFAULT_ADMIN_ID.equals(userId)) {
-                        role = SecurityRoles.ADMIN;
+                if (user != null) {
+                    if (user.getStatus() != null && user.getStatus() == Constants.USER_STATUS_DISABLED) {
+                        SecurityContextHolder.clearContext();
+                        filterChain.doFilter(request, response);
+                        return;
                     }
-                }
-                authorities.add(new SimpleGrantedAuthority(SecurityRoles.toSpringRole(role)));
+                    var authorities = userAuthorityService.loadAuthorities(user.getId());
+                    if (authorities.isEmpty()) {
+                        log.warn("拒绝没有有效 RBAC 角色的用户，uid={}", uid);
+                        SecurityContextHolder.clearContext();
+                        filterChain.doFilter(request, response);
+                        return;
+                    }
 
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(userId, null, authorities);
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-                log.debug("JWT认证成功，用户ID: {}, 用户名: {}, 角色: {}", userId, username, role);
+                    // 内部认证主体继续使用数据库主键，避免业务层和关联表暴露或依赖公开 UUID。
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(user.getId(), null, authorities);
+                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                    log.debug("JWT认证成功，用户UUID: {}, 用户名: {}, authorities={}", uid, username, authorities);
+                }
             }
         } catch (Exception e) {
             log.error("JWT认证失败: {}", e.getMessage());
         }
 
         filterChain.doFilter(request, response);
-    }
-
-    private String resolveRole(User user) {
-        if (StringUtils.hasText(user.getRole())) {
-            return user.getRole().trim().toUpperCase();
-        }
-        // 兼容历史数据：ID=1 视为管理员
-        if (Constants.DEFAULT_ADMIN_ID.equals(user.getId())) {
-            return SecurityRoles.ADMIN;
-        }
-        return SecurityRoles.USER;
     }
 
     private String getTokenFromRequest(HttpServletRequest request) {

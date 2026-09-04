@@ -14,6 +14,7 @@ import com.course.platform.domain.entity.SystemVariable;
 import com.course.platform.application.service.system.SystemVariableService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
@@ -30,7 +31,7 @@ import java.util.List;
  * Source: 基于系统变量管理需求设计
  */
 @Tag(name = "系统变量管理", description = "系统变量配置管理接口")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAuthority('system-config:update')")
 @RequestMapping("/admin/variables")
 @RequiredArgsConstructor
 @RestController
@@ -42,7 +43,7 @@ public class SystemVariableController {
      * 验证管理员权限
      */
     private void checkAdmin(Long userId) {
-        SecurityUtils.requireAdmin();
+        SecurityUtils.requireAuthority("system-config:update");
     }
 
     /**
@@ -71,6 +72,20 @@ public class SystemVariableController {
 
         systemVariableService.updateVariable(request, userId);
         return Result.success("系统变量更新成功");
+    }
+
+    /**
+     * 批量更新主题颜色变量
+     */
+    @Operation(summary = "批量更新主题颜色", description = "在单个事务中发布一组主题颜色配置")
+    @PutMapping("/theme")
+    public Result<Void> updateThemeVariables(@Validated @RequestBody List<@Valid SystemVariableUpdateRequest> requests,
+                                             Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        checkAdmin(userId);
+
+        systemVariableService.updateThemeVariables(requests, userId);
+        return Result.success("主题颜色更新成功");
     }
 
     /**
@@ -103,9 +118,10 @@ public class SystemVariableController {
     @Operation(summary = "分页查询变量", description = "分页查询系统变量")
     @GetMapping
     public Result<IPage<SystemVariable>> queryVariables(@RequestParam(required = false) String variableType,
+                                                       @RequestParam(required = false) String keyword,
                                                        @RequestParam(defaultValue = "1") Integer page,
                                                        @RequestParam(defaultValue = "20") Integer pageSize) {
-        IPage<SystemVariable> result = systemVariableService.queryVariables(variableType, page, pageSize);
+        IPage<SystemVariable> result = systemVariableService.queryVariables(variableType, keyword, page, pageSize);
         return Result.success(result);
     }
 
@@ -157,7 +173,8 @@ public class SystemVariableController {
         // 这里可以从数据库查询所有不同的变量类型
         List<String> types = List.of(
             "order_status", "dock_status", "user_status", "platform_status",
-            "card_status", "announcement_type", "session_status", "message_type"
+            "card_status", "announcement_type", "session_status", "message_type",
+            "theme_color_light", "theme_color_dark"
         );
         return Result.success(types);
     }
