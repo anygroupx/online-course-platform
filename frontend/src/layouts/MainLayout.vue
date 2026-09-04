@@ -1,6 +1,7 @@
 <template>
   <el-container
     class="main-container fluent-spatial-stage"
+    :class="{ 'mobile-menu-open': isMobile && isMobileMenuVisible }"
     data-spatial-shell
   >
     <!-- 空间背景只提供环境光与透视参照，不参与交互。 -->
@@ -385,6 +386,13 @@ const closeMobileMenu = () => {
   isMobileMenuVisible.value = false;
 };
 
+// 菜单展开后支持键盘退出，避免遮罩只能依赖指针点击关闭。
+const handleWindowKeydown = (event) => {
+  if (event.key === "Escape" && isMobileMenuVisible.value) {
+    closeMobileMenu();
+  }
+};
+
 // 处理菜单选择
 const handleMenuSelect = (index) => {
   // 移动端选择菜单项后自动关闭菜单
@@ -692,11 +700,13 @@ onMounted(() => {
     loadSettings();
   }
   window.addEventListener("must-change-password", handleMustChangePassword);
+  window.addEventListener("keydown", handleWindowKeydown);
 });
 
 // 组件卸载时清理事件监听
 onUnmounted(() => {
   window.removeEventListener("must-change-password", handleMustChangePassword);
+  window.removeEventListener("keydown", handleWindowKeydown);
 });
 </script>
 
@@ -1244,7 +1254,7 @@ html.dark .menu .el-menu-item.is-active {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--el-overlay-color-lighter);
   z-index: 999;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
@@ -1801,6 +1811,8 @@ html.dark .user-info:hover {
     inset: 0 auto 0 0;
     width: min(84vw, 300px) !important;
     height: 100dvh;
+    /* 后置主题层会覆盖基础层层级，这里确保菜单始终位于遮罩之上。 */
+    z-index: 1000;
     padding-bottom: var(--safe-area-bottom);
     margin: 0;
     border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
@@ -1816,6 +1828,11 @@ html.dark .user-info:hover {
   .main-content {
     padding: 14px max(12px, var(--safe-area-right))
       max(22px, var(--safe-area-bottom)) max(12px, var(--safe-area-left));
+  }
+
+  /* 菜单打开时冻结实际滚动容器，避免触摸滑动穿透遮罩。 */
+  .main-container.mobile-menu-open .main-content {
+    overflow: hidden;
   }
 
   .header-left {
