@@ -49,8 +49,10 @@ public class SecurityConfig {
      * 不需要认证的路径
      */
     private static final String[] PERMIT_ALL_PATHS = {
-            // 认证相关（包含 /auth/login, /auth/refresh 等）
-            "/auth/**",
+            // 仅登录、刷新和 MFA 登录验证匿名可用；logout/current 必须认证。
+            "/auth/login",
+            "/auth/refresh",
+            "/auth/mfa/verify",
             // 健康检查端点（Docker容器健康检查）
             "/health",
             "/ping",
