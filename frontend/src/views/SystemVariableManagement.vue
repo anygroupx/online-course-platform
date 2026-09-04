@@ -32,10 +32,10 @@
           </el-select>
           <el-input
             v-model="filters.keyword"
+            class="keyword-filter"
             placeholder="搜索变量名称或键名"
             clearable
             @input="handleSearch"
-            style="width: 200px; margin-left: 10px;"
           >
             <template #prefix>
               <el-icon><Search /></el-icon>
@@ -89,32 +89,58 @@
             </el-icon>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" :width="isMobile ? 96 : 260" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="showEditDialog(row)">编辑</el-button>
-            <el-button 
-              size="small" 
-              :type="row.isEnabled ? 'warning' : 'success'"
-              @click="toggleStatus(row)"
+            <!-- 移动端将多个行操作收敛为单一入口，避免固定列内按钮拥挤。 -->
+            <el-dropdown
+              v-if="isMobile"
+              trigger="click"
+              @command="(command) => handleVariableAction(command, row)"
             >
-              {{ row.isEnabled ? '禁用' : '启用' }}
-            </el-button>
-            <el-button 
-              v-if="!row.isDefault"
-              size="small" 
-              type="info"
-              @click="setDefault(row)"
-            >
-              设为默认
-            </el-button>
-            <el-button 
-              v-if="!row.isDefault"
-              size="small" 
-              type="danger"
-              @click="deleteVariable(row)"
-            >
-              删除
-            </el-button>
+              <el-button size="small">
+                操作 <el-icon><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="edit">编辑</el-dropdown-item>
+                  <el-dropdown-item command="toggle">
+                    {{ row.isEnabled ? '禁用' : '启用' }}
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="!row.isDefault" command="default">
+                    设为默认
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="!row.isDefault" command="delete" divided>
+                    删除
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <div v-else class="variable-row-actions">
+              <el-button size="small" @click="showEditDialog(row)">编辑</el-button>
+              <el-button
+                size="small"
+                :type="row.isEnabled ? 'warning' : 'success'"
+                @click="toggleStatus(row)"
+              >
+                {{ row.isEnabled ? '禁用' : '启用' }}
+              </el-button>
+              <el-button
+                v-if="!row.isDefault"
+                size="small"
+                type="info"
+                @click="setDefault(row)"
+              >
+                设为默认
+              </el-button>
+              <el-button
+                v-if="!row.isDefault"
+                size="small"
+                type="danger"
+                @click="deleteVariable(row)"
+              >
+                删除
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -126,7 +152,9 @@
           v-model:page-size="pagination.pageSize"
           :page-sizes="[10, 20, 50, 100]"
           :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper"
+          :layout="isMobile ? 'sizes, prev, pager, next' : 'total, sizes, prev, pager, next, jumper'"
+          :pager-count="isMobile ? 5 : 7"
+          :size="isMobile ? 'small' : 'default'"
           @size-change="loadVariables"
           @current-change="loadVariables"
         />
@@ -138,13 +166,16 @@
       v-model="dialogVisible"
       :title="isEdit ? '编辑变量' : '添加变量'"
       width="600px"
+      append-to-body
+      align-center
       @close="resetForm"
     >
       <el-form
         ref="formRef"
         :model="form"
         :rules="rules"
-        label-width="120px"
+        :label-position="isMobile ? 'top' : 'right'"
+        :label-width="isMobile ? 'auto' : '120px'"
       >
         <el-form-item label="变量键名" prop="variableKey">
           <el-input v-model="form.variableKey" placeholder="请输入变量键名" />
@@ -195,7 +226,8 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Plus, Refresh, Search, ArrowDown } from '@element-plus/icons-vue'
+import { useResponsive } from '@/composables/useResponsive'
 import {
   createVariable,
   updateVariable,
@@ -213,6 +245,7 @@ const variableTypes = ref([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref()
+const { isMobile } = useResponsive()
 
 // 筛选条件
 const filters = reactive({
@@ -399,6 +432,17 @@ const setDefault = async (row) => {
   }
 }
 
+// 统一承接移动端下拉命令，复用原有操作与确认流程。
+const handleVariableAction = (command, row) => {
+  const handlers = {
+    edit: () => showEditDialog(row),
+    toggle: () => toggleStatus(row),
+    default: () => setDefault(row),
+    delete: () => deleteVariable(row)
+  }
+  handlers[command]?.()
+}
+
 // 删除变量
 const deleteVariable = async (row) => {
   try {
@@ -461,6 +505,22 @@ onMounted(() => {
 .right-filters {
   display: flex;
   align-items: center;
+  gap: 10px;
+}
+
+.keyword-filter {
+  width: 200px;
+}
+
+.variable-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.variable-row-actions :deep(.el-button) {
+  margin-inline-start: 0;
 }
 
 .table-card {
@@ -478,5 +538,49 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   margin-top: 20px;
+}
+
+@media (max-width: 767px) {
+  .system-variable-management {
+    padding: 12px;
+  }
+
+  .page-header,
+  .operation-card,
+  .table-card {
+    margin-bottom: 12px;
+  }
+
+  .operation-bar,
+  .right-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .operation-bar {
+    gap: 12px;
+  }
+
+  .left-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .left-actions :deep(.el-button) {
+    inline-size: 100%;
+    margin-inline-start: 0;
+  }
+
+  .right-filters :deep(.el-select),
+  .keyword-filter {
+    inline-size: 100%;
+  }
+
+  .pagination-container :deep(.el-pagination) {
+    max-inline-size: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 8px;
+  }
 }
 </style>
