@@ -3,6 +3,9 @@ package com.course.platform.application.service.platform;
 import com.course.platform.domain.dto.DockResult;
 import com.course.platform.domain.dto.OrderProgressResult;
 import com.course.platform.domain.dto.QueryCourseRequest;
+import com.course.platform.domain.dto.PlatformItem;
+import com.course.platform.domain.dto.ProductImportRequest;
+import com.course.platform.domain.dto.ProviderOrderLog;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.entity.CourseOrder;
 import com.course.platform.domain.entity.CoursePlatform;
@@ -77,6 +80,18 @@ public interface PlatformDockingService {
      * @return 导入结果
      */
     Map<String, Object> importPlatforms(Long apiProviderId, BigDecimal priceMultiplier, String targetCategoryId, Boolean syncCategories, List<String> skipCategoryIds);
+
+    /** 查询第三方商品列表，并标记本地是否已导入。 */
+    List<PlatformItem> fetchProviderProducts(Long apiProviderId, String categoryId);
+
+    /** 从第三方商品列表中选择商品导入。 */
+    Map<String, Object> importSelectedProducts(ProductImportRequest request);
+
+    /** 查询并保存第三方接口余额。 */
+    BigDecimal refreshProviderBalance(Long apiProviderId);
+
+    /** 查询指定本地订单的第三方订单日志。 */
+    List<ProviderOrderLog> fetchOrderLogs(Long orderId);
 
     /**
      * 批量同步订单进度（增量）

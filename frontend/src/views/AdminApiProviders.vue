@@ -17,9 +17,20 @@
         <el-table-column prop="providerType" label="接口类型" width="120" />
         <el-table-column prop="apiUrl" label="API地址" show-overflow-tooltip />
         <el-table-column prop="usernameMasked" label="账号" width="120" />
-        <el-table-column prop="balance" label="余额" width="100">
+        <el-table-column prop="balance" label="余额" width="170">
           <template #default="scope">
-            <el-tag type="success">¥{{ scope.row.balance || 0 }}</el-tag>
+            <div class="balance-cell">
+              <el-tag type="success">¥{{ formatBalance(scope.row.balance) }}</el-tag>
+              <el-button
+                link
+                type="primary"
+                :loading="balanceLoadingIds.has(scope.row.id)"
+                :disabled="scope.row.status !== 1"
+                @click="handleRefreshBalance(scope.row)"
+              >
+                查询余额
+              </el-button>
+            </div>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="80">
@@ -42,7 +53,7 @@
         </el-table-column>
         <el-table-column
           label="操作"
-          :width="isMobile ? 120 : 280"
+          :width="isMobile ? 130 : 300"
           fixed="right"
         >
           <template #default="scope">
@@ -170,10 +181,12 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import axios from "@/utils/request";
 import { useResponsive } from "@/composables/useResponsive";
 import dayjs from "dayjs";
+import { refreshApiProviderBalance } from "@/api/apiProvider";
 
 const { isMobile } = useResponsive();
 
 const tableData = ref([]);
+const balanceLoadingIds = ref(new Set());
 const currentPage = ref(1);
 const pageSize = ref(10);
 const total = ref(0);
@@ -292,6 +305,26 @@ const handleDelete = async (row) => {
   }
 };
 
+const formatBalance = (value) => {
+  const balance = Number(value);
+  return Number.isFinite(balance) ? balance.toFixed(2) : "0.00";
+};
+
+const handleRefreshBalance = async (row) => {
+  balanceLoadingIds.value = new Set([...balanceLoadingIds.value, row.id]);
+  try {
+    const res = await refreshApiProviderBalance(row.id);
+    row.balance = res.data;
+    ElMessage.success(`${row.name} 余额已更新`);
+  } catch (error) {
+    console.error("查询余额失败：", error);
+  } finally {
+    const next = new Set(balanceLoadingIds.value);
+    next.delete(row.id);
+    balanceLoadingIds.value = next;
+  }
+};
+
 const handleBatchSync = async (row) => {
   try {
     await ElMessageBox.confirm(
@@ -357,5 +390,11 @@ onMounted(() => {
 .pagination {
   margin-top: 20px;
   justify-content: flex-end;
+}
+
+.balance-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

@@ -80,3 +80,26 @@ export function deletePlatform(id) {
   })
 }
 
+
+/**
+ * 查询第三方接口商品列表（管理员）
+ */
+export function fetchProviderProducts(params) {
+  return request({
+    url: '/admin/docking/products',
+    method: 'get',
+    params
+  })
+}
+
+/**
+ * 导入选中的第三方商品（管理员）
+ */
+export function importSelectedProducts(data) {
+  return request({
+    url: '/admin/docking/import-products',
+    method: 'post',
+    data,
+    timeout: 120000
+  })
+}

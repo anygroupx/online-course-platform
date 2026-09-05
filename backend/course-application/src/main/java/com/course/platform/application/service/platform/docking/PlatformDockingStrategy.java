@@ -5,11 +5,13 @@ import com.course.platform.domain.vo.CourseInfoResponse;
 import com.course.platform.domain.dto.DockResult;
 import com.course.platform.domain.dto.OrderProgressResult;
 import com.course.platform.domain.dto.PlatformItem;
+import com.course.platform.domain.dto.ProviderOrderLog;
 import com.course.platform.domain.dto.QueryCourseRequest;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.entity.CourseOrder;
 import com.course.platform.domain.entity.CoursePlatform;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -69,6 +71,28 @@ public interface PlatformDockingStrategy {
      * @return 平台/课程列表
      */
     List<PlatformItem> fetchPlatformList(ApiProvider apiProvider);
+
+    /**
+     * 按远程分类获取平台/商品列表。默认对完整列表做本地筛选，支持分类参数的适配器可覆盖。
+     */
+    default List<PlatformItem> fetchPlatformList(ApiProvider apiProvider, String categoryId) {
+        if (categoryId == null || categoryId.isBlank()) {
+            return fetchPlatformList(apiProvider);
+        }
+        return fetchPlatformList(apiProvider).stream()
+                .filter(item -> categoryId.equals(item.getCategoryId()))
+                .toList();
+    }
+
+    /** 查询第三方接口账户余额；不支持时返回 null。 */
+    default BigDecimal queryBalance(ApiProvider apiProvider) {
+        return null;
+    }
+
+    /** 查询指定订单的第三方日志；不支持时返回 null。 */
+    default List<ProviderOrderLog> fetchOrderLogs(CourseOrder order, ApiProvider apiProvider) {
+        return null;
+    }
 
     /**
      * 批量查询订单进度（增量）

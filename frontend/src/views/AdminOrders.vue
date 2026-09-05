@@ -1097,7 +1097,7 @@
     <el-dialog
       v-model="detailDialogVisible"
       title="订单详情"
-      width="800px"
+      width="min(860px, 96vw)"
       append-to-body
     >
       <el-descriptions :column="2" border v-if="currentOrder">
@@ -1155,6 +1155,59 @@
           </div>
         </el-descriptions-item>
       </el-descriptions>
+
+      <el-divider content-position="left">上游订单日志</el-divider>
+      <div class="provider-log-header">
+        <span class="provider-log-tip">日志来自订单对应的第三方接口</span>
+        <el-button
+          size="small"
+          :icon="Refresh"
+          :loading="providerLogsLoading"
+          :disabled="!currentOrder || isSelfOperatedOrder(currentOrder)"
+          @click="loadProviderOrderLogs"
+        >
+          刷新日志
+        </el-button>
+      </div>
+      <div v-loading="providerLogsLoading" class="provider-log-panel">
+        <el-alert
+          v-if="currentOrder && isSelfOperatedOrder(currentOrder)"
+          title="自营订单无上游日志"
+          type="info"
+          :closable="false"
+          show-icon
+        />
+        <el-alert
+          v-else-if="providerLogsError"
+          :title="providerLogsError"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
+        <el-empty
+          v-else-if="!providerLogsLoading && providerLogs.length === 0"
+          description="暂无上游订单日志"
+          :image-size="72"
+        />
+        <el-timeline v-else class="provider-log-timeline">
+          <el-timeline-item
+            v-for="(log, index) in providerLogs"
+            :key="log.id || `${log.createTime || 'log'}-${index}`"
+            :timestamp="log.createTime || ''"
+            placement="top"
+            :type="getProviderLogType(log.status)"
+          >
+            <div class="provider-log-card">
+              <div class="provider-log-title">
+                <span>{{ log.title || log.status || "订单日志" }}</span>
+                <el-tag v-if="log.status" size="small" effect="plain">{{ log.status }}</el-tag>
+              </div>
+              <div class="provider-log-content">{{ log.content || "无详细内容" }}</div>
+              <div v-if="log.operator" class="provider-log-operator">操作人：{{ log.operator }}</div>
+            </div>
+          </el-timeline-item>
+        </el-timeline>
+      </div>
     </el-dialog>
 
     <!-- 订单导出对话框 -->
@@ -1273,6 +1326,7 @@ import {
   getRemainingCountdown,
   completeOrder,
   exportOrders,
+  getProviderOrderLogs,
 } from "@/api/order";
 import { getCoursePlatforms } from "@/api/course";
 import { useVariableStore } from "@/stores/variableStore";
@@ -1632,6 +1686,10 @@ const exportResult = ref({
 const batchLoading = ref(false);
 const exportLoading = ref(false);
 const currentOrder = ref(null);
+const providerLogs = ref([]);
+const providerLogsLoading = ref(false);
+const providerLogsError = ref("");
+let providerLogsRequestVersion = 0;
 
 // 个性化配置相关方法
 const loadTableConfig = () => {
@@ -2014,9 +2072,51 @@ const handleOperationCommand = (command, row) => {
   }
 };
 
+const isSelfOperatedOrder = (order) =>
+  order?.isSelfOperated === true || Number(order?.isSelfOperated) === 1;
+
+const getProviderLogType = (status) => {
+  const value = String(status || "");
+  if (/成功|完成|正常/.test(value)) return "success";
+  if (/失败|异常|错误|取消/.test(value)) return "danger";
+  if (/等待|待处理|暂停/.test(value)) return "warning";
+  return "primary";
+};
+
+const loadProviderOrderLogs = async () => {
+  const order = currentOrder.value;
+  const requestVersion = ++providerLogsRequestVersion;
+  providerLogs.value = [];
+  providerLogsError.value = "";
+  providerLogsLoading.value = false;
+  if (!order || isSelfOperatedOrder(order)) return;
+
+  const orderId = order.id;
+  providerLogsLoading.value = true;
+  try {
+    const res = await getProviderOrderLogs(orderId);
+    if (requestVersion === providerLogsRequestVersion && currentOrder.value?.id === orderId) {
+      providerLogs.value = Array.isArray(res.data) ? res.data : [];
+    }
+  } catch (error) {
+    if (requestVersion === providerLogsRequestVersion && currentOrder.value?.id === orderId) {
+      providerLogsError.value =
+        error?.response?.data?.message || error?.message || "上游订单日志加载失败";
+      console.error("加载上游订单日志失败：", error);
+    }
+  } finally {
+    if (requestVersion === providerLogsRequestVersion) {
+      providerLogsLoading.value = false;
+    }
+  }
+};
+
 const handleView = (row) => {
   currentOrder.value = row;
+  providerLogs.value = [];
+  providerLogsError.value = "";
   detailDialogVisible.value = true;
+  loadProviderOrderLogs();
 };
 
 const handleForceUpdateStatus = (row) => {
@@ -3466,5 +3566,56 @@ html.dark .indicator-cancelled {
 
 html.dark .indicator-failed {
   box-shadow: 0 0 8px color-mix(in srgb, var(--color-danger) 80%, transparent);
+}
+
+.provider-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.provider-log-tip,
+.provider-log-operator {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.provider-log-panel {
+  min-height: 90px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 4px 8px 0 2px;
+}
+
+.provider-log-timeline {
+  padding-top: 8px;
+}
+
+.provider-log-card {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+}
+
+.provider-log-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.provider-log-content {
+  margin-top: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-regular);
+}
+
+.provider-log-operator {
+  margin-top: 8px;
 }
 </style>

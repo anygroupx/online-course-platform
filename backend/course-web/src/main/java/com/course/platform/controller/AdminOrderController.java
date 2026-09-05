@@ -36,6 +36,8 @@ import com.course.platform.application.service.order.OrderCountdownService;
 import com.course.platform.application.service.course.CountdownConfigService;
 import com.course.platform.application.service.order.CountdownHistoryService;
 import com.course.platform.application.service.order.OrderExportService;
+import com.course.platform.application.service.platform.PlatformDockingService;
+import com.course.platform.domain.dto.ProviderOrderLog;
 import cn.hutool.core.util.StrUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -79,6 +81,7 @@ public class AdminOrderController {
     private final CountdownConfigService countdownConfigService;
     private final CountdownHistoryService countdownHistoryService;
     private final OrderExportService orderExportService;
+    private final PlatformDockingService platformDockingService;
     private final com.course.platform.service.impl.AccountLedgerServiceImpl accountLedgerService;
 
     /**
@@ -94,6 +97,16 @@ public class AdminOrderController {
      */
     private void checkAdmin(Long userId) {
         SecurityUtils.requireAuthority("order:update");
+    }
+
+    @Operation(summary = "查询第三方订单日志", description = "按本地订单ID拉取上游订单日志")
+    @GetMapping("/{id}/provider-logs")
+    public Result<List<ProviderOrderLog>> getProviderOrderLogs(@PathVariable Long id,
+                                                                Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        checkAdmin(userId);
+        List<ProviderOrderLog> logs = platformDockingService.fetchOrderLogs(id);
+        return Result.success(logs);
     }
 
     /**

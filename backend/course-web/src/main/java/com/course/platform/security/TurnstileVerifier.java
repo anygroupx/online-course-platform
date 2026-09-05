@@ -3,6 +3,7 @@ package com.course.platform.security;
 import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.course.platform.infra.http.OutboundPolicyRegistry;
@@ -132,6 +133,7 @@ public class TurnstileVerifier {
                 "人机验证失败", "action=" + action + ",reason=" + reason);
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private record TurnstileResponse(
             boolean success,
             String hostname,
