@@ -10,12 +10,17 @@ import com.course.platform.common.result.ResultCode;
 import com.course.platform.common.security.SecretCrypto;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
+import com.course.platform.infra.http.OutboundPolicyRegistry;
+import com.course.platform.infra.http.SafeHttpException;
+import com.course.platform.infra.http.SsrfGuard;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+
+import java.net.URI;
 
 /**
  * 第三方API接口服务实现类（敏感字段加密存储）
@@ -26,6 +31,8 @@ import org.springframework.util.StringUtils;
 public class ApiProviderServiceImpl implements ApiProviderService {
 
     private final ApiProviderMapper apiProviderMapper;
+    private final SsrfGuard ssrfGuard;
+    private final OutboundPolicyRegistry outboundPolicies;
 
     @Value("${app.crypto.secret:}")
     private String cryptoSecret;
@@ -38,6 +45,7 @@ public class ApiProviderServiceImpl implements ApiProviderService {
         if (existing != null) {
             throw new BusinessException("接口名称已存在");
         }
+        validateProviderUrl(apiProvider.getApiUrl());
         encryptSecrets(apiProvider);
         apiProviderMapper.insert(apiProvider);
         log.info("API接口创建成功：id={}, name={}", apiProvider.getId(), apiProvider.getName());
@@ -51,6 +59,10 @@ public class ApiProviderServiceImpl implements ApiProviderService {
         if (existing == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "API接口不存在");
         }
+        if (!StringUtils.hasText(apiProvider.getApiUrl())) {
+            apiProvider.setApiUrl(existing.getApiUrl());
+        }
+        validateProviderUrl(apiProvider.getApiUrl());
         // 列表接口仅返回脱敏账号；编辑时未重新填写账号则保留原值。
         if (!StringUtils.hasText(apiProvider.getUsername())) {
             apiProvider.setUsername(existing.getUsername());
@@ -107,6 +119,19 @@ public class ApiProviderServiceImpl implements ApiProviderService {
     public ApiProvider loadDecrypted(Long id) {
         ApiProvider provider = apiProviderMapper.selectById(id);
         return decryptSecrets(provider);
+    }
+
+    private void validateProviderUrl(String value) {
+        try {
+            if (!StringUtils.hasText(value) || value.length() > 2048) {
+                throw new SafeHttpException(SafeHttpException.Reason.BLOCKED_DESTINATION);
+            }
+            ssrfGuard.validate(URI.create(value), outboundPolicies.provider());
+        } catch (SafeHttpException | IllegalArgumentException ex) {
+            log.warn("API Provider URL rejected: reason={}",
+                    ex instanceof SafeHttpException safe ? safe.getReason() : ex.getClass().getSimpleName());
+            throw new BusinessException("API地址不符合出站安全策略");
+        }
     }
 
     private void encryptSecrets(ApiProvider provider) {

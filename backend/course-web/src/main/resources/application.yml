@@ -148,6 +148,17 @@ app:
     # 必须由环境变量注入；生产环境建议改用 KMS。
     secret: ${APP_CRYPTO_SECRET}
   security:
+    outbound:
+      dns-mode: ${OUTBOUND_DNS_MODE:system}
+      provider-allowed-hosts: ${OUTBOUND_PROVIDER_ALLOWED_HOSTS:}
+      provider-http-allowed-hosts: ${OUTBOUND_PROVIDER_HTTP_ALLOWED_HOSTS:}
+      provider-allowed-ports: ${OUTBOUND_PROVIDER_ALLOWED_PORTS:}
+      alert-webhook-allowed-hosts: ${OUTBOUND_ALERT_ALLOWED_HOSTS:}
+      alert-webhook-http-allowed-hosts: ${OUTBOUND_ALERT_HTTP_ALLOWED_HOSTS:}
+      connect-timeout-millis: 5000
+      read-timeout-millis: 15000
+      call-timeout-millis: 20000
+      max-response-bytes: 1048576
     auth-cookie:
       secure: ${AUTH_COOKIE_SECURE:false}
       same-site: Strict

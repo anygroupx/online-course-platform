@@ -70,7 +70,7 @@ public class OligeiDockingStrategy implements PlatformDockingStrategy {
         params.put("kcid", order.getCourseId());
         // params.put("miaoshua", order.getIsFlash() == 1 ? "1" : "0");
 
-        log.info("Oligei下单请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
+        log.info("Oligei下单请求: params={}", DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
         log.debug("Oligei下单响应已接收: length={}", response == null ? 0 : response.length());
 
@@ -106,7 +106,7 @@ public class OligeiDockingStrategy implements PlatformDockingStrategy {
         Map<String, Object> params = new HashMap<>();
         params.put("token", apiProvider.getToken());
 
-        log.info("Oligei获取课程列表请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
+        log.info("Oligei获取课程列表请求: params={}", DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
 
         JSONObject json = JSONUtil.parseObj(response);

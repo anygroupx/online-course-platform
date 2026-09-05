@@ -4,22 +4,22 @@ import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.course.platform.infra.http.OutboundPolicyRegistry;
+import com.course.platform.infra.http.SafeHttpClient;
+import com.course.platform.infra.http.SafeHttpException;
+import com.course.platform.infra.http.SafeHttpResponse;
 import com.course.platform.shared.util.ServletUtil;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Cloudflare Turnstile 服务端验证器。
@@ -31,7 +31,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TurnstileVerifier {
 
-    private final RestTemplate restTemplate;
+    private final SafeHttpClient safeHttpClient;
+    private final OutboundPolicyRegistry outboundPolicies;
+    private final ObjectMapper objectMapper;
     private final SecurityAuditService securityAuditService;
 
     @Value("${cloudflare.turnstile.enabled:false}")
@@ -86,22 +88,18 @@ public class TurnstileVerifier {
             throw new BusinessException(ResultCode.HUMAN_VERIFICATION_FAILED);
         }
 
-        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("secret", secretKey);
-        form.add("response", token);
-        form.add("remoteip", ServletUtil.getClientIp());
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
         TurnstileResponse response;
         try {
-            response = restTemplate.postForObject(
-                    verifyUrl,
-                    new HttpEntity<>(form, headers),
-                    TurnstileResponse.class
-            );
-        } catch (RestClientException ex) {
+            SafeHttpResponse httpResponse = safeHttpClient.postForm(URI.create(verifyUrl), Map.of(
+                    "secret", secretKey,
+                    "response", token,
+                    "remoteip", ServletUtil.getClientIp()
+            ), Map.of(), outboundPolicies.turnstile());
+            if (!httpResponse.isSuccessful()) {
+                throw new SafeHttpException(SafeHttpException.Reason.INVALID_RESPONSE);
+            }
+            response = objectMapper.readValue(httpResponse.body(), TurnstileResponse.class);
+        } catch (SafeHttpException | IllegalArgumentException | com.fasterxml.jackson.core.JsonProcessingException ex) {
             log.warn("Cloudflare Turnstile 服务调用失败：{}", ex.getClass().getSimpleName());
             auditFailure(expectedAction, "provider-unavailable", "CRITICAL");
             throw new BusinessException(ResultCode.HUMAN_VERIFICATION_UNAVAILABLE);

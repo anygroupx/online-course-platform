@@ -1,113 +1,97 @@
 package com.course.platform.infra.external;
 
-import cn.hutool.core.util.StrUtil;
 import com.course.platform.common.exception.BusinessException;
+import com.course.platform.infra.http.OutboundPolicyRegistry;
+import com.course.platform.infra.http.SafeHttpClient;
+import com.course.platform.infra.http.SafeHttpException;
+import com.course.platform.infra.http.SafeHttpResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.*;
+import okhttp3.HttpUrl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
-import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
-/**
- * 通用API调用客户端
- */
+/** Provider API adapter backed exclusively by the SSRF-safe outbound transport. */
 @Slf4j
 @Component
 public class ApiHttpClient {
 
-    private final RestTemplate restTemplate;
+    private final SafeHttpClient safeHttpClient;
+    private final OutboundPolicyRegistry policies;
 
-    public ApiHttpClient(RestTemplate restTemplate) {
-        this.restTemplate = restTemplate;
+    public ApiHttpClient(SafeHttpClient safeHttpClient, OutboundPolicyRegistry policies) {
+        this.safeHttpClient = safeHttpClient;
+        this.policies = policies;
     }
 
-    /**
-     * 发送POST请求（表单格式）
-     *
-     * @param url    请求地址
-     * @param params 请求参数
-     * @return 响应字符串
-     */
     public String postForString(String url, Map<String, Object> params) {
         return postForString(url, params, null);
     }
 
-    /**
-     * 发送POST请求（表单格式），带Header
-     *
-     * @param url     请求地址
-     * @param params  请求参数
-     * @param headers 请求头
-     * @return 响应字符串
-     */
     public String postForString(String url, Map<String, Object> params, HttpHeaders headers) {
         try {
-            if (headers == null) {
-                headers = new HttpHeaders();
-            }
-            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
-            MultiValueMap<String, Object> map = new LinkedMultiValueMap<>();
-            if (params != null) {
-                map.setAll(params);
-            }
-
-            HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(map, headers);
-            ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-
-            if (response.getStatusCode() == HttpStatus.OK) {
-                return response.getBody();
-            } else {
-                log.error("API请求失败: url={}, status={}", url, response.getStatusCode());
-                throw new BusinessException("第三方API请求失败: " + response.getStatusCode());
-            }
-        } catch (Exception e) {
-            log.error("API请求异常: url={}, error={}", url, e.getMessage(), e);
-            throw new BusinessException("第三方API请求异常: " + e.getMessage());
+            SafeHttpResponse response = safeHttpClient.postForm(
+                    strictUri(url), params, singleHeaders(headers), policies.provider());
+            return requireSuccess(response);
+        } catch (SafeHttpException | IllegalArgumentException ex) {
+            log.warn("Provider request blocked or failed: reason={}", safeReason(ex));
+            throw new BusinessException("第三方服务暂不可用");
         }
     }
 
-    /**
-     * 发送GET请求
-     *
-     * @param url    请求地址
-     * @param params 请求参数
-     * @return 响应字符串
-     */
     public String getForString(String url, Map<String, Object> params) {
         try {
-            StringBuilder urlBuilder = new StringBuilder(url);
-            if (params != null && !params.isEmpty()) {
-                if (!url.contains("?")) {
-                    urlBuilder.append("?");
-                } else {
-                    urlBuilder.append("&");
-                }
-                params.forEach((k, v) -> {
-                    if (v != null) {
-                        urlBuilder.append(k).append("=").append(v).append("&");
-                    }
+            URI original = strictUri(url);
+            var policy = policies.provider();
+            safeHttpClient.validate(original, policy); // Before HttpUrl can canonicalize the authority.
+            HttpUrl parsed = HttpUrl.get(original.toURL());
+            HttpUrl.Builder builder = parsed.newBuilder();
+            if (params != null) {
+                params.forEach((key, value) -> {
+                    if (key != null && value != null) builder.addQueryParameter(key, String.valueOf(value));
                 });
-                // 移除最后一个&
-                if (urlBuilder.charAt(urlBuilder.length() - 1) == '&') {
-                    urlBuilder.deleteCharAt(urlBuilder.length() - 1);
-                }
             }
-
-            ResponseEntity<String> response = restTemplate.getForEntity(urlBuilder.toString(), String.class);
-
-            if (response.getStatusCode() == HttpStatus.OK) {
-                return response.getBody();
-            } else {
-                log.error("API请求失败: url={}, status={}", url, response.getStatusCode());
-                throw new BusinessException("第三方API请求失败: " + response.getStatusCode());
-            }
-        } catch (Exception e) {
-            log.error("API请求异常: url={}, error={}", url, e.getMessage(), e);
-            throw new BusinessException("第三方API请求异常: " + e.getMessage());
+            SafeHttpResponse response = safeHttpClient.get(
+                    builder.build().uri(), Map.of(), policy);
+            return requireSuccess(response);
+        } catch (SafeHttpException | IllegalArgumentException | java.net.MalformedURLException ex) {
+            log.warn("Provider request blocked or failed: reason={}", safeReason(ex));
+            throw new BusinessException("第三方服务暂不可用");
         }
+    }
+
+    private String requireSuccess(SafeHttpResponse response) {
+        if (!response.isSuccessful()) {
+            log.warn("Provider returned non-success status: status={}", response.statusCode());
+            throw new BusinessException("第三方服务暂不可用");
+        }
+        return response.body();
+    }
+
+    private URI strictUri(String value) {
+        if (value == null || value.isBlank() || value.length() > 2048) {
+            throw new SafeHttpException(SafeHttpException.Reason.BLOCKED_DESTINATION);
+        }
+        try {
+            return URI.create(value);
+        } catch (IllegalArgumentException ex) {
+            throw new SafeHttpException(SafeHttpException.Reason.BLOCKED_DESTINATION, ex);
+        }
+    }
+
+    private Map<String, String> singleHeaders(HttpHeaders headers) {
+        if (headers == null || headers.isEmpty()) return Map.of();
+        Map<String, String> values = new LinkedHashMap<>();
+        headers.forEach((key, list) -> {
+            if (key != null && list != null && !list.isEmpty()) values.put(key, list.get(0));
+        });
+        return values;
+    }
+
+    private String safeReason(Exception ex) {
+        return ex instanceof SafeHttpException safe ? safe.getReason().name() : ex.getClass().getSimpleName();
     }
 }

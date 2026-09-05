@@ -58,7 +58,7 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         params.put("user", request.getStudentAccount());
         params.put("pass", request.getStudentPassword());
 
-        log.info("Benz查课请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
+        log.info("Benz查课请求: params={}", DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
         log.debug("Benz查课响应已接收: length={}", response == null ? 0 : response.length());
 
@@ -103,7 +103,7 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         // 可选参数
         // params.put("miaoshua", order.getIsFlash() == 1 ? "1" : "0");
 
-        log.info("Benz下单请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
+        log.info("Benz下单请求: params={}", DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
         log.debug("Benz下单响应已接收: length={}", response == null ? 0 : response.length());
 
@@ -164,7 +164,7 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         params.put("school", order.getSchoolName());    // 学校名称
         params.put("kcname", order.getCourseName());    // 课程名称（更精确匹配）
 
-        log.info("Benz查单请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
+        log.info("Benz查单请求: params={}", DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
         log.debug("Benz查单响应已接收: length={}", response == null ? 0 : response.length());
 
@@ -264,7 +264,7 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         params.put("key", apiProvider.getApiKey());
         params.put("id", thirdOrderId);
 
-        log.info("Benz补单请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
+        log.info("Benz补单请求: params={}", DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
         log.debug("Benz补单响应已接收: length={}", response == null ? 0 : response.length());
 
@@ -284,7 +284,7 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         params.put("uid", apiProvider.getUsername());
         params.put("key", apiProvider.getApiKey());
 
-        log.info("Benz获取课程列表请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
+        log.info("Benz获取课程列表请求: params={}", DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
         // log.debug("Benz获取课程列表响应已接收: length={}", response == null ? 0 : response.length()); // 响应可能很大，暂不打印
 
@@ -329,7 +329,7 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
             params.put("timestamp", timestampSeconds);
         }
 
-        log.info("Benz批量查单请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
+        log.info("Benz批量查单请求: params={}", DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
         log.info("Benz批量查单响应数据量: {} 字节", response != null ? response.length() : 0);
 
