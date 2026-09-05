@@ -6,17 +6,23 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.course.platform.domain.dto.aqks.AqksExamInfo;
 import com.course.platform.domain.dto.aqks.AqksLoginResult;
+import com.course.platform.infra.http.OutboundPolicyRegistry;
+import com.course.platform.infra.http.SafeHttpClient;
+import com.course.platform.infra.http.SafeHttpException;
+import com.course.platform.infra.http.SafeHttpResponse;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.HttpUrl;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
  * AQKS实验室安全平台API客户端
@@ -39,14 +45,15 @@ public class AqksApiClient {
      * API端点
      */
     private static final String API_LOGIN = "/api/MyUserInfo";
-    private static final String API_STUDY_TIME_SET = "/api/LoginTimesSet";
     private static final String API_STUDY_TIME_GET = "/api/LoginTimesGet";
     private static final String API_MY_SCORES = "/api/MyScores";
     
-    private final RestTemplate restTemplate;
-    
-    public AqksApiClient() {
-        this.restTemplate = new RestTemplate();
+    private final SafeHttpClient safeHttpClient;
+    private final OutboundPolicyRegistry policies;
+
+    public AqksApiClient(SafeHttpClient safeHttpClient, OutboundPolicyRegistry policies) {
+        this.safeHttpClient = safeHttpClient;
+        this.policies = policies;
     }
     
     /**
@@ -57,9 +64,9 @@ public class AqksApiClient {
      * @return 登录结果
      */
     public AqksLoginResult login(String username, String password) {
-        String url = BASE_URL + API_LOGIN + "?UserName=" + username + "&isBackground=false";
+        URI url = aqksUri(API_LOGIN, Map.of("UserName", username, "isBackground", false));
         
-        log.info("[AQKS登录] 学号: {}", username);
+        log.debug("[AQKS] 请求处理");
         
         try {
             // 只对密码进行双层Base64编码
@@ -74,23 +81,18 @@ public class AqksApiClient {
             headers.set("Connection", "keep-alive");
             
             // Body为双层Base64编码的密码（JSON字符串格式，带引号）
-            HttpEntity<String> entity = new HttpEntity<>("\"" + encodedPassword + "\"", headers);
-            
-            log.debug("[AQKS登录] 请求URL: {}", url);
-            
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
-            String responseBody = response.getBody();
-            
-            log.info("[AQKS登录] 响应状态: {}", response.getStatusCode());
-            log.debug("[AQKS登录] 响应Body: {}", responseBody);
+            SafeHttpResponse response = safeHttpClient.postJson(url, singleHeaders(headers),
+                    "\"" + encodedPassword + "\"", policies.aqks());
+            String responseBody = requireSuccess(response);
+            log.info("[AQKS登录] 响应状态: {}", response.statusCode());
             
             return parseLoginResponse(responseBody, username);
             
         } catch (Exception e) {
-            log.error("[AQKS登录] 登录失败: {}", e.getMessage(), e);
+            log.error("[AQKS登录] 登录失败: {}", e.getClass().getSimpleName());
             return AqksLoginResult.builder()
                     .success(false)
-                    .errorMessage("登录失败: " + e.getMessage())
+                    .errorMessage("登录服务暂不可用")
                     .build();
         }
     }
@@ -104,41 +106,10 @@ public class AqksApiClient {
      * @return 是否成功
      */
     public boolean addStudyTime(String userId, int deltaSeconds, String cookie) {
-        String url = BASE_URL + API_STUDY_TIME_SET + "?UserID=" + userId + "&StudyTimes=" + deltaSeconds;
-        
-        log.info("[AQKS刷时长] userId={}, delta={}秒", userId, deltaSeconds);
-        
-        try {
-            HttpHeaders headers = buildCookieHeaders(cookie);
-            HttpEntity<String> entity = new HttpEntity<>(headers);
-            
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-            
-            log.info("[AQKS刷时长] 响应状态: {}, Body: {}", response.getStatusCode(), response.getBody());
-            
-            // 检查响应是否成功
-            if (response.getStatusCode().is2xxSuccessful()) {
-                String body = response.getBody();
-                // 某些成功返回可能是空或简单文本
-                if (StrUtil.isBlank(body) || "true".equalsIgnoreCase(body)) {
-                    return true;
-                }
-                // 尝试解析JSON
-                if (body.trim().startsWith("{")) {
-                    JSONObject json = JSONUtil.parseObj(body);
-                    // 检查是否有success字段
-                    if (json.containsKey("success") || json.containsKey("Success")) {
-                        return json.getBool("success", json.getBool("Success", true));
-                    }
-                }
-                return true;  // 默认认为成功
-            }
-            return false;
-            
-        } catch (Exception e) {
-            log.error("[AQKS刷时长] 失败: {}", e.getMessage(), e);
-            return false;
-        }
+        // P0 safety cut-over: this historical automation endpoint mutates third-party study time.
+        // It is intentionally disabled rather than migrated to the new transport.
+        log.warn("[AQKS] 已阻止自动增加学习时长请求");
+        return false;
     }
     
     /**
@@ -152,7 +123,7 @@ public class AqksApiClient {
      * @return 当前累计时长（分钟），失败返回-1
      */
     public int getStudyTimeByLogin(String username, String password) {
-        log.debug("[AQKS读时长] 通过登录验证, username={}", username);
+        log.debug("[AQKS] 请求处理");
         
         try {
             AqksLoginResult result = login(username, password);
@@ -161,7 +132,7 @@ public class AqksApiClient {
             }
             return -1;
         } catch (Exception e) {
-            log.error("[AQKS读时长] 登录验证失败: {}", e.getMessage(), e);
+            log.error("[AQKS读时长] 登录验证失败: {}", e.getClass().getSimpleName());
             return -1;
         }
     }
@@ -176,18 +147,16 @@ public class AqksApiClient {
      */
     @Deprecated
     public int getStudyTime(String userId, String cookie) {
-        String url = BASE_URL + API_STUDY_TIME_GET + "?UserID=" + userId;
+        URI url = aqksUri(API_STUDY_TIME_GET, Map.of("UserID", userId));
         
-        log.debug("[AQKS读时长] userId={}", userId);
+        log.debug("[AQKS] 请求处理");
         
         try {
             HttpHeaders headers = buildCookieHeaders(cookie);
-            HttpEntity<String> entity = new HttpEntity<>(headers);
+            SafeHttpResponse response = safeHttpClient.get(url, singleHeaders(headers), policies.aqks());
+            String body = requireSuccess(response);
             
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-            String body = response.getBody();
-            
-            log.debug("[AQKS读时长] 响应: {}", body);
+            log.debug("[AQKS] 请求处理");
             
             if (StrUtil.isBlank(body)) {
                 return -1;
@@ -220,7 +189,7 @@ public class AqksApiClient {
             return -1;
             
         } catch (Exception e) {
-            log.error("[AQKS读时长] 失败: {}", e.getMessage(), e);
+            log.error("[AQKS读时长] 失败: {}", e.getClass().getSimpleName());
             return -1;
         }
     }
@@ -232,7 +201,7 @@ public class AqksApiClient {
      * @return 考试信息列表
      */
     public List<AqksExamInfo> getExamList(String cookie) {
-        String url = BASE_URL + API_MY_SCORES;
+        URI url = aqksUri(API_MY_SCORES, Map.of());
         
         log.debug("[AQKS考试列表] 请求");
         
@@ -240,12 +209,10 @@ public class AqksApiClient {
         
         try {
             HttpHeaders headers = buildCookieHeaders(cookie);
-            HttpEntity<String> entity = new HttpEntity<>(headers);
+            SafeHttpResponse response = safeHttpClient.get(url, singleHeaders(headers), policies.aqks());
+            String body = requireSuccess(response);
             
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-            String body = response.getBody();
-            
-            log.debug("[AQKS考试列表] 响应: {}", body);
+            log.debug("[AQKS] 请求处理");
             
             if (StrUtil.isBlank(body)) {
                 return examList;
@@ -273,7 +240,7 @@ public class AqksApiClient {
             log.info("[AQKS考试列表] 获取到 {} 门考试", examList.size());
             
         } catch (Exception e) {
-            log.error("[AQKS考试列表] 失败: {}", e.getMessage(), e);
+            log.error("[AQKS考试列表] 失败: {}", e.getClass().getSimpleName());
         }
         
         return examList;
@@ -287,16 +254,14 @@ public class AqksApiClient {
      * @return 考试信息
      */
     public AqksExamInfo getExamDetail(String courseId, String cookie) {
-        String url = BASE_URL + API_MY_SCORES + "?CourseID=" + courseId;
+        URI url = aqksUri(API_MY_SCORES, Map.of("CourseID", courseId));
         
         log.debug("[AQKS考试详情] courseId={}", courseId);
         
         try {
             HttpHeaders headers = buildCookieHeaders(cookie);
-            HttpEntity<String> entity = new HttpEntity<>(headers);
-            
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-            String body = response.getBody();
+            SafeHttpResponse response = safeHttpClient.get(url, singleHeaders(headers), policies.aqks());
+            String body = requireSuccess(response);
             
             if (StrUtil.isBlank(body)) {
                 return null;
@@ -323,7 +288,7 @@ public class AqksApiClient {
                     .build();
             
         } catch (Exception e) {
-            log.error("[AQKS考试详情] 失败: {}", e.getMessage(), e);
+            log.error("[AQKS考试详情] 失败: {}", e.getClass().getSimpleName());
             return null;
         }
     }
@@ -340,18 +305,16 @@ public class AqksApiClient {
      * @return 完整考试信息（包含学生信息、证书等）
      */
     public AqksExamInfo getExamFullDetail(String courseId, Integer testId, String cookie) {
-        String url = BASE_URL + API_MY_SCORES + "?TestID=" + testId + "&CourseID=" + courseId;
+        URI url = aqksUri(API_MY_SCORES, Map.of("TestID", testId, "CourseID", courseId));
         
         log.info("[AQKS完整考试详情] courseId={}, testId={}", courseId, testId);
         
         try {
             HttpHeaders headers = buildCookieHeaders(cookie);
-            HttpEntity<String> entity = new HttpEntity<>(headers);
+            SafeHttpResponse response = safeHttpClient.get(url, singleHeaders(headers), policies.aqks());
+            String body = requireSuccess(response);
             
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-            String body = response.getBody();
-            
-            log.debug("[AQKS完整考试详情] 响应: {}", body);
+            log.debug("[AQKS] 请求处理");
             
             if (StrUtil.isBlank(body)) {
                 return null;
@@ -395,7 +358,7 @@ public class AqksApiClient {
                     .build();
             
         } catch (Exception e) {
-            log.error("[AQKS完整考试详情] 失败: {}", e.getMessage(), e);
+            log.error("[AQKS完整考试详情] 失败: {}", e.getClass().getSimpleName());
             return null;
         }
     }
@@ -414,13 +377,13 @@ public class AqksApiClient {
      * @return 完整考试信息，如果没有考试或失败则返回null
      */
     public AqksExamInfo checkExamStatus(String username, String password) {
-        log.info("[AQKS检查考试状态] username={}", username);
+        log.debug("[AQKS] 请求处理");
         
         try {
             // 第一步：登录
             AqksLoginResult loginResult = login(username, password);
             if (!loginResult.isSuccess()) {
-                log.error("[AQKS检查考试状态] 登录失败: {}", loginResult.getErrorMessage());
+                log.warn("[AQKS检查考试状态] 登录失败");
                 return null;
             }
             
@@ -453,15 +416,14 @@ public class AqksApiClient {
             // 第四步：获取完整考试详情
             AqksExamInfo fullDetail = getExamFullDetail(courseId, testId, cookie);
             if (fullDetail != null) {
-                log.info("[AQKS检查考试状态] 完整详情获取成功: score={}, isPassed={}, certificateId={}", 
-                        fullDetail.getScore(), fullDetail.getIsPassed(), fullDetail.getCertificateId());
+                log.debug("[AQKS检查考试状态] 完整详情获取成功");
                 return fullDetail;
             }
             
             return examWithTestId;  // 如果完整详情获取失败，返回有TestID的版本
             
         } catch (Exception e) {
-            log.error("[AQKS检查考试状态] 失败: {}", e.getMessage(), e);
+            log.error("[AQKS检查考试状态] 失败: {}", e.getClass().getSimpleName());
             return null;
         }
     }
@@ -549,10 +511,10 @@ public class AqksApiClient {
                     .build();
             
         } catch (Exception e) {
-            log.error("[AQKS登录] 解析响应失败: {}", e.getMessage(), e);
+            log.error("[AQKS登录] 解析响应失败: {}", e.getClass().getSimpleName());
             return AqksLoginResult.builder()
                     .success(false)
-                    .errorMessage("解析登录响应失败: " + e.getMessage())
+                    .errorMessage("解析登录响应失败")
                     .build();
         }
     }
@@ -589,6 +551,29 @@ public class AqksApiClient {
     /**
      * 构建带Cookie的请求头
      */
+    private URI aqksUri(String path, Map<String, ?> query) {
+        HttpUrl.Builder builder = java.util.Objects.requireNonNull(HttpUrl.parse(BASE_URL + path)).newBuilder();
+        query.forEach((key, value) -> {
+            if (key != null && value != null) builder.addQueryParameter(key, String.valueOf(value));
+        });
+        return builder.build().uri();
+    }
+
+    private String requireSuccess(SafeHttpResponse response) {
+        if (!response.isSuccessful()) {
+            throw new SafeHttpException(SafeHttpException.Reason.INVALID_RESPONSE);
+        }
+        return response.body();
+    }
+
+    private java.util.Map<String, String> singleHeaders(HttpHeaders headers) {
+        java.util.Map<String, String> values = new java.util.LinkedHashMap<>();
+        headers.forEach((key, list) -> {
+            if (key != null && list != null && !list.isEmpty()) values.put(key, list.get(0));
+        });
+        return values;
+    }
+
     private HttpHeaders buildCookieHeaders(String serverCookie) {
         HttpHeaders headers = new HttpHeaders();
         headers.set("Accept", "application/json, text/javascript, */*; q=0.01");

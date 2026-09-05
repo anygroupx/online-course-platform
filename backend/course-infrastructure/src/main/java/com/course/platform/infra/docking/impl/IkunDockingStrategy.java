@@ -58,7 +58,7 @@ public class IkunDockingStrategy implements PlatformDockingStrategy {
         urlBuilder.append("&course=").append(URLUtil.encode(order.getCourseName()));
 
         String url = urlBuilder.toString();
-        log.info("Ikun下单请求: url={}", url);
+        log.info("Ikun下单请求已构建");
         
         // ApiHttpClient 需要支持 GET 请求
         // 假设 postForString 可以改用 getForString 或者 ApiHttpClient 有 get 方法

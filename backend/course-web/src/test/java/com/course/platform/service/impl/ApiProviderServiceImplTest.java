@@ -4,6 +4,8 @@ import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.security.SecretCrypto;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
+import com.course.platform.infra.http.*;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -17,13 +19,19 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ApiProviderServiceImplTest {
+    private ApiProviderServiceImpl service(ApiProviderMapper mapper) {
+        OutboundSecurityProperties properties = new OutboundSecurityProperties();
+        properties.setProviderAllowedHosts(List.of("provider.example"));
+        return new ApiProviderServiceImpl(mapper, mock(SsrfGuard.class), new OutboundPolicyRegistry(properties));
+    }
+
 
     @Test
     @DisplayName("运行时加载应解密数据库中的 API Key")
     void loadDecrypted_shouldReturnPlainSecrets() {
         String masterKey = "unit-test-master-key";
         ApiProviderMapper mapper = mock(ApiProviderMapper.class);
-        ApiProviderServiceImpl service = new ApiProviderServiceImpl(mapper);
+        ApiProviderServiceImpl service = service(mapper);
         ReflectionTestUtils.setField(service, "cryptoSecret", masterKey);
 
         ApiProvider encrypted = new ApiProvider();
@@ -44,7 +52,7 @@ class ApiProviderServiceImplTest {
     void loadDecrypted_encryptedSecretsWithoutMasterKeyShouldFail() {
         String masterKey = "unit-test-master-key";
         ApiProviderMapper mapper = mock(ApiProviderMapper.class);
-        ApiProviderServiceImpl service = new ApiProviderServiceImpl(mapper);
+        ApiProviderServiceImpl service = service(mapper);
 
         ApiProvider encrypted = new ApiProvider();
         encrypted.setId(3L);
@@ -59,11 +67,12 @@ class ApiProviderServiceImplTest {
     void updateApiProvider_blankCredentialsShouldKeepStoredValues() {
         String masterKey = "unit-test-master-key";
         ApiProviderMapper mapper = mock(ApiProviderMapper.class);
-        ApiProviderServiceImpl service = new ApiProviderServiceImpl(mapper);
+        ApiProviderServiceImpl service = service(mapper);
         ReflectionTestUtils.setField(service, "cryptoSecret", masterKey);
 
         ApiProvider existing = new ApiProvider();
         existing.setId(2L);
+        existing.setApiUrl("https://provider.example/api.php");
         existing.setUsername("stored-user");
         existing.setPassword(SecretCrypto.encrypt("stored-password", masterKey));
         existing.setApiKey(SecretCrypto.encrypt("stored-api-key", masterKey));

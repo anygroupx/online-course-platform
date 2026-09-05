@@ -66,104 +66,8 @@ public class AqksStudyServiceImpl implements AqksStudyService {
     
     @Override
     public boolean startAutoStudy(Long orderId) {
-        log.info("[AQKS自动刷课] 启动任务: orderId={}", orderId);
-        
-        // 检查是否已在运行
-        if (runningTasks.containsKey(orderId)) {
-            log.warn("[AQKS自动刷课] 任务已在运行: orderId={}", orderId);
-            return false;
-        }
-        
-        // 获取订单信息
-        CourseOrder order = courseOrderMapper.selectById(orderId);
-        if (order == null) {
-            throw new BusinessException("订单不存在");
-        }
-        
-        // 验证是否为自营订单
-        if (order.getIsSelfOperated() == null || order.getIsSelfOperated() != 1) {
-            throw new BusinessException("只有自营订单才能使用此功能");
-        }
-        
-        // 登录获取会话
-        AqksLoginResult loginResult = aqksApiClient.login(
-                order.getStudentAccount(),
-                order.getStudentPassword()
-        );
-        
-        if (!loginResult.isSuccess()) {
-            throw new BusinessException("AQKS登录失败: " + loginResult.getErrorMessage());
-        }
-        
-        // 检查学习进度（Source: AURA-X-KYS - 智能状态同步）
-        int currentTime = 0;
-        int required = 0;
-        try {
-            currentTime = Integer.parseInt(loginResult.getStudyTimes());
-            required = Integer.parseInt(loginResult.getMinTimeMinute());
-        } catch (NumberFormatException e) {
-            log.warn("[AQKS自动刷课] 解析时长失败，使用默认值: orderId={}", orderId);
-        }
-        
-        // 如果进度已达100%，自动切换订单状态为待考试
-        if (required > 0 && currentTime >= required) {
-            log.info("[AQKS自动刷课] 学习进度已达100%，切换状态为待考试: orderId={}, {}/{}", 
-                    orderId, currentTime, required);
-            
-            // 更新订单状态为待考试（使用系统变量缓存）
-            // Source: AURA-X-KYS - 统一状态管理
-            int examPendingStatus = SystemVariableCache.getStatusValue("order_status", "exam_pending");
-            order.setOrderStatus(examPendingStatus);  // 5-待考试
-            String progress = String.format("100%% (%d/%d分钟)", currentTime, required);
-            order.setProgress(progress);
-            courseOrderMapper.updateById(order);
-            
-            // 记录日志
-            operationLogService.log(1L, "启动刷课-自动切换状态",
-                    String.format("订单号: %s, 进度已达100%%，自动切换为待考试", order.getOrderNo()),
-                    BigDecimal.ZERO, null);
-            
-            throw new BusinessException("学习进度已达100%，订单已自动切换为待考试状态");
-        }
-        
-        // 检查是否已经完成
-        if (loginResult.isStudyCompleted()) {
-            log.info("[AQKS自动刷课] 学习已完成，无需刷课: orderId={}", orderId);
-            return false;
-        }
-        
-        // 如果订单状态是待处理，启动刷课时切换为进行中
-        // Source: AURA-X-KYS - 统一状态管理
-        int pendingStatus = SystemVariableCache.getStatusValue("order_status", "pending");
-        int processingStatus = SystemVariableCache.getStatusValue("order_status", "processing");
-        
-        if (order.getOrderStatus() != null && order.getOrderStatus() == pendingStatus) {
-            order.setOrderStatus(processingStatus);  // 1-进行中
-            courseOrderMapper.updateById(order);
-            log.info("[AQKS自动刷课] 订单状态切换为进行中: orderId={}", orderId);
-        }
-        
-        // 缓存会话信息
-        sessionCache.put(orderId, loginResult);
-        
-        // 创建定时任务
-        ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(
-                () -> executeStudyTask(orderId, order),
-                0,  // 立即执行第一次
-                STUDY_INTERVAL_SECONDS,
-                TimeUnit.SECONDS
-        );
-        
-        runningTasks.put(orderId, future);
-        
-        // 记录日志
-        operationLogService.log(1L, "启动自动刷课",
-                String.format("订单号: %s, 学生: %s", order.getOrderNo(), order.getStudentAccount()),
-                BigDecimal.ZERO, null);
-        
-        log.info("[AQKS自动刷课] 任务启动成功: orderId={}, 间隔={}秒", orderId, STUDY_INTERVAL_SECONDS);
-        
-        return true;
+        log.warn("[AQKS] 自动学习任务已由 P0 安全基线永久禁用: orderId={}", orderId);
+        return false;
     }
     
     @Override
@@ -192,45 +96,8 @@ public class AqksStudyServiceImpl implements AqksStudyService {
     
     @Override
     public boolean addStudyTimeOnce(Long orderId, int deltaSeconds) {
-        log.info("[AQKS手动刷课] orderId={}, delta={}秒", orderId, deltaSeconds);
-        
-        CourseOrder order = courseOrderMapper.selectById(orderId);
-        if (order == null) {
-            throw new BusinessException("订单不存在");
-        }
-        
-        // 验证是否为自营订单
-        if (order.getIsSelfOperated() == null || order.getIsSelfOperated() != 1) {
-            throw new BusinessException("只有自营订单才能使用此功能");
-        }
-        
-        // 登录
-        AqksLoginResult loginResult = aqksApiClient.login(
-                order.getStudentAccount(),
-                order.getStudentPassword()
-        );
-        
-        if (!loginResult.isSuccess()) {
-            throw new BusinessException("AQKS登录失败: " + loginResult.getErrorMessage());
-        }
-        
-        // 刷时长（单位：秒）
-        boolean success = aqksApiClient.addStudyTime(
-                loginResult.getUserId(),
-                deltaSeconds,
-                loginResult.getServerCookie()
-        );
-        
-        if (success) {
-            // 记录日志
-            operationLogService.log(1L, "手动刷时长",
-                    String.format("订单号: %s, 增加: %d秒", order.getOrderNo(), deltaSeconds),
-                    BigDecimal.ZERO, null);
-            
-            log.info("[AQKS手动刷课] 成功: +{}秒", deltaSeconds);
-        }
-        
-        return success;
+        log.warn("[AQKS] 手动增加学习时长已由 P0 安全基线永久禁用: orderId={}", orderId);
+        return false;
     }
     
     @Override

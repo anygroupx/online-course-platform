@@ -1,6 +1,9 @@
 package com.course.platform.security;
 
 import com.course.platform.domain.entity.SecurityAuditLog;
+import com.course.platform.infra.http.OutboundPolicyRegistry;
+import com.course.platform.infra.http.SafeHttpClient;
+import com.course.platform.infra.http.SafeHttpException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -8,67 +11,64 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
-/**
- * 简易告警通道：Webhook（IM/邮件网关）+ 结构化日志。
- */
+/** Security alert webhook sent through the same SSRF-safe egress boundary. */
 @Slf4j
 @Component
 public class SecurityAlertNotifier {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(3))
-            .build();
+    private final ObjectMapper objectMapper;
+    private final SafeHttpClient safeHttpClient;
+    private final OutboundPolicyRegistry policies;
+
+    public SecurityAlertNotifier(ObjectMapper objectMapper, SafeHttpClient safeHttpClient,
+                                 OutboundPolicyRegistry policies) {
+        this.objectMapper = objectMapper;
+        this.safeHttpClient = safeHttpClient;
+        this.policies = policies;
+    }
 
     @Value("${app.security.alert-webhook:}")
     private String webhookUrl;
 
     public void notify(SecurityAuditLog event) {
         String text = String.format("[SECURITY][%s][%s] user=%s path=%s msg=%s",
-                event.getSeverity(),
-                event.getEventType(),
-                event.getUsername() == null ? event.getUserId() : event.getUsername(),
-                event.getRequestPath(),
-                event.getMessage());
-        if ("CRITICAL".equalsIgnoreCase(event.getSeverity())) {
-            log.error(text);
-        } else {
-            log.warn(text);
-        }
-        if (!StringUtils.hasText(webhookUrl)) {
-            return;
-        }
+                safeText(event.getSeverity()), safeText(event.getEventType()),
+                safeText(event.getUsername() == null ? event.getUserId() : event.getUsername()),
+                safeText(event.getRequestPath()), safeText(event.getMessage()));
+        if ("CRITICAL".equalsIgnoreCase(event.getSeverity())) log.error(text); else log.warn(text);
+        if (!StringUtils.hasText(webhookUrl)) return;
+
+        CompletableFuture.runAsync(() -> send(event, text));
+    }
+
+    private String safeText(Object value) {
+        if (value == null) return "-";
+        String clean = String.valueOf(value).replaceAll("[\\p{Cntrl}]", " ").trim();
+        return clean.length() <= 512 ? clean : clean.substring(0, 512);
+    }
+
+    private void send(SecurityAuditLog event, String text) {
         try {
             Map<String, Object> body = new HashMap<>();
             body.put("msg_type", "text");
-            Map<String, String> content = new HashMap<>();
-            content.put("text", text);
-            body.put("content", content);
-            body.put("eventType", event.getEventType());
-            body.put("severity", event.getSeverity());
-            body.put("traceId", event.getTraceId());
-            String json = objectMapper.writeValueAsString(body);
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(webhookUrl))
-                    .timeout(Duration.ofSeconds(5))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
-                    .build();
-            httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding())
-                    .exceptionally(ex -> {
-                        log.warn("安全告警 Webhook 发送失败: {}", ex.getMessage());
-                        return null;
-                    });
-        } catch (Exception e) {
-            log.warn("安全告警 Webhook 构造失败: {}", e.getMessage());
+            body.put("content", Map.of("text", text));
+            body.put("eventType", safeText(event.getEventType()));
+            body.put("severity", safeText(event.getSeverity()));
+            body.put("traceId", safeText(event.getTraceId()));
+            var response = safeHttpClient.postJson(URI.create(webhookUrl), Map.of(),
+                    objectMapper.writeValueAsString(body), policies.alertWebhook());
+            if (!response.isSuccessful()) {
+                log.warn("安全告警 Webhook 返回失败: status={}", response.statusCode());
+            }
+        } catch (SafeHttpException | IllegalArgumentException ex) {
+            log.warn("安全告警 Webhook 被阻止或发送失败: reason={}",
+                    ex instanceof SafeHttpException safe ? safe.getReason() : ex.getClass().getSimpleName());
+        } catch (Exception ex) {
+            log.warn("安全告警 Webhook 序列化失败: reason={}", ex.getClass().getSimpleName());
         }
     }
 }

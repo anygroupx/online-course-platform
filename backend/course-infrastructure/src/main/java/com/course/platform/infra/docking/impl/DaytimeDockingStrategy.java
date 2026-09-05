@@ -199,7 +199,7 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
 
     private String post(ApiProvider apiProvider, String action, String operation, Map<String, Object> params) {
         String url = endpoint(apiProvider, action);
-        log.info("{} {}请求: url={}, params={}", getProviderType(), operation, url,
+        log.info("{} {}请求: params={}", getProviderType(), operation,
                 DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
         log.debug("{} {}响应已接收: length={}", getProviderType(), operation,

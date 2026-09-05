@@ -58,7 +58,7 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         params.put("pass", request.getStudentPassword());
         params.put("kcid", ""); // QueryCourseRequest 中没有 courseId 字段
 
-        log.info("暗网查课请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
+        log.info("暗网查课请求: params={}", DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
         log.debug("暗网查课响应已接收: length={}", response == null ? 0 : response.length());
         
@@ -106,7 +106,7 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         // score: 暂不支持分数设置，传空字符串
         params.put("score", "");
 
-        log.info("暗网下单请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
+        log.info("暗网下单请求: params={}", DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
         log.debug("暗网下单响应已接收: length={}", response == null ? 0 : response.length());
 
@@ -131,8 +131,8 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         params.put("username", order.getStudentAccount());
         params.put("cid", platform.getDockParam());
 
-        log.info("暗网进度查询请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.getForString(url, DockingLogSanitizer.sanitize(params));
+        log.info("暗网进度查询请求: params={}", DockingLogSanitizer.sanitize(params));
+        String response = apiHttpClient.getForString(url, params);
         log.debug("暗网进度查询响应已接收: length={}", response == null ? 0 : response.length());
 
         JSONObject json = JSONUtil.parseObj(response);
@@ -199,7 +199,7 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         params.put("key", apiProvider.getApiKey());
         params.put("id", order.getThirdOrderId());
 
-        log.info("暗网补刷请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
+        log.info("暗网补刷请求: params={}", DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
         log.debug("暗网补刷响应已接收: length={}", response == null ? 0 : response.length());
 
@@ -220,7 +220,7 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         params.put("uid", apiProvider.getUsername());
         params.put("key", apiProvider.getApiKey());
 
-        log.info("暗网一键导入请求: url={}, params={}", url, DockingLogSanitizer.sanitize(params));
+        log.info("暗网一键导入请求: params={}", DockingLogSanitizer.sanitize(params));
         String response = apiHttpClient.postForString(url, params);
         log.debug("暗网一键导入响应已接收: length={}", response == null ? 0 : response.length());
 
