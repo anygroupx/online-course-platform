@@ -290,7 +290,7 @@
     ></button>
 
     <!-- 在线客服组件 -->
-    <CustomerService v-if="!mustChangePassword" />
+    <CustomerService v-if="!mustChangePassword" v-show="!isMobileMenuVisible || !isMobile" />
   </el-container>
 </template>
 
@@ -1824,7 +1824,7 @@ html.dark .user-info:hover {
 
   .main-content {
     padding: 14px max(12px, var(--safe-area-right))
-      max(22px, var(--safe-area-bottom)) max(12px, var(--safe-area-left));
+      calc(88px + var(--safe-area-bottom)) max(12px, var(--safe-area-left));
   }
 
   /* 菜单打开时冻结实际滚动容器，避免触摸滑动穿透遮罩。 */

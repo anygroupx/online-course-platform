@@ -8,6 +8,7 @@ import com.course.platform.domain.dto.ProductImportRequest;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.entity.CourseOrder;
 import com.course.platform.domain.entity.CoursePlatform;
+import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.infra.docking.PlatformDockingStrategyFactory;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
 import com.course.platform.infra.persistence.mapper.CourseOrderMapper;
@@ -16,6 +17,8 @@ import com.course.platform.infra.persistence.mapper.PlatformCategoryMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
@@ -25,6 +28,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -41,6 +46,60 @@ class PlatformDockingServiceImplTest {
     private PlatformCategoryMapper platformCategoryMapper;
     private PlatformDockingStrategy strategy;
     private PlatformDockingServiceImpl service;
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 2})
+    void everyBusinessEntryRejectsInactiveDatabaseConfigurationBeforeCallingStrategy(int status) {
+        ApiProvider stored = new ApiProvider();
+        stored.setId(9L);
+        stored.setProviderType("Daytime");
+        stored.setStatus(status);
+        when(apiProviderService.loadDecrypted(9L)).thenReturn(stored);
+        ApiProvider callerSnapshot = new ApiProvider();
+        callerSnapshot.setId(9L);
+        callerSnapshot.setStatus(ApiProvider.STATUS_ACTIVE);
+        CoursePlatform platform = new CoursePlatform();
+        platform.setQueryApiId(9L);
+        CourseOrder order = new CourseOrder();
+        order.setId(5L);
+        order.setApiProviderId(9L);
+        when(courseOrderMapper.selectById(5L)).thenReturn(order);
+        ProductImportRequest request = new ProductImportRequest();
+        request.setApiProviderId(9L);
+
+        List<org.junit.jupiter.api.function.Executable> operations = List.of(
+                () -> service.queryCourses(platform, null),
+                () -> service.dockOrder(order, platform, callerSnapshot),
+                () -> service.queryOrderProgress(order, platform, callerSnapshot),
+                () -> service.retryOrder(order, platform, callerSnapshot),
+                () -> service.importPlatforms(9L, BigDecimal.ONE, null),
+                () -> service.fetchProviderProducts(9L, null),
+                () -> service.importSelectedProducts(request),
+                () -> service.refreshProviderBalance(9L),
+                () -> service.fetchOrderLogs(5L),
+                () -> service.batchSyncOrderProgress(9L, null, null));
+        for (var operation : operations) {
+            var error = assertThrows(ProviderRequestException.class, operation);
+            assertEquals(ProviderRequestException.Reason.PROVIDER_NOT_ACTIVE, error.getReason());
+        }
+        verifyNoInteractions(strategy, strategyFactory);
+    }
+
+    @Test
+    void responseConversionFailureIsClassifiedWithoutLeakingProviderBody() {
+        ApiProvider provider = new ApiProvider();
+        provider.setId(9L);
+        provider.setProviderType("Daytime");
+        provider.setStatus(ApiProvider.STATUS_ACTIVE);
+        when(apiProviderService.loadDecrypted(9L)).thenReturn(provider);
+        when(strategyFactory.getStrategy("Daytime")).thenReturn(strategy);
+        when(strategy.queryBalance(provider)).thenThrow(new NumberFormatException("unsafe-password-from-body"));
+        var error = assertThrows(ProviderRequestException.class, () -> service.refreshProviderBalance(9L));
+        assertEquals(ProviderRequestException.Reason.INVALID_RESPONSE, error.getReason());
+        assertNull(error.getCause());
+        assertFalse(error.getMessage().contains("unsafe-password"));
+        verifyNoInteractions(apiProviderMapper);
+    }
 
     @BeforeEach
     void setUp() {
@@ -71,6 +130,7 @@ class PlatformDockingServiceImplTest {
 
         ApiProvider decrypted = new ApiProvider();
         decrypted.setId(9L);
+        decrypted.setStatus(ApiProvider.STATUS_ACTIVE);
         decrypted.setProviderType("Daytime");
         decrypted.setApiKey("plain-key");
 
@@ -92,6 +152,7 @@ class PlatformDockingServiceImplTest {
     void batchSync_shouldNotWritePlainSecretsBack() {
         ApiProvider decrypted = new ApiProvider();
         decrypted.setId(9L);
+        decrypted.setStatus(ApiProvider.STATUS_ACTIVE);
         decrypted.setProviderType("27");
         decrypted.setApiKey("plain-key");
         decrypted.setPassword("plain-password");
@@ -116,6 +177,7 @@ class PlatformDockingServiceImplTest {
     void refreshBalance_shouldNotWritePlainSecretsBack() {
         ApiProvider decrypted = new ApiProvider();
         decrypted.setId(9L);
+        decrypted.setStatus(ApiProvider.STATUS_ACTIVE);
         decrypted.setStatus(1);
         decrypted.setProviderType("Daytime");
         decrypted.setApiKey("plain-key");
@@ -141,6 +203,7 @@ class PlatformDockingServiceImplTest {
     void importSelectedProducts_shouldOnlyImportSelectedIds() {
         ApiProvider decrypted = new ApiProvider();
         decrypted.setId(9L);
+        decrypted.setStatus(ApiProvider.STATUS_ACTIVE);
         decrypted.setStatus(1);
         decrypted.setProviderType("Daytime");
         when(apiProviderService.loadDecrypted(9L)).thenReturn(decrypted);
@@ -177,6 +240,7 @@ class PlatformDockingServiceImplTest {
     void fetchProviderProducts_shouldEnforceCategoryFilterLocally() {
         ApiProvider decrypted = new ApiProvider();
         decrypted.setId(9L);
+        decrypted.setStatus(ApiProvider.STATUS_ACTIVE);
         decrypted.setStatus(1);
         decrypted.setProviderType("Daytime");
         when(apiProviderService.loadDecrypted(9L)).thenReturn(decrypted);
@@ -198,6 +262,7 @@ class PlatformDockingServiceImplTest {
     void importSelectedProducts_shouldRejectMissingPrice() {
         ApiProvider decrypted = new ApiProvider();
         decrypted.setId(9L);
+        decrypted.setStatus(ApiProvider.STATUS_ACTIVE);
         decrypted.setStatus(1);
         decrypted.setProviderType("Daytime");
         when(apiProviderService.loadDecrypted(9L)).thenReturn(decrypted);

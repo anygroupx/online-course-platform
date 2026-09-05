@@ -4,11 +4,15 @@ package com.course.platform.infra.http;
 public class SafeHttpException extends RuntimeException {
     public enum Reason {
         BLOCKED_DESTINATION,
+        PRIVATE_ADDRESS,
+        PROVIDER_NOT_ACTIVE,
         DNS_FAILURE,
         REDIRECT_BLOCKED,
         TIMEOUT,
         RESPONSE_TOO_LARGE,
         NETWORK_FAILURE,
+        TLS_FAILURE,
+        HTTP_ERROR,
         INVALID_RESPONSE
     }
 

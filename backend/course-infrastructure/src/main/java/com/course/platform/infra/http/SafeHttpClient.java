@@ -114,6 +114,8 @@ public class SafeHttpClient {
         } catch (InterruptedIOException ex) {
             log.warn("Outbound request timed out: integration={}", policy.name());
             throw new SafeHttpException(SafeHttpException.Reason.TIMEOUT, ex);
+        } catch (javax.net.ssl.SSLException ex) {
+            throw new SafeHttpException(SafeHttpException.Reason.TLS_FAILURE, ex);
         } catch (IOException ex) {
             log.warn("Outbound request failed: integration={}, reason={}", policy.name(), ex.getClass().getSimpleName());
             throw new SafeHttpException(SafeHttpException.Reason.NETWORK_FAILURE, ex);

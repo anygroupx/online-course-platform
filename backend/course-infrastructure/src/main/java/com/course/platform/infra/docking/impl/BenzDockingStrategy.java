@@ -3,7 +3,8 @@ package com.course.platform.infra.docking.impl;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
+import com.course.platform.infra.docking.ProviderResponseParser;
+import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.infra.cache.SystemVariableCache;
 import com.course.platform.common.constant.Constants;
 import com.course.platform.common.exception.BusinessException;
@@ -59,15 +60,15 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         params.put("pass", request.getStudentPassword());
 
         log.info("Benz查课请求: params={}", DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.postForString(url, params);
+        String response = apiHttpClient.postForString(apiProvider, url, params);
         log.debug("Benz查课响应已接收: length={}", response == null ? 0 : response.length());
 
-        JSONObject json = JSONUtil.parseObj(response);
+        JSONObject json = ProviderResponseParser.parseObject(response);
         if (json.getInt("code") != 1 && json.getInt("code") != 0) { // 部分接口成功码可能是0或1，需根据实际调整，参考代码中是code!=1为错，但benz对接.php中是code==-1为错
              // 参考benz对接.php: if ($result["code"] == -1 ) { ... } else { ... }
              // 这里假设非-1即为成功，或者根据msg判断
              if (json.getInt("code") == -1) {
-                 throw new BusinessException("查课失败: " + json.getStr("msg"));
+                 throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
              }
         }
 
@@ -104,10 +105,10 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         // params.put("miaoshua", order.getIsFlash() == 1 ? "1" : "0");
 
         log.info("Benz下单请求: params={}", DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.postForString(url, params);
+        String response = apiHttpClient.postForString(apiProvider, url, params);
         log.debug("Benz下单响应已接收: length={}", response == null ? 0 : response.length());
 
-        JSONObject json = JSONUtil.parseObj(response);
+        JSONObject json = ProviderResponseParser.parseObject(response);
         if (json.getInt("code") == 1 || json.getInt("code") == 0) { // 参考代码中 code==0 为成功
             // 尝试从响应中提取订单ID
             String thirdOrderId = null;
@@ -148,7 +149,7 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
             log.info("Benz下单成功，已获取第三方订单ID: {}", StrUtil.isNotBlank(thirdOrderId));
             return DockResult.success("下单成功", thirdOrderId);
         } else {
-            return DockResult.fail(json.getStr("msg"));
+            return DockResult.fail(ProviderRequestException.PUBLIC_MESSAGE);
         }
     }
 
@@ -165,10 +166,10 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         params.put("kcname", order.getCourseName());    // 课程名称（更精确匹配）
 
         log.info("Benz查单请求: params={}", DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.postForString(url, params);
+        String response = apiHttpClient.postForString(apiProvider, url, params);
         log.debug("Benz查单响应已接收: length={}", response == null ? 0 : response.length());
 
-        JSONObject json = JSONUtil.parseObj(response);
+        JSONObject json = ProviderResponseParser.parseObject(response);
         if (json.getInt("code") == 1) {
             JSONArray data = json.getJSONArray("data");
             if (data != null && data.size() > 0) {
@@ -182,7 +183,7 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
                     .remarks("未在第三方平台找到该课程订单")
                     .build();
         } else {
-            throw new BusinessException("查单失败: " + json.getStr("msg"));
+            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
         }
     }
 
@@ -255,7 +256,7 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
                 }
             } catch (Exception e) {
                 log.error("查询第三方订单ID失败：{}", e.getMessage(), e);
-                return DockResult.fail("查询第三方订单ID失败：" + e.getMessage());
+                return DockResult.fail(ProviderRequestException.PUBLIC_MESSAGE);
             }
         }
 
@@ -265,17 +266,22 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         params.put("id", thirdOrderId);
 
         log.info("Benz补单请求: params={}", DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.postForString(url, params);
+        String response = apiHttpClient.postForString(apiProvider, url, params);
         log.debug("Benz补单响应已接收: length={}", response == null ? 0 : response.length());
 
-        JSONObject json = JSONUtil.parseObj(response);
+        JSONObject json = ProviderResponseParser.parseObject(response);
         // 参考 bsjk.php: code==1 为成功
         if (json.getInt("code") == 1) {
             return DockResult.success("补单提交成功", thirdOrderId);
         } else {
-            return DockResult.fail(json.getStr("msg"));
+            return DockResult.fail(ProviderRequestException.PUBLIC_MESSAGE);
         }
     }
+    @Override
+    public void testConnection(ApiProvider apiProvider) {
+        fetchPlatformList(apiProvider);
+    }
+
     @Override
     public List<PlatformItem> fetchPlatformList(ApiProvider apiProvider) {
         String url = apiProvider.getApiUrl() + "/api.php?act=getclass";
@@ -285,18 +291,16 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         params.put("key", apiProvider.getApiKey());
 
         log.info("Benz获取课程列表请求: params={}", DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.postForString(url, params);
+        String response = apiHttpClient.postForString(apiProvider, url, params);
         // log.debug("Benz获取课程列表响应已接收: length={}", response == null ? 0 : response.length()); // 响应可能很大，暂不打印
 
-        JSONObject json = JSONUtil.parseObj(response);
+        JSONObject json = ProviderResponseParser.parseObject(response);
         if (json.getInt("code") != 1 && json.getInt("code") != 0) {
-             if (json.getInt("code") == -1) {
-                 throw new BusinessException("获取课程列表失败: " + json.getStr("msg"));
-             }
+            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
         }
 
         List<PlatformItem> items = new ArrayList<>();
-        JSONArray data = json.getJSONArray("data");
+        JSONArray data = ProviderResponseParser.requireArray(json, "data");
         if (data != null) {
             for (int i = 0; i < data.size(); i++) {
                 JSONObject item = data.getJSONObject(i);
@@ -330,10 +334,10 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         }
 
         log.info("Benz批量查单请求: params={}", DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.postForString(url, params);
+        String response = apiHttpClient.postForString(apiProvider, url, params);
         log.info("Benz批量查单响应数据量: {} 字节", response != null ? response.length() : 0);
 
-        JSONObject json = JSONUtil.parseObj(response);
+        JSONObject json = ProviderResponseParser.parseObject(response);
         List<OrderProgressResult> results = new ArrayList<>();
         
         // 根据 benztb.php，直接从 data 数组获取订单列表

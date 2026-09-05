@@ -14,7 +14,7 @@ import request from '@/utils/request'
  */
 export function startAutoStudy(orderId) {
     return request({
-        url: `/api/admin/aqks/start/${orderId}`,
+        url: `/admin/aqks/start/${orderId}`,
         method: 'post'
     })
 }
@@ -25,7 +25,7 @@ export function startAutoStudy(orderId) {
  */
 export function stopAutoStudy(orderId) {
     return request({
-        url: `/api/admin/aqks/stop/${orderId}`,
+        url: `/admin/aqks/stop/${orderId}`,
         method: 'post'
     })
 }
@@ -37,7 +37,7 @@ export function stopAutoStudy(orderId) {
  */
 export function addStudyTime(orderId, seconds = 10) {
     return request({
-        url: `/api/admin/aqks/add-time/${orderId}`,
+        url: `/admin/aqks/add-time/${orderId}`,
         method: 'post',
         params: { seconds }
     })
@@ -49,7 +49,7 @@ export function addStudyTime(orderId, seconds = 10) {
  */
 export function getStudyStatus(orderId) {
     return request({
-        url: `/api/admin/aqks/status/${orderId}`,
+        url: `/admin/aqks/status/${orderId}`,
         method: 'get'
     })
 }
@@ -60,7 +60,7 @@ export function getStudyStatus(orderId) {
  */
 export function isTaskRunning(orderId) {
     return request({
-        url: `/api/admin/aqks/running/${orderId}`,
+        url: `/admin/aqks/running/${orderId}`,
         method: 'get'
     })
 }
@@ -73,7 +73,7 @@ export function isTaskRunning(orderId) {
  */
 export function batchCheckRunningStatus(orderIds) {
     return request({
-        url: '/api/admin/aqks/running/batch',
+        url: '/admin/aqks/running/batch',
         method: 'post',
         data: orderIds
     })
@@ -84,7 +84,7 @@ export function batchCheckRunningStatus(orderIds) {
  */
 export function getRunningTaskCount() {
     return request({
-        url: '/api/admin/aqks/running-count',
+        url: '/admin/aqks/running-count',
         method: 'get'
     })
 }
@@ -95,7 +95,7 @@ export function getRunningTaskCount() {
  */
 export function getAqksStatistics() {
     return request({
-        url: '/api/admin/aqks/statistics',
+        url: '/admin/aqks/statistics',
         method: 'get'
     })
 }
@@ -111,7 +111,7 @@ export function getAqksStatistics() {
  */
 export function checkExamStatus(orderId) {
     return request({
-        url: `/api/admin/aqks/check-exam/${orderId}`,
+        url: `/admin/aqks/check-exam/${orderId}`,
         method: 'post'
     })
 }
@@ -125,7 +125,7 @@ export function checkExamStatus(orderId) {
  */
 export function syncExamStatus() {
     return request({
-        url: '/api/admin/aqks/sync-exam-status',
+        url: '/admin/aqks/sync-exam-status',
         method: 'post'
     })
 }

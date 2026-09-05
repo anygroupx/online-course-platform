@@ -547,6 +547,8 @@ onBeforeUnmount(() => clearTimeout(searchTimer))
 .theme-header-badge { display: inline-flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 999px; color: var(--text-regular); font-weight: 600; background: var(--surface-acrylic); }
 .theme-header-swatch { width: 34px; height: 18px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--border-color-light); }
 .left-actions, .right-filters, .variable-row-actions { display: flex; align-items: center; gap: 10px; }
+.operation-bar, .left-actions, .right-filters { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.right-filters > * { max-width: 100%; }
 .left-actions :deep(.el-button), .variable-row-actions :deep(.el-button) { margin-inline-start: 0; }
 .type-filter { width: 190px; }
 .keyword-filter { width: 240px; }

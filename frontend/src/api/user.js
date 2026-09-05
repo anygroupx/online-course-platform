@@ -139,3 +139,8 @@ export function setupInviteCode(data) {
   })
 }
 
+
+/** Password-confirmed self-service rotation. The old key becomes invalid immediately. */
+export function rotateApiKey(currentPassword) {
+  return request({ url: '/api-keys/rotate', method: 'post', data: { currentPassword } })
+}

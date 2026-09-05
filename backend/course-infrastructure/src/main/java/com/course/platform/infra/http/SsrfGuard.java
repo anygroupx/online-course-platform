@@ -76,7 +76,9 @@ public class SsrfGuard {
             throw new SafeHttpException(SafeHttpException.Reason.DNS_FAILURE);
         }
         for (InetAddress address : addresses) {
-            if (!isPublicAddress(address)) blocked();
+            if (!isPublicAddress(address)) {
+                throw new SafeHttpException(SafeHttpException.Reason.PRIVATE_ADDRESS);
+            }
         }
         return new ValidatedDestination(uri, host, addresses);
     }

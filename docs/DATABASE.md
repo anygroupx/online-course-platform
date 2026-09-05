@@ -1,6 +1,6 @@
 # 数据库与迁移
 
-> 更新时间：2026-07-12
+> 更新时间：2026-09-06
 > 数据库名：`online_course`
 > 字符集：`utf8mb4` / `utf8mb4_unicode_ci`
 
@@ -13,11 +13,8 @@ mysql -u root -p online_course < database/schema.sql
 # 可选测试数据
 mysql -u root -p online_course < database/test_data.sql
 
-# 增量迁移（建议按序号执行）
-for f in database/migrations/*.sql; do
-  echo "Applying $f"
-  mysql -u root -p online_course < "$f"
-done
+# 已有数据库升级：核对已执行的迁移，只运行尚未应用的脚本。
+# 不要在最新 schema.sql 初始化后无差别重跑全部迁移。
 ```
 
 Docker 首次启动时，`schema.sql` 会挂载到 MySQL 初始化目录：
@@ -64,6 +61,13 @@ Docker 首次启动时，`schema.sql` 会挂载到 MySQL 初始化目录：
 | `005_remote_category_mapping.sql` | `platform_category` 远程分类映射 |
 | `006_aqks_study_log.sql` | AQKS 刷课日志表 `aqks_study_log` |
 | `007_security_hardening.sql` | RBAC 角色、Token 哈希、API Key 哈希、资金流水 `account_ledger` 等 |
+| `017_provider_outbound_governance.sql` | Provider 待验证状态、配置版本、验证人/时间、健康分类；扩大 URL/加密凭据列 |
+
+### 017 Provider 出站治理
+
+已有数据库须在新后端上线前执行一次；最新 `schema.sql` 已包含该结构，不能重复执行 `017`。保留已有启用/禁用状态；不为历史记录伪造验证信息。新 Provider 默认为待验证，配置敏感字段变化后重新验证。
+
+操作与回退注意事项见 [Provider 出站治理指南](./PROVIDER_OUTBOUND_GOVERNANCE.md#上线与数据库迁移)。
 
 ### 007 安全加固要点
 

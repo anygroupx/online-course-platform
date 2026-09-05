@@ -63,13 +63,13 @@
                     <label>用户ID (UID):</label>
                     <div class="key-value">
                       <code>{{ userInfo.uid }}</code>
-                      <el-button size="small" text @click="copyToClipboard(userInfo.uid, 'UID')">
+                      <el-button size="small" text aria-label="复制完整UID" @click="copyToClipboard(userInfo.uid, 'UID')">
                         <el-icon><DocumentCopy /></el-icon>
                       </el-button>
                     </div>
                   </div>
                   <div class="key-item">
-                    <label>密钥标识:</label>
+                    <label>密钥前缀（不是完整 APIKey）:</label>
                     <div class="key-value">
                       <code>{{ userInfo.apiKeyPrefix || '已配置' }}••••</code>
                     </div>
@@ -80,11 +80,13 @@
                   </div>
                 </div>
 
+                <p class="key-help">此处仅展示用于识别的前缀，不能用于 API 认证。完整密钥只在签发时显示一次；如果未保存或已过期，可验证登录密码后免费轮换；旧密钥将立即失效。</p>
                 <div class="api-docs-link">
                   <el-button type="primary" @click="goToApiDocs" plain>
                     <el-icon><Document /></el-icon>
                     查看API文档
                   </el-button>
+                  <el-button type="warning" plain :loading="enablingApiKey" @click="handleRotateApiKey">轮换 APIKey</el-button>
                 </div>
               </template>
 
@@ -278,7 +280,7 @@
       title="设置邀请码"
       width="400px"
       :close-on-click-modal="false"
-    >
+     append-to-body>
       <el-form :model="inviteForm" label-width="120px">
         <el-form-item label="邀请费率(%)">
           <el-input-number
@@ -308,15 +310,37 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="issuedKeyVisible"
+      title="APIKey 仅显示一次"
+      width="600px"
+      append-to-body
+      destroy-on-close
+      :show-close="false"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      class="issued-key-dialog"
+      @closed="issuedKey = ''"
+    >
+      <el-alert title="请立即复制并安全保存完整密钥，关闭后无法再次查看。" type="warning" :closable="false" show-icon />
+      <p>完整 APIKey（可换行显示，复制时不会包含换行）：</p>
+      <pre class="issued-key-value" tabindex="0" aria-label="完整 APIKey">{{ issuedKey }}</pre>
+      <template #footer>
+        <el-button type="primary" @click="copyToClipboard(issuedKey, '完整 APIKey')">复制完整 APIKey</el-button>
+        <el-button @click="issuedKeyVisible = false">我已安全保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, onDeactivated } from "vue";
+import { copyText } from "@/utils/clipboard";
 import { useRouter } from "vue-router";
 import { useUserStore } from "@/stores/user";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { getUserInfo, enableApiKey, setupInviteCode } from "@/api/user";
+import { getUserInfo, enableApiKey, rotateApiKey, setupInviteCode } from "@/api/user";
 import {
   UserFilled,
   DocumentCopy,
@@ -339,6 +363,11 @@ const stats = ref({
 
 // API密钥相关状态
 const enablingApiKey = ref(false);
+const issuedKey = ref('');
+const issuedKeyVisible = ref(false);
+const clearIssuedKey = () => { issuedKeyVisible.value = false; issuedKey.value = ''; };
+onBeforeUnmount(clearIssuedKey);
+onDeactivated(clearIssuedKey);
 
 // 邀请码相关状态
 const inviteDialogVisible = ref(false);
@@ -359,7 +388,8 @@ const loadUserInfo = async () => {
   try {
     const res = await getUserInfo();
     if (res.code === 1) {
-      userInfo.value = res.data;
+      userInfo.value = { ...res.data, isAdmin: userStore.isAdmin };
+      if (userStore.userInfo) userStore.userInfo = { ...userStore.userInfo, balance: res.data.balance };
       stats.value.totalOrders = res.data.totalOrders || 0;
       stats.value.totalRecharge = res.data.totalRecharge || 0;
       stats.value.agentStats = res.data.agentStats;
@@ -378,7 +408,7 @@ const formatDate = (date) => {
 // 复制到剪贴板
 const copyToClipboard = async (text, label) => {
   try {
-    await navigator.clipboard.writeText(text);
+    await copyText(text);
     ElMessage.success(`${label}已复制到剪贴板`);
   } catch (error) {
     console.error("复制失败:", error);
@@ -407,27 +437,40 @@ const handleEnableApiKey = async () => {
 
     // 检查响应码
     if (res.code === 1) {
-      const issuedKey = res.data;
-      await ElMessageBox.alert(
-        `请立即复制并安全保存此 API 密钥；关闭后系统无法再次显示：\n\n${issuedKey}`,
-        "API 密钥仅显示一次",
-        { confirmButtonText: "我已安全保存", closeOnClickModal: false, closeOnPressEscape: false }
-      );
-      // 关闭弹窗后不在组件状态中保留明文。
+      issuedKey.value = res.data;
+      issuedKeyVisible.value = true;
       await loadUserInfo();
-      // 更新store中的用户信息
-      await userStore.fetchUserInfo();
     } else {
       // 后端返回的业务错误
       ElMessage.error(res.message || "开通失败");
     }
   } catch (error) {
-    if (error !== "cancel") {
+    if (error !== "cancel" && error !== "close") {
       console.error("开通API密钥失败:", error);
       // 显示错误信息
       const errorMessage = error.response?.data?.message || error.message || "开通失败";
       ElMessage.error(errorMessage);
     }
+  } finally {
+    enablingApiKey.value = false;
+  }
+};
+
+// Never try to retrieve an existing plaintext key from the server.
+const handleRotateApiKey = async () => {
+  try {
+    const { value: password } = await ElMessageBox.prompt(
+      '轮换免费，旧密钥将立即失效，请及时更新第三方配置。请输入当前登录密码确认。',
+      '确认轮换 APIKey',
+      { inputType: 'password', inputPlaceholder: '当前登录密码', inputValidator: (value) => !!value || '请输入当前登录密码', confirmButtonText: '验证并轮换', cancelButtonText: '取消', closeOnClickModal: false }
+    );
+    enablingApiKey.value = true;
+    const res = await rotateApiKey(password);
+    issuedKey.value = res.data;
+    issuedKeyVisible.value = true;
+    await loadUserInfo();
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(error.response?.data?.message || error.message || '轮换失败');
   } finally {
     enablingApiKey.value = false;
   }
@@ -459,7 +502,6 @@ const handleSetupInviteCode = async () => {
       ElMessage.success("邀请码设置成功");
       inviteDialogVisible.value = false;
       await loadUserInfo();
-      await userStore.fetchUserInfo();
     }
   } catch (error) {
     console.error("设置邀请码失败:", error);
@@ -476,6 +518,7 @@ onMounted(() => {
 
 <style scoped>
 .profile-page {
+  box-sizing: border-box;
   padding: 20px;
   max-width: 1400px;
   margin: 0 auto;
@@ -560,14 +603,16 @@ html.dark .key-value {
 
 .key-value code {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-all;
   font-family: "Courier New", monospace;
   font-size: 14px;
   color: var(--text-regular);
 }
 
-.api-docs-link {
-  margin-top: 20px;
-}
+.api-docs-link { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.api-docs-link .el-button { margin: 0; }
 
 /* 统计卡片 */
 .stat-card {
@@ -626,11 +671,22 @@ html.dark .key-value {
   margin-top: 5px;
 }
 
+.key-value { min-width: 0; }
+.key-value .el-button { flex-shrink: 0; min-width: 44px; min-height: 44px; }
+.key-help { color: var(--text-secondary); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.issued-key-value { padding: 16px; border-radius: 8px; background: var(--bg-body); font: 16px/1.8 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-all; user-select: all; }
+.avatar-section h2 { overflow-wrap: anywhere; }
 /* 响应式优化 */
 @media (max-width: 768px) {
-  .profile-page {
-    padding: 10px;
-  }
+  .profile-page { padding: 0; }
+  .user-card { height: auto; margin-bottom: 16px; }
+  :deep(.el-card__body), :deep(.el-card__header) { padding: 16px 12px; }
+  :deep(.el-descriptions__table) { table-layout: fixed; }
+  :deep(.el-descriptions__label) { width: 90px; }
+  :deep(.el-descriptions__content) { overflow-wrap: anywhere; }
+  :deep(.el-alert__content) { min-width: 0; }
+  .stat-item .stat-value { font-size: 26px; }
+  .invite-value { flex-wrap: wrap; }
 
   .avatar {
     width: 60px;

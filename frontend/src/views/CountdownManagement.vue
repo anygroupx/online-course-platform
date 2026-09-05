@@ -1206,7 +1206,7 @@
       title="跳转到指定行"
       width="400px"
       :close-on-click-modal="false"
-    >
+     append-to-body>
       <el-form :model="jumpToRowForm" label-width="100px">
         <el-form-item label="账号">
           <el-input

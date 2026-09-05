@@ -19,6 +19,12 @@ import java.util.List;
  */
 public interface PlatformDockingStrategy {
 
+    /** Must be explicitly implemented with a read-only operation, never an order or retry. */
+    default void testConnection(ApiProvider apiProvider) {
+        throw new com.course.platform.domain.exception.ProviderRequestException(
+                com.course.platform.domain.exception.ProviderRequestException.Reason.UNSUPPORTED_OPERATION);
+    }
+
     /**
      * 获取支持的平台类型 (对应ApiProvider.providerType)
      *

@@ -6,7 +6,7 @@ export const sessionUserInfo = ref(readStoredUserInfo());
 let refreshPromise = null;
 
 // Remove credentials left by pre-P0 clients. Access credentials now live only in memory.
-for (const key of ["token", "tokenTime", "refreshToken", "refreshTokenTime"]) {
+for (const key of ["token", "tokenTime", "refreshToken", "refreshTokenTime", "api_test_key", "api_test_uid"]) {
   localStorage.removeItem(key);
 }
 
@@ -33,7 +33,7 @@ export function clearAuthSession() {
   accessToken.value = "";
   sessionUserInfo.value = null;
   localStorage.removeItem("userInfo");
-  for (const key of ["token", "tokenTime", "refreshToken", "refreshTokenTime"]) {
+  for (const key of ["token", "tokenTime", "refreshToken", "refreshTokenTime", "api_test_key", "api_test_uid"]) {
     localStorage.removeItem(key);
   }
 }

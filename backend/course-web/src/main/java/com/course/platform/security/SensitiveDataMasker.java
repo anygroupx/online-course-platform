@@ -109,6 +109,11 @@ public final class SensitiveDataMasker {
                 .balance(provider.getBalance())
                 .lastSyncTime(provider.getLastSyncTime())
                 .status(provider.getStatus())
+                .verifiedAt(provider.getVerifiedAt())
+                .verifiedBy(provider.getVerifiedBy())
+                .checkedAt(provider.getCheckedAt())
+                .lastCheckReason(provider.getLastCheckReason())
+                .lastCheckErrorId(provider.getLastCheckErrorId())
                 .createTime(provider.getCreateTime())
                 .updateTime(provider.getUpdateTime())
                 .build();

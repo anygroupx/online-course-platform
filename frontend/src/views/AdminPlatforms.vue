@@ -8,7 +8,6 @@
             <el-radio-group
               v-model="viewMode"
               size="small"
-              style="margin-right: 10px"
             >
               <el-radio-button label="list">列表视图</el-radio-button>
               <el-radio-button label="tree">树状视图</el-radio-button>
@@ -17,7 +16,6 @@
               type="primary"
               @click="handleCategoryManagement"
               plain
-              style="margin-right: 10px"
             >
               分类管理
             </el-button>
@@ -28,7 +26,6 @@
               type="success"
               :icon="Download"
               @click="handleImport"
-              style="margin-left: 10px"
             >
               一键导入
             </el-button>
@@ -1064,14 +1061,20 @@ onMounted(() => {
 
 .card-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  min-width: 0;
+  gap: 10px;
 }
+.header-actions > .el-button { margin: 0; }
 
 .platform-tree {
   background: transparent;
@@ -1139,9 +1142,13 @@ onMounted(() => {
 
 /* 移动端操作列优化 */
 @media (max-width: 767px) {
-  .operation-buttons {
-    gap: 2px;
-  }
+  .admin-platforms { padding: 0; }
+  .card-header { align-items: stretch; flex-direction: column; gap: 12px; }
+  .card-header > span { font-weight: 600; }
+  .header-actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+  .header-actions > .el-radio-group { flex-basis: 100%; margin: 0 !important; }
+  .header-actions > .el-button { flex: 1 1 auto; margin: 0 !important; }
+  .operation-buttons { gap: 4px; }
 
   .operation-buttons .el-button {
     padding: 2px 6px;

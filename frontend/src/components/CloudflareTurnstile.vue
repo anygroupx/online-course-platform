@@ -34,6 +34,9 @@ const emit = defineEmits(["update:modelValue", "error"]);
 const containerRef = ref(null);
 const statusMessage = ref("");
 let widgetId = null;
+let renderedSize = null;
+let resizeObserver = null;
+let disposed = false;
 
 const SCRIPT_ID = "cloudflare-turnstile-script";
 const SCRIPT_URL =
@@ -92,13 +95,20 @@ const renderWidget = async () => {
 
   try {
     const turnstile = await loadTurnstile();
-    if (!containerRef.value) return;
-
+    if (disposed || !containerRef.value) return;
+    // Flexible widgets have a 300px minimum; compact mode fits narrow phone cards.
+    const size = containerRef.value.clientWidth < 300 ? "compact" : "flexible";
+    if (widgetId !== null && renderedSize === size) return;
+    if (widgetId !== null) {
+      turnstile.remove(widgetId);
+      clearToken();
+    }
+    renderedSize = size;
     widgetId = turnstile.render(containerRef.value, {
       sitekey: props.siteKey,
       action: props.action,
       theme: "auto",
-      size: "flexible",
+      size,
       language: "zh-cn",
       retry: "auto",
       "refresh-expired": "auto",
@@ -138,9 +148,17 @@ const reset = () => {
 
 defineExpose({ reset });
 
-onMounted(renderWidget);
+onMounted(() => {
+  renderWidget();
+  if (typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver(() => renderWidget());
+    if (containerRef.value) resizeObserver.observe(containerRef.value);
+  }
+});
 
 onBeforeUnmount(() => {
+  disposed = true;
+  resizeObserver?.disconnect();
   clearToken();
   if (widgetId !== null && window.turnstile) {
     window.turnstile.remove(widgetId);

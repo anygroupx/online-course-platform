@@ -2,6 +2,7 @@ package com.course.platform.application.service.platform;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.course.platform.domain.entity.ApiProvider;
+import com.course.platform.domain.vo.ProviderConnectionTestResult;
 
 /**
  * 第三方API接口服务接口
@@ -25,6 +26,15 @@ public interface ApiProviderService {
      * @param apiProvider API接口信息
      */
     void updateApiProvider(ApiProvider apiProvider);
+
+    /** Test saved configuration without changing its activation state or placing orders. */
+    ProviderConnectionTestResult testConnection(Long id, Long operatorId);
+
+    /** Enabling requires successful verification of the current configuration; disabling is always local. */
+    void updateStatus(Long id, Integer status);
+
+    /** Read-only health check for an enabled provider; does not grant or revoke activation. */
+    void checkHealth(Long id);
 
     /**
      * 删除API接口
@@ -52,4 +62,3 @@ public interface ApiProviderService {
      */
     ApiProvider loadDecrypted(Long id);
 }
-

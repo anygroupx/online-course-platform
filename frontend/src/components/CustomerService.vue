@@ -1,7 +1,7 @@
 <template>
   <div class="customer-service">
     <!-- 客服入口按钮 -->
-    <div v-if="!chatVisible" class="service-button" @click="openChat">
+    <button v-if="!chatVisible && !minimized" type="button" class="service-button" aria-label="打开在线客服" @click="openChat">
       <el-icon><ChatDotRound /></el-icon>
       <span>在线客服</span>
       <el-badge
@@ -9,7 +9,7 @@
         :value="unreadCount"
         class="unread-badge"
       />
-    </div>
+    </button>
 
     <!-- 聊天窗口 -->
     <div v-if="chatVisible" class="chat-window">
@@ -26,10 +26,10 @@
           >
         </div>
         <div class="header-actions">
-          <el-button size="small" @click="minimizeChat">
+          <el-button size="small" @click="minimizeChat" aria-label="最小化客服">
             <el-icon><Minus /></el-icon>
           </el-button>
-          <el-button size="small" @click="closeChat">
+          <el-button size="small" @click="closeChat" aria-label="关闭客服">
             <el-icon><Close /></el-icon>
           </el-button>
         </div>
@@ -92,14 +92,14 @@
     </div>
 
     <!-- 最小化状态 -->
-    <div v-if="minimized" class="minimized-chat" @click="restoreChat">
+    <button v-if="minimized" type="button" class="minimized-chat" aria-label="恢复客服对话" @click="restoreChat">
       <el-icon><ChatDotRound /></el-icon>
       <el-badge
         v-if="unreadCount > 0"
         :value="unreadCount"
         class="unread-badge"
       />
-    </div>
+    </button>
   </div>
 </template>
 
@@ -350,9 +350,15 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.customer-service {
-  position: relative;
-}
+.customer-service { position: relative; }
+.service-button, .minimized-chat { border: 0; font: inherit; }
+.chat-window { max-height: calc(100dvh - 24px); }
+.chat-header, .input-area { flex-shrink: 0; }
+.message-list { min-height: 0; }
+.header-info { min-width: 0; flex-wrap: wrap; }
+.header-actions { flex-shrink: 0; }
+.header-actions .el-button { min-width: 40px; min-height: 40px; margin: 0; }
+
 
 /* 客服入口按钮 */
 .service-button {
@@ -614,9 +620,8 @@ onUnmounted(() => {
 }
 
 @media (max-height: 520px) and (max-width: 900px) {
-  .chat-window {
-    max-height: none;
-  }
+  .chat-window { height: calc(100dvh - 20px); max-height: calc(100dvh - 20px); }
+  .input-area :deep(.el-textarea__inner) { min-height: 48px !important; height: 48px; }
 }
 
 /* Dark Mode Overrides */

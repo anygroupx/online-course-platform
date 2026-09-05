@@ -3,7 +3,6 @@ package com.course.platform.infra.docking.impl;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
 import com.course.platform.application.service.platform.docking.PlatformDockingStrategy;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.domain.dto.DockResult;
@@ -18,6 +17,10 @@ import com.course.platform.domain.vo.CourseInfoResponse;
 import com.course.platform.infra.cache.SystemVariableCache;
 import com.course.platform.infra.docking.DockingLogSanitizer;
 import com.course.platform.infra.external.ApiHttpClient;
+import com.course.platform.infra.http.ProviderUrlNormalizer;
+import com.course.platform.infra.docking.ProviderResponseParser;
+import com.course.platform.domain.exception.ProviderRequestException;
+import org.springframework.web.util.UriComponentsBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -40,6 +43,7 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     protected final ApiHttpClient apiHttpClient;
+    private final ProviderUrlNormalizer urlNormalizer = new ProviderUrlNormalizer();
 
     public DaytimeDockingStrategy(ApiHttpClient apiHttpClient) {
         this.apiHttpClient = apiHttpClient;
@@ -48,6 +52,11 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
     @Override
     public String getProviderType() {
         return "Daytime";
+    }
+
+    @Override
+    public void testConnection(ApiProvider apiProvider) {
+        queryBalance(apiProvider);
     }
 
     @Override
@@ -62,8 +71,8 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
 
         String response = post(apiProvider, "get", "查课", params);
         JSONObject json = parseResponse(response, "查课");
-        if (isCode(json, -1)) {
-            throw new BusinessException("查课失败: " + message(json, "第三方接口返回失败"));
+        if (!isCode(json, 0) && !isCode(json, 1)) {
+            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
         }
 
         List<CourseInfoResponse.CourseItem> courses = new ArrayList<>();
@@ -93,7 +102,7 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
 
         JSONObject json = parseResponse(post(apiProvider, "add", "下单", params), "下单");
         if (!isCode(json, 0)) {
-            return DockResult.fail(message(json, "下单失败"));
+            return DockResult.fail(ProviderRequestException.PUBLIC_MESSAGE);
         }
 
         String thirdOrderId = extractThirdOrderId(json);
@@ -116,7 +125,7 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
 
         JSONObject json = parseResponse(post(apiProvider, "chadan", "进度查询", params), "进度查询");
         if (!isCode(json, 1)) {
-            throw new BusinessException("进度查询失败: " + message(json, "第三方接口返回失败"));
+            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
         }
 
         JSONObject item = findProgressItem(json.getJSONArray("data"), thirdOrderId);
@@ -158,9 +167,9 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
         JSONObject json = parseResponse(post(apiProvider, "budan", "补刷", params), "补刷");
         Integer code = json.getInt("code");
         if (Integer.valueOf(1).equals(code) || Integer.valueOf(0).equals(code)) {
-            return DockResult.success(message(json, "补刷提交成功"), thirdOrderId);
+            return DockResult.success("补刷提交成功", thirdOrderId);
         }
-        return DockResult.fail(message(json, "补刷失败"));
+        return DockResult.fail(ProviderRequestException.PUBLIC_MESSAGE);
     }
 
     @Override
@@ -175,8 +184,8 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
             params.put("fenlei", categoryId);
         }
         JSONObject json = parseResponse(post(apiProvider, "getclass", "商品列表", params), "商品列表");
-        if (isCode(json, -1)) {
-            throw new BusinessException("获取商品列表失败: " + message(json, "第三方接口返回失败"));
+        if (!isCode(json, 0) && !isCode(json, 1)) {
+            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
         }
 
         List<PlatformItem> items = new ArrayList<>();
@@ -207,8 +216,8 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
     @Override
     public BigDecimal queryBalance(ApiProvider apiProvider) {
         JSONObject json = parseResponse(post(apiProvider, "getmoney", "余额查询", authParams(apiProvider)), "余额查询");
-        if (isCode(json, -1)) {
-            throw new BusinessException("余额查询失败: " + message(json, "第三方接口返回失败"));
+        if (!isCode(json, 0) && !isCode(json, 1)) {
+            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
         }
 
         BigDecimal balance = firstBigDecimal(json, null, "money", "balance", "amount", "je");
@@ -219,7 +228,7 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
             balance = toBigDecimal(data);
         }
         if (balance == null) {
-            throw new BusinessException("余额查询成功，但响应中没有余额字段");
+            throw new ProviderRequestException(ProviderRequestException.Reason.INVALID_RESPONSE);
         }
         return balance;
     }
@@ -231,8 +240,8 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
         params.put("oid", thirdOrderId);
 
         JSONObject json = parseResponse(post(apiProvider, "getOrderLogs", "订单日志", params), "订单日志");
-        if (isCode(json, -1)) {
-            throw new BusinessException("订单日志查询失败: " + message(json, "第三方接口返回失败"));
+        if (!isCode(json, 0) && !isCode(json, 1)) {
+            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
         }
 
         JSONArray data = responseArray(json, "data", "logs", "list");
@@ -265,26 +274,19 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
         String url = endpoint(apiProvider, action);
         log.info("{} {}请求: params={}", getProviderType(), operation,
                 DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.postForString(url, params);
+        String response = apiHttpClient.postForString(apiProvider, url, params);
         log.debug("{} {}响应已接收: length={}", getProviderType(), operation,
                 response == null ? 0 : response.length());
         return response;
     }
 
     private String endpoint(ApiProvider apiProvider, String action) {
-        String baseUrl = StrUtil.removeSuffix(apiProvider.getApiUrl(), "/");
-        return baseUrl + "/api.php?act=" + action;
+        return UriComponentsBuilder.fromUri(urlNormalizer.normalize(apiProvider.getApiUrl(), getProviderType()))
+                .path("/api.php").queryParam("act", action).build(true).toUriString();
     }
 
     private JSONObject parseResponse(String response, String operation) {
-        if (StrUtil.isBlank(response)) {
-            throw new BusinessException(operation + "失败: 第三方接口返回空响应");
-        }
-        try {
-            return JSONUtil.parseObj(response);
-        } catch (Exception e) {
-            throw new BusinessException(operation + "失败: 第三方接口返回格式错误");
-        }
+        return ProviderResponseParser.parseObject(response);
     }
 
     private JSONArray responseArray(JSONObject json, String... keys) {

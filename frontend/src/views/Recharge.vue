@@ -34,7 +34,8 @@
               <!-- 快捷金额选择 -->
               <el-form-item label="充值金额">
                 <div class="amount-options">
-                  <div
+                  <button
+                    type="button"
                     v-for="preset in presetAmounts"
                     :key="preset"
                     class="amount-option"
@@ -43,7 +44,7 @@
                   >
                     <span class="amount-value">{{ preset }}</span>
                     <span class="amount-unit">元</span>
-                  </div>
+                  </button>
                 </div>
               </el-form-item>
 
@@ -546,8 +547,13 @@ html.dark .amount-option.active {
 }
 
 @media (max-width: 768px) {
-  .amount-options {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  .recharge-page { padding: 0; }
+  .alipay-recharge { padding: 0; }
+  .amount-options { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .amount-option { min-width: 0; padding: 12px 8px; }
+  .balance-info { flex-wrap: wrap; gap: 16px; }
+  .balance-item { min-width: 0; }
+  .balance-value { overflow-wrap: anywhere; font-size: 26px; }
+  :deep(.el-input) { width: 100% !important; }
 }
 </style>

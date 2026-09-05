@@ -171,14 +171,21 @@ CREATE TABLE `api_provider` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '接口ID',
   `provider_type` VARCHAR(50) NOT NULL COMMENT '接口类型标识',
   `name` VARCHAR(100) NOT NULL COMMENT '接口名称',
-  `api_url` VARCHAR(255) DEFAULT NULL COMMENT 'API地址',
+  `api_url` VARCHAR(2048) DEFAULT NULL COMMENT 'API地址',
   `username` VARCHAR(100) DEFAULT NULL COMMENT '账号',
-  `password` VARCHAR(255) DEFAULT NULL COMMENT '密码',
-  `token` VARCHAR(500) DEFAULT NULL COMMENT 'Token',
-  `api_key` VARCHAR(255) DEFAULT NULL COMMENT 'API Key',
+  `password` TEXT DEFAULT NULL COMMENT '密码',
+  `token` TEXT DEFAULT NULL COMMENT 'Token',
+  `api_key` TEXT DEFAULT NULL COMMENT 'API Key',
   `cookie` TEXT DEFAULT NULL COMMENT 'Cookie',
   `balance` DECIMAL(10,2) DEFAULT 0.00 COMMENT '接口余额',
-  `status` TINYINT DEFAULT 1 COMMENT '状态：0-禁用 1-正常',
+  `last_sync_time` BIGINT DEFAULT NULL COMMENT '上次同步时间戳（秒）',
+  `status` TINYINT NOT NULL DEFAULT 2 COMMENT '状态：0-禁用 1-已启用 2-待验证/待启用',
+  `config_version` BIGINT NOT NULL DEFAULT 0 COMMENT '配置CAS版本',
+  `verified_at` DATETIME NULL COMMENT '最近成功的人工连接验证时间',
+  `verified_by` BIGINT NULL COMMENT '连接验证操作人',
+  `checked_at` DATETIME NULL COMMENT '最近连接/健康检查时间',
+  `last_check_reason` VARCHAR(40) NULL COMMENT '安全的健康检查分类',
+  `last_check_error_id` VARCHAR(36) NULL COMMENT '健康检查错误追踪ID',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
@@ -189,10 +196,10 @@ CREATE TABLE `api_provider` (
 -- 插入示例数据
 INSERT INTO `api_provider` (`id`, `provider_type`, `name`, `api_url`, `status`) 
 VALUES 
-(1, 'xxtouba', '学习通对接', 'https://api.example.com', 1),
-(2, 'zhjy', '智慧职教对接', 'https://api.example.com', 1),
-(3, 'mooc', 'MOOC对接', 'https://api.example.com', 1),
-(4, 'qhs', '青书学堂对接', 'https://api.example.com', 1);
+(1, 'xxtouba', '学习通对接', 'https://api.example.com', 2),
+(2, 'zhjy', '智慧职教对接', 'https://api.example.com', 2),
+(3, 'mooc', 'MOOC对接', 'https://api.example.com', 2),
+(4, 'qhs', '青书学堂对接', 'https://api.example.com', 2);
 
 -- =============================================
 -- 4. 订单表 (course_order)

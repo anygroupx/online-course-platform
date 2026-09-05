@@ -87,7 +87,7 @@ class CloudflareDnsResolverTest {
         });
         SsrfGuard guard = new SsrfGuard(new CloudflareDnsResolver(transport));
 
-        assertEquals(SafeHttpException.Reason.BLOCKED_DESTINATION,
+        assertEquals(SafeHttpException.Reason.PRIVATE_ADDRESS,
                 assertThrows(SafeHttpException.class, () -> guard.validate(
                         URI.create("https://api.example"),
                         SsrfGuardTest.policy(Set.of("api.example"), Set.of(), Set.of()))).getReason());

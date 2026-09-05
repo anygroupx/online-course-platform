@@ -22,13 +22,14 @@ class AnwangDockingStrategyTest {
     @SuppressWarnings({"rawtypes", "unchecked"})
     void progressQuerySendsOriginalCredentialsInsteadOfLogMasks() {
         ApiHttpClient client = mock(ApiHttpClient.class);
-        when(client.getForString(eq("https://provider.example/api/search"), anyMap()))
-                .thenReturn("{\"code\":1,\"data\":[{\"process\":\"50%\",\"status\":\"进行中\"}]}");
-
         ApiProvider provider = new ApiProvider();
         provider.setApiUrl("https://provider.example");
         provider.setUsername("provider-uid");
         provider.setApiKey("provider-key");
+
+        when(client.getForString(eq(provider), eq("https://provider.example/api/search"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":[{\"process\":\"50%\",\"status\":\"进行中\"}]}");
+
         CoursePlatform platform = new CoursePlatform();
         platform.setDockParam("platform-1");
         CourseOrder order = new CourseOrder();
@@ -38,7 +39,7 @@ class AnwangDockingStrategyTest {
         new AnwangDockingStrategy(client).queryOrderProgress(order, platform, provider);
 
         ArgumentCaptor<Map> captor = ArgumentCaptor.forClass(Map.class);
-        verify(client).getForString(eq("https://provider.example/api/search"), captor.capture());
+        verify(client).getForString(eq(provider), eq("https://provider.example/api/search"), captor.capture());
         Map<String, Object> sent = captor.getValue();
         assertEquals("provider-uid", sent.get("uid"));
         assertEquals("provider-key", sent.get("key"));

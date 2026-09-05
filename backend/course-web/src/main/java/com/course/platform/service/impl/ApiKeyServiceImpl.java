@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -33,6 +34,7 @@ public class ApiKeyServiceImpl implements ApiKeyService {
     private final OperationLogService operationLogService;
     private final AccountLedgerServiceImpl accountLedgerService;
     private final SecurityAuditService securityAuditService;
+    private final PasswordEncoder passwordEncoder;
 
     @Value("${course.business.api-enable-free-threshold:300}")
     private BigDecimal apiEnableFreeThreshold;
@@ -43,16 +45,35 @@ public class ApiKeyServiceImpl implements ApiKeyService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String enableApiKey(Long userId, Integer type, String targetUserUid) {
-        if (type == 1) {
+        if (Integer.valueOf(1).equals(type)) {
             return enableForSelf(userId);
-        } else if (type == 2) {
+        } else if (Integer.valueOf(2).equals(type)) {
             return enableForSubordinate(userId, targetUserUid);
         }
         throw new BusinessException("开通类型错误");
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String rotateApiKey(Long userId, String currentPassword) {
+        User user = userMapper.selectByIdForUpdate(userId);
+        if (user == null) throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        if (Integer.valueOf(0).equals(user.getStatus())) throw new BusinessException(ResultCode.ACCOUNT_DISABLED);
+        if (currentPassword == null || !passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new BusinessException(ResultCode.USERNAME_OR_PASSWORD_ERROR);
+        }
+        if (!hasActiveApiKey(user)) throw new BusinessException(ResultCode.API_KEY_NOT_ENABLED);
+        String plain = generatePlainApiKey();
+        // Rotation must not restore permissions an administrator has deliberately removed.
+        persistApiKey(user, plain, user.getApiKeyScopes());
+        securityAuditService.record("KEY_CHANGE", "WARN", userId, user.getUsername(),
+                "/api-keys/rotate", "POST", "用户轮换 API Key，旧密钥立即失效", null);
+        return plain;
+    }
+
     private String enableForSelf(Long userId) {
-        User user = userMapper.selectById(userId);
+        // Serialize issuance with account debits so concurrent clicks cannot charge twice.
+        User user = userMapper.selectByIdForUpdate(userId);
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
@@ -76,7 +97,7 @@ public class ApiKeyServiceImpl implements ApiKeyService {
         String plain = generatePlainApiKey();
         storeApiKey(user, plain, free ? "免费开通" : "付费开通");
         securityAuditService.record("KEY_CHANGE", "WARN", userId, user.getUsername(),
-                "/api-key/enable", "POST", "用户开通/轮换 API Key", free ? "free" : "paid");
+                "/api-keys/enable", "POST", "用户开通/轮换 API Key", free ? "free" : "paid");
         operationLogService.log(userId, "开通API",
                 free ? "免费开通API接口成功" : String.format("开通API接口成功，扣费%s元", apiEnableFee),
                 free ? BigDecimal.ZERO : apiEnableFee.negate(),
@@ -88,7 +109,7 @@ public class ApiKeyServiceImpl implements ApiKeyService {
         if (!PublicUidUtil.isValid(targetUserUid)) {
             throw new BusinessException("目标用户 UUID 格式错误");
         }
-        User operator = userMapper.selectById(operatorId);
+        User operator = userMapper.selectByIdForUpdate(operatorId);
         if (operator == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
@@ -98,6 +119,8 @@ public class ApiKeyServiceImpl implements ApiKeyService {
         if (target == null) {
             throw new BusinessException("目标用户不存在");
         }
+        target = userMapper.selectByIdForUpdate(target.getId());
+        if (target == null) throw new BusinessException(ResultCode.USER_NOT_FOUND);
         if (target.getParentId() == null || !target.getParentId().equals(operatorId)) {
             throw new BusinessException("只能给自己的下级开通");
         }
@@ -118,7 +141,7 @@ public class ApiKeyServiceImpl implements ApiKeyService {
         String plain = generatePlainApiKey();
         storeApiKey(target, plain, "上级开通");
         securityAuditService.record("KEY_CHANGE", "WARN", operatorId, operator.getUsername(),
-                "/api-key/enable", "POST", "上级为下级开通 API Key", "targetUserUid=" + target.getUid());
+                "/api-keys/enable", "POST", "上级为下级开通 API Key", "targetUserUid=" + target.getUid());
         operationLogService.log(operatorId, "开通API",
                 String.format("给下级用户[%s]开通API接口，扣费%s元", target.getUsername(), cost),
                 cost.negate(), operator.getBalance());
@@ -133,22 +156,21 @@ public class ApiKeyServiceImpl implements ApiKeyService {
     }
 
     private String generatePlainApiKey() {
-        // 32 hex chars
+        // 48 hex chars (192 bits); never returned again after issuance.
         return IdUtil.simpleUUID() + IdUtil.simpleUUID().substring(0, 16);
     }
 
     private void storeApiKey(User user, String plain, String source) {
-        // ensure non-empty longer key
-        if (plain == null || plain.length() < 16) {
-            plain = IdUtil.simpleUUID();
-        }
-        String prefix = plain.length() >= 8 ? plain.substring(0, 8) : plain;
+        persistApiKey(user, plain, "balance:read,orders:read,orders:write,platforms:read");
+        log.info("API Key 已生成并哈希存储：userId={}, source={}", user.getId(), source);
+    }
+
+    private void persistApiKey(User user, String plain, String scopes) {
+        String prefix = plain.substring(0, 8);
         String hash = TokenHashUtil.sha256(plain);
-        String scopes = "balance:read,orders:read,orders:write,platforms:read";
         LocalDateTime expiresAt = LocalDateTime.now().plusYears(1);
         if (userMapper.updateApiKey(user.getId(), hash, prefix, scopes, expiresAt) != 1) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
-        log.info("API Key 已生成并哈希存储：userId={}, prefix={}, source={}", user.getId(), prefix, source);
     }
 }

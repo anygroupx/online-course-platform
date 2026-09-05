@@ -28,7 +28,10 @@
 3. 切换应用密钥并验证支付配置读取
 
 ### API Key
-- 调用开通/轮换接口，仅返回一次明文；库中仅存 hash/prefix/scopes/expire
+- 已开通用户在个人中心选择「轮换 APIKey」，或使用网页登录 JWT 调用 `POST /api/api-keys/rotate`，JSON 体为 `{"currentPassword":"当前登录密码"}`。
+- 轮换免费，只能操作自己；需验证当前密码。旧密钥立即失效，新密钥有效期一年，保留原作用域。
+- 响应 `Cache-Control: no-store`，仅返回一次明文；库中仅存 hash/prefix/scopes/expire。立即安全保存并更新第三方配置。
+- 丢失密钥不可从哈希恢复，不得重新开放资料接口读取明文。详见 [第三方API说明](../EXTERNAL_API_GUIDE.md)。
 
 ### 支付密钥
 1. 支付宝平台创建新密钥对

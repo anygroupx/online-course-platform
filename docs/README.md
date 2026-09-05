@@ -1,6 +1,6 @@
 # 文档索引
 
-> 最后更新：2026-07-12
+> 最后更新：2026-09-06
 > 对应代码：后端 `2.0.1` / 前端 `1.1.2`
 
 ## 入门
@@ -43,6 +43,7 @@
 | 文档 | 说明 |
 |------|------|
 | [SECURITY_FIXES.md](./SECURITY_FIXES.md) | 已落地的 P0/P1 安全加固 |
+| [PROVIDER_OUTBOUND_GOVERNANCE.md](./PROVIDER_OUTBOUND_GOVERNANCE.md) | Provider 单目标出站、验证启用与迁移 |
 | [SECURITY_ROADMAP.md](./SECURITY_ROADMAP.md) | P2+ 安全建设路线图 |
 
 ## 前端组件

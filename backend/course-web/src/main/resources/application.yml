@@ -144,13 +144,16 @@ course:
 
 # 敏感字段本地加密与安全任务配置
 app:
+  provider-health:
+    enabled: ${PROVIDER_HEALTH_ENABLED:false}
+    interval-millis: ${PROVIDER_HEALTH_INTERVAL_MILLIS:1800000}
+    initial-delay-millis: 60000
   crypto:
     # 必须由环境变量注入；生产环境建议改用 KMS。
     secret: ${APP_CRYPTO_SECRET}
   security:
     outbound:
       dns-mode: ${OUTBOUND_DNS_MODE:system}
-      provider-allowed-hosts: ${OUTBOUND_PROVIDER_ALLOWED_HOSTS:}
       provider-http-allowed-hosts: ${OUTBOUND_PROVIDER_HTTP_ALLOWED_HOSTS:}
       provider-allowed-ports: ${OUTBOUND_PROVIDER_ALLOWED_PORTS:}
       alert-webhook-allowed-hosts: ${OUTBOUND_ALERT_ALLOWED_HOSTS:}

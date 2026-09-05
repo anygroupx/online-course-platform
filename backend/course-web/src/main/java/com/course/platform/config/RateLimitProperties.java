@@ -21,6 +21,7 @@ public class RateLimitProperties {
     private Rule paymentNotifyIp = new Rule(300, 60);
     private Rule passwordIp = new Rule(20, 900);
     private Rule passwordUser = new Rule(5, 900);
+    private Rule apiKeyUser = new Rule(5, 900);
     private Rule externalIp = new Rule(180, 60);
     private Rule externalKey = new Rule(120, 60);
     private Rule orderUser = new Rule(30, 60);
@@ -31,7 +32,7 @@ public class RateLimitProperties {
     @PostConstruct
     void validate() {
         for (Rule rule : new Rule[]{loginIp, registerIp, inviteIp, refreshIp, refreshCredential,
-                mfaIp, paymentNotifyIp, passwordIp, passwordUser, externalIp, externalKey,
+                mfaIp, paymentNotifyIp, passwordIp, passwordUser, apiKeyUser, externalIp, externalKey,
                 orderUser, paymentUser, refundUser, exportUser}) {
             if (rule == null || rule.limit < 1 || rule.windowSeconds < 1) {
                 throw new IllegalStateException("Invalid rate-limit rule");

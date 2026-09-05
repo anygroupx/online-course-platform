@@ -10,6 +10,7 @@ import com.course.platform.domain.dto.QueryCourseRequest;
 import com.course.platform.domain.dto.ProductImportRequest;
 import com.course.platform.domain.dto.ProviderOrderLog;
 import com.course.platform.domain.entity.ApiProvider;
+import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.domain.entity.CourseOrder;
 import com.course.platform.domain.entity.CoursePlatform;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
@@ -35,6 +36,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.function.Function;
+import java.util.function.Supplier;
+import com.course.platform.infra.http.SafeHttpException;
+import java.net.URI;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import cn.hutool.core.util.StrUtil;
 
@@ -72,47 +77,44 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
             throw new BusinessException("未配置查课接口");
         }
         
-        ApiProvider apiProvider = apiProviderService.loadDecrypted(platform.getQueryApiId());
-        if (apiProvider == null || !Integer.valueOf(1).equals(apiProvider.getStatus())) {
-            throw new BusinessException("查课接口配置不存在或已禁用");
-        }
+        ApiProvider apiProvider = requireEnabledProvider(platform.getQueryApiId());
 
         PlatformDockingStrategy strategy = strategyFactory.getStrategy(apiProvider.getProviderType());
         if (strategy == null) {
             throw new BusinessException("不支持的接口类型: " + apiProvider.getProviderType());
         }
 
-        return strategy.queryCourses(platform, request, apiProvider);
+        return invokeProvider(apiProvider, "queryCourses", () -> strategy.queryCourses(platform, request, apiProvider));
     }
 
     @Override
     public DockResult dockOrder(CourseOrder order, CoursePlatform platform, ApiProvider apiProvider) {
-        apiProvider = resolveDecryptedProvider(apiProvider);
-        PlatformDockingStrategy strategy = strategyFactory.getStrategy(apiProvider.getProviderType());
+        ApiProvider resolved = resolveDecryptedProvider(apiProvider);
+        PlatformDockingStrategy strategy = strategyFactory.getStrategy(resolved.getProviderType());
         if (strategy == null) {
-            return DockResult.fail("不支持的接口类型: " + apiProvider.getProviderType());
+            return DockResult.fail("不支持的接口类型: " + resolved.getProviderType());
         }
-        return strategy.dockOrder(order, platform, apiProvider);
+        return invokeProvider(resolved, "dockOrder", () -> strategy.dockOrder(order, platform, resolved));
     }
 
     @Override
     public OrderProgressResult queryOrderProgress(CourseOrder order, CoursePlatform platform, ApiProvider apiProvider) {
-        apiProvider = resolveDecryptedProvider(apiProvider);
-        PlatformDockingStrategy strategy = strategyFactory.getStrategy(apiProvider.getProviderType());
+        ApiProvider resolved = resolveDecryptedProvider(apiProvider);
+        PlatformDockingStrategy strategy = strategyFactory.getStrategy(resolved.getProviderType());
         if (strategy == null) {
-            throw new BusinessException("不支持的接口类型: " + apiProvider.getProviderType());
+            throw new BusinessException("不支持的接口类型: " + resolved.getProviderType());
         }
-        return strategy.queryOrderProgress(order, platform, apiProvider);
+        return invokeProvider(resolved, "queryOrderProgress", () -> strategy.queryOrderProgress(order, platform, resolved));
     }
 
     @Override
     public DockResult retryOrder(CourseOrder order, CoursePlatform platform, ApiProvider apiProvider) {
-        apiProvider = resolveDecryptedProvider(apiProvider);
-        PlatformDockingStrategy strategy = strategyFactory.getStrategy(apiProvider.getProviderType());
+        ApiProvider resolved = resolveDecryptedProvider(apiProvider);
+        PlatformDockingStrategy strategy = strategyFactory.getStrategy(resolved.getProviderType());
         if (strategy == null) {
-            return DockResult.fail("不支持的接口类型: " + apiProvider.getProviderType());
+            return DockResult.fail("不支持的接口类型: " + resolved.getProviderType());
         }
-        return strategy.retryOrder(order, platform, apiProvider);
+        return invokeProvider(resolved, "retryOrder", () -> strategy.retryOrder(order, platform, resolved));
     }
 
     @Override
@@ -140,7 +142,7 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
         PlatformDockingStrategy strategy = requireStrategy(apiProvider);
         BigDecimal multiplier = normalizeMultiplier(priceMultiplier);
 
-        List<PlatformItem> items = strategy.fetchPlatformList(apiProvider, targetCategoryId).stream()
+        List<PlatformItem> items = invokeProvider(apiProvider, "products", () -> strategy.fetchPlatformList(apiProvider, targetCategoryId)).stream()
                 // Never trust an upstream category filter to be enforced correctly.
                 .filter(item -> StrUtil.isBlank(targetCategoryId)
                         || targetCategoryId.equals(item.getCategoryId()))
@@ -153,7 +155,7 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
     public List<PlatformItem> fetchProviderProducts(Long apiProviderId, String categoryId) {
         ApiProvider apiProvider = requireEnabledProvider(apiProviderId);
         PlatformDockingStrategy strategy = requireStrategy(apiProvider);
-        List<PlatformItem> items = strategy.fetchPlatformList(apiProvider, categoryId).stream()
+        List<PlatformItem> items = invokeProvider(apiProvider, "products", () -> strategy.fetchPlatformList(apiProvider, categoryId)).stream()
                 // Daytime accepts a remote filter parameter, but still enforce it locally.
                 .filter(item -> StrUtil.isBlank(categoryId) || categoryId.equals(item.getCategoryId()))
                 .collect(Collectors.toCollection(ArrayList::new));
@@ -185,7 +187,7 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
         }
 
         // 重新从第三方拉取，商品名称、价格和分类均以后端实时数据为准。
-        List<PlatformItem> selectedItems = new ArrayList<>(strategy.fetchPlatformList(apiProvider).stream()
+        List<PlatformItem> selectedItems = new ArrayList<>(invokeProvider(apiProvider, "products", () -> strategy.fetchPlatformList(apiProvider)).stream()
                 .filter(item -> selectedIds.contains(item.getId()))
                 .filter(item -> StrUtil.isNotBlank(item.getId()))
                 .collect(Collectors.toMap(PlatformItem::getId, Function.identity(),
@@ -208,7 +210,7 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
     public BigDecimal refreshProviderBalance(Long apiProviderId) {
         ApiProvider apiProvider = requireEnabledProvider(apiProviderId);
         PlatformDockingStrategy strategy = requireStrategy(apiProvider);
-        BigDecimal balance = strategy.queryBalance(apiProvider);
+        BigDecimal balance = invokeProvider(apiProvider, "balance", () -> strategy.queryBalance(apiProvider));
         if (balance == null) {
             throw new BusinessException("该接口类型暂不支持余额查询");
         }
@@ -240,7 +242,8 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
         }
 
         ApiProvider apiProvider = requireEnabledProvider(apiProviderId);
-        List<ProviderOrderLog> logs = requireStrategy(apiProvider).fetchOrderLogs(order, apiProvider);
+        List<ProviderOrderLog> logs = invokeProvider(apiProvider, "orderLogs",
+                () -> requireStrategy(apiProvider).fetchOrderLogs(order, apiProvider));
         if (logs == null) {
             throw new BusinessException("该接口类型暂不支持订单日志查询");
         }
@@ -355,13 +358,48 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
         return categoryId;
     }
 
+    /** Keep transport/response classifications while stripping unsafe converter/parser exceptions. */
+    private <T> T invokeProvider(ApiProvider provider, String operation, Supplier<T> action) {
+        long started = System.nanoTime();
+        try {
+            return action.get();
+        } catch (ProviderRequestException ex) {
+            logProviderFailure(provider, operation, ex, started);
+            throw ex;
+        } catch (SafeHttpException ex) {
+            ProviderRequestException failure = new ProviderRequestException(
+                    ProviderRequestException.Reason.valueOf(ex.getReason().name()));
+            logProviderFailure(provider, operation, failure, started);
+            throw failure;
+        } catch (BusinessException ex) {
+            throw ex; // Local, fixed business validations (e.g. missing third-party order ID).
+        } catch (RuntimeException ex) {
+            ProviderRequestException failure = new ProviderRequestException(ProviderRequestException.Reason.INVALID_RESPONSE);
+            logProviderFailure(provider, operation, failure, started);
+            throw failure;
+        }
+    }
+
+    private void logProviderFailure(ApiProvider provider, String operation, ProviderRequestException error, long started) {
+        String host = "unknown";
+        try {
+            String value = URI.create(provider.getApiUrl()).getHost();
+            if (value != null && value.matches("[A-Za-z0-9.-]{1,253}")) host = value;
+        } catch (RuntimeException ignored) { /* Never log the original URI. */ }
+        String type = provider.getProviderType();
+        if (type == null || !type.matches("[A-Za-z0-9_-]{1,50}")) type = "unknown";
+        log.warn("Provider operation failed: providerId={}, providerType={}, operation={}, normalizedHost={}, reason={}, errorId={}, durationMs={}",
+                provider.getId(), type, operation, host, error.getReason(), error.getErrorId(),
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
+    }
+
     private ApiProvider requireEnabledProvider(Long apiProviderId) {
         ApiProvider apiProvider = apiProviderService.loadDecrypted(apiProviderId);
         if (apiProvider == null) {
             throw new BusinessException("API配置不存在");
         }
         if (!Integer.valueOf(1).equals(apiProvider.getStatus())) {
-            throw new BusinessException("API接口已禁用");
+            throw new ProviderRequestException(ProviderRequestException.Reason.PROVIDER_NOT_ACTIVE);
         }
         return apiProvider;
     }
@@ -387,10 +425,7 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> batchSyncOrderProgress(Long apiProviderId, Long timestampSeconds, Integer offset) {
-        ApiProvider apiProvider = apiProviderService.loadDecrypted(apiProviderId);
-        if (apiProvider == null) {
-            throw new BusinessException("API配置不存在");
-        }
+        ApiProvider apiProvider = requireEnabledProvider(apiProviderId);
 
         PlatformDockingStrategy strategy = strategyFactory.getStrategy(apiProvider.getProviderType());
         if (strategy == null) {
@@ -418,8 +453,9 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
         
         // 模拟 benztb.php 的 while(true) 循环逻辑（第29-78行）
         while (true) {
-            List<OrderProgressResult> results = strategy.batchQueryOrderProgress(
-                    apiProvider, bufferedTimestamp, currentOffset);
+            int requestedOffset = currentOffset;
+            List<OrderProgressResult> results = invokeProvider(apiProvider, "batchProgress",
+                    () -> strategy.batchQueryOrderProgress(apiProvider, bufferedTimestamp, requestedOffset));
 
             int batchSize = results.size();
             log.info("批量查询返回 {} 条订单，offset={}", batchSize, currentOffset);
@@ -477,20 +513,13 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
 
     /**
      * 将调用方传入的配置统一替换为数据库中的解密副本。
-     * 临时/测试配置没有 ID 时保持原对象，避免破坏现有扩展调用。
+     * 业务调用不能用调用方传入的临时配置绕过启用状态；连接测试有独立的只读路径。
      */
     private ApiProvider resolveDecryptedProvider(ApiProvider apiProvider) {
-        if (apiProvider == null) {
+        if (apiProvider == null || apiProvider.getId() == null) {
             throw new BusinessException("API配置不存在");
         }
-        if (apiProvider.getId() == null) {
-            return apiProvider;
-        }
-        ApiProvider decrypted = apiProviderService.loadDecrypted(apiProvider.getId());
-        if (decrypted == null) {
-            throw new BusinessException("API配置不存在");
-        }
-        return decrypted;
+        return requireEnabledProvider(apiProvider.getId());
     }
 
     /** 同步分类（参考 benzcron.php 的分类同步逻辑）
