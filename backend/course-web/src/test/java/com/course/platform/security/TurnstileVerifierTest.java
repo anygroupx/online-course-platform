@@ -46,7 +46,16 @@ class TurnstileVerifierTest {
     void validatesSuccessHostnameAndAction() {
         SafeHttpClient client = mock(SafeHttpClient.class);
         when(client.postForm(any(), anyMap(), anyMap(), any())).thenReturn(new SafeHttpResponse(200, """
-                {"success":true,"hostname":"course.example.com","action":"login","error-codes":[]}
+                {
+                  "success": true,
+                  "hostname": "course.example.com",
+                  "action": "login",
+                  "error-codes": [],
+                  "messages": [],
+                  "challenge_ts": "2026-09-05T16:02:06.000Z",
+                  "cdata": "login-attempt",
+                  "metadata": {"ephemeral_id":"opaque"}
+                }
                 """, Map.of()));
         TurnstileVerifier verifier = verifier(client, mock(SecurityAuditService.class),
                 true, true, "prod", "course.example.com");

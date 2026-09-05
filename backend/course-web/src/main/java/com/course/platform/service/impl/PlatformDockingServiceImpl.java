@@ -7,6 +7,8 @@ import com.course.platform.domain.dto.DockResult;
 import com.course.platform.domain.dto.OrderProgressResult;
 import com.course.platform.domain.dto.PlatformItem;
 import com.course.platform.domain.dto.QueryCourseRequest;
+import com.course.platform.domain.dto.ProductImportRequest;
+import com.course.platform.domain.dto.ProviderOrderLog;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.entity.CourseOrder;
 import com.course.platform.domain.entity.CoursePlatform;
@@ -25,11 +27,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import cn.hutool.core.util.StrUtil;
 
 /**
@@ -125,75 +131,179 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
      * @param skipCategoryIds  跳过的分类ID列表（对应 benzcron.php 的 $skipCategories）
      * @return 导入结果
      */
-    public Map<String, Object> importPlatforms(Long apiProviderId, BigDecimal priceMultiplier, 
-                                                String targetCategoryId, Boolean syncCategories, 
-                                                List<String> skipCategoryIds) {
-        ApiProvider apiProvider = apiProviderService.loadDecrypted(apiProviderId);
-        if (apiProvider == null) {
-            throw new BusinessException("API配置不存在");
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> importPlatforms(Long apiProviderId, BigDecimal priceMultiplier,
+                                               String targetCategoryId, Boolean syncCategories,
+                                               List<String> skipCategoryIds) {
+        ApiProvider apiProvider = requireEnabledProvider(apiProviderId);
+        PlatformDockingStrategy strategy = requireStrategy(apiProvider);
+        BigDecimal multiplier = normalizeMultiplier(priceMultiplier);
+
+        List<PlatformItem> items = strategy.fetchPlatformList(apiProvider, targetCategoryId).stream()
+                // Never trust an upstream category filter to be enforced correctly.
+                .filter(item -> StrUtil.isBlank(targetCategoryId)
+                        || targetCategoryId.equals(item.getCategoryId()))
+                .filter(item -> skipCategoryIds == null || !skipCategoryIds.contains(item.getCategoryId()))
+                .toList();
+        return importPlatformItems(apiProviderId, items, multiplier, syncCategories, skipCategoryIds);
+    }
+
+    @Override
+    public List<PlatformItem> fetchProviderProducts(Long apiProviderId, String categoryId) {
+        ApiProvider apiProvider = requireEnabledProvider(apiProviderId);
+        PlatformDockingStrategy strategy = requireStrategy(apiProvider);
+        List<PlatformItem> items = strategy.fetchPlatformList(apiProvider, categoryId).stream()
+                // Daytime accepts a remote filter parameter, but still enforce it locally.
+                .filter(item -> StrUtil.isBlank(categoryId) || categoryId.equals(item.getCategoryId()))
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        Map<String, CoursePlatform> importedByRemoteId = coursePlatformMapper.selectList(
+                        new QueryWrapper<CoursePlatform>().eq("dock_api_id", apiProviderId))
+                .stream()
+                .filter(platform -> StrUtil.isNotBlank(platform.getDockParam()))
+                .collect(Collectors.toMap(CoursePlatform::getDockParam, Function.identity(), (left, right) -> left));
+
+        for (PlatformItem item : items) {
+            CoursePlatform imported = importedByRemoteId.get(item.getId());
+            item.setImported(imported != null);
+            item.setLocalPlatformId(imported == null ? null : imported.getId());
+        }
+        return items;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> importSelectedProducts(ProductImportRequest request) {
+        ApiProvider apiProvider = requireEnabledProvider(request.getApiProviderId());
+        PlatformDockingStrategy strategy = requireStrategy(apiProvider);
+        Set<String> selectedIds = request.getProductIds().stream()
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.toSet());
+        if (selectedIds.isEmpty()) {
+            throw new BusinessException("请至少选择一个有效商品");
         }
 
-        PlatformDockingStrategy strategy = strategyFactory.getStrategy(apiProvider.getProviderType());
-        if (strategy == null) {
-            throw new BusinessException("不支持的接口类型: " + apiProvider.getProviderType());
+        // 重新从第三方拉取，商品名称、价格和分类均以后端实时数据为准。
+        List<PlatformItem> selectedItems = new ArrayList<>(strategy.fetchPlatformList(apiProvider).stream()
+                .filter(item -> selectedIds.contains(item.getId()))
+                .filter(item -> StrUtil.isNotBlank(item.getId()))
+                .collect(Collectors.toMap(PlatformItem::getId, Function.identity(),
+                        (first, ignored) -> first, LinkedHashMap::new))
+                .values());
+        if (selectedItems.isEmpty()) {
+            throw new BusinessException("所选商品已不存在，请重新查询商品列表");
         }
 
-        List<PlatformItem> items = strategy.fetchPlatformList(apiProvider);
+        Map<String, Object> result = importPlatformItems(
+                request.getApiProviderId(), selectedItems, normalizeMultiplier(request.getPriceMultiplier()),
+                request.getSyncCategories(), null);
+        result.put("requested", selectedIds.size());
+        result.put("missing", Math.max(0, selectedIds.size() - selectedItems.size()));
+        return result;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BigDecimal refreshProviderBalance(Long apiProviderId) {
+        ApiProvider apiProvider = requireEnabledProvider(apiProviderId);
+        PlatformDockingStrategy strategy = requireStrategy(apiProvider);
+        BigDecimal balance = strategy.queryBalance(apiProvider);
+        if (balance == null) {
+            throw new BusinessException("该接口类型暂不支持余额查询");
+        }
+
+        ApiProvider update = new ApiProvider();
+        update.setId(apiProviderId);
+        update.setBalance(balance);
+        apiProviderMapper.updateById(update);
+        return balance;
+    }
+
+    @Override
+    public List<ProviderOrderLog> fetchOrderLogs(Long orderId) {
+        CourseOrder order = courseOrderMapper.selectById(orderId);
+        if (order == null) {
+            throw new BusinessException("订单不存在");
+        }
+        if (Integer.valueOf(1).equals(order.getIsSelfOperated())) {
+            throw new BusinessException("自营订单没有第三方订单日志");
+        }
+
+        Long apiProviderId = order.getApiProviderId();
+        if (apiProviderId == null && order.getPlatformId() != null) {
+            CoursePlatform platform = coursePlatformMapper.selectById(order.getPlatformId());
+            apiProviderId = platform == null ? null : platform.getDockApiId();
+        }
+        if (apiProviderId == null) {
+            throw new BusinessException("订单未配置第三方接口");
+        }
+
+        ApiProvider apiProvider = requireEnabledProvider(apiProviderId);
+        List<ProviderOrderLog> logs = requireStrategy(apiProvider).fetchOrderLogs(order, apiProvider);
+        if (logs == null) {
+            throw new BusinessException("该接口类型暂不支持订单日志查询");
+        }
+        return logs;
+    }
+
+    private Map<String, Object> importPlatformItems(Long apiProviderId, List<PlatformItem> items,
+                                                     BigDecimal priceMultiplier, Boolean syncCategories,
+                                                     List<String> skipCategoryIds) {
         int successCount = 0;
         int failCount = 0;
         int updateCount = 0;
         int createCount = 0;
         int categoryCreated = 0;
 
-        // 第一步：同步分类（如果启用）
         if (Boolean.TRUE.equals(syncCategories)) {
             categoryCreated = syncCategories(items, skipCategoryIds);
         }
 
-        // 创建分类缓存，避免重复查询数据库
         Map<String, Long> categoryCache = new HashMap<>();
-
-        // 第二步：同步平台/商品
         for (PlatformItem item : items) {
             try {
-                // 检查是否跳过该分类
+                if (StrUtil.isBlank(item.getId()) || StrUtil.isBlank(item.getName())) {
+                    failCount++;
+                    continue;
+                }
                 if (skipCategoryIds != null && skipCategoryIds.contains(item.getCategoryId())) {
                     continue;
                 }
 
-                // 如果指定了目标分类，只导入该分类下的商品
-                if (StrUtil.isNotBlank(targetCategoryId) && !targetCategoryId.equals(item.getCategoryId())) {
-                    continue;
-                }
-
-                // 使用缓存查找或创建分类（传入apiProviderId用于去重）
-                Long categoryId = getCategoryIdFromCache(item.getCategoryId(), item.getCategoryName(), apiProviderId, categoryCache);
-
-                // Check if exists by dockParam (cid) and dockApiId
+                boolean shouldSyncCategory = Boolean.TRUE.equals(syncCategories);
+                Long categoryId = shouldSyncCategory
+                        ? getCategoryIdFromCache(item.getCategoryId(), item.getCategoryName(),
+                                apiProviderId, categoryCache)
+                        : null;
                 CoursePlatform existing = coursePlatformMapper.selectOne(new QueryWrapper<CoursePlatform>()
                         .eq("dock_param", item.getId())
                         .eq("dock_api_id", apiProviderId));
+                BigDecimal remotePrice = item.getPrice();
+                if (remotePrice == null || remotePrice.compareTo(BigDecimal.ZERO) < 0) {
+                    throw new BusinessException("第三方商品价格缺失或无效");
+                }
+                BigDecimal localPrice = remotePrice.multiply(priceMultiplier);
 
                 if (existing != null) {
-                    // Update
-                    existing.setBasePrice(item.getPrice().multiply(priceMultiplier));
+                    existing.setBasePrice(localPrice);
                     existing.setName(item.getName());
-                    existing.setCategoryId(categoryId);
+                    if (shouldSyncCategory) {
+                        existing.setCategoryId(categoryId);
+                    }
                     existing.setUpdateTime(LocalDateTime.now());
                     if (item.getContent() != null) {
                         existing.setDescription(item.getContent());
                     }
-                    
                     coursePlatformMapper.updateById(existing);
                     updateCount++;
                 } else {
-                    // Create
                     CoursePlatform newPlatform = new CoursePlatform();
                     newPlatform.setName(item.getName());
                     newPlatform.setCategoryId(categoryId);
                     newPlatform.setQueryParam(item.getId());
                     newPlatform.setDockParam(item.getId());
-                    newPlatform.setBasePrice(item.getPrice().multiply(priceMultiplier));
+                    newPlatform.setBasePrice(localPrice);
                     newPlatform.setQueryApiId(apiProviderId);
                     newPlatform.setDockApiId(apiProviderId);
                     newPlatform.setRateType("MULTIPLY");
@@ -204,54 +314,74 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
                     newPlatform.setDescription(item.getContent());
                     newPlatform.setCreateTime(LocalDateTime.now());
                     newPlatform.setUpdateTime(LocalDateTime.now());
-                    
                     coursePlatformMapper.insert(newPlatform);
                     createCount++;
                 }
                 successCount++;
             } catch (Exception e) {
-                log.error("导入平台失败: {}", item.getName(), e);
+                log.error("导入平台失败: remoteId={}, name={}", item.getId(), item.getName(), e);
                 failCount++;
             }
         }
 
-        Map<String, Object> result = new HashMap<>();
+        Map<String, Object> result = new LinkedHashMap<>();
         result.put("total", items.size());
         result.put("success", successCount);
         result.put("fail", failCount);
         result.put("created", createCount);
         result.put("updated", updateCount);
-        if (syncCategories) {
+        if (Boolean.TRUE.equals(syncCategories)) {
             result.put("categoryCreated", categoryCreated);
         }
         return result;
     }
 
     /**
-     * 从缓存中获取分类ID，避免重复查询数据库
+     * 从缓存中获取分类 ID，避免同一批商品重复查询或创建分类。
      */
-    private Long getCategoryIdFromCache(String remoteCategoryId, String categoryName, Long apiProviderId, Map<String, Long> cache) {
+    private Long getCategoryIdFromCache(String remoteCategoryId, String categoryName,
+                                        Long apiProviderId, Map<String, Long> cache) {
         if (StrUtil.isBlank(remoteCategoryId)) {
             return null;
         }
-
-        // 缓存key格式：apiProviderId:remoteCategoryId
         String cacheKey = apiProviderId + ":" + remoteCategoryId;
-        
-        // 先从缓存中查找
         if (cache.containsKey(cacheKey)) {
             return cache.get(cacheKey);
         }
-
-        // 缓存中没有，查询或创建（传入apiProviderId）
-        Long longCategoryId = findOrCreateCategory(remoteCategoryId, categoryName, apiProviderId);
-        
-        // 存入缓存
-        if (longCategoryId != null) {
-            cache.put(cacheKey, longCategoryId);
+        Long categoryId = findOrCreateCategory(remoteCategoryId, categoryName, apiProviderId);
+        if (categoryId != null) {
+            cache.put(cacheKey, categoryId);
         }
+        return categoryId;
+    }
 
-        return longCategoryId;
+    private ApiProvider requireEnabledProvider(Long apiProviderId) {
+        ApiProvider apiProvider = apiProviderService.loadDecrypted(apiProviderId);
+        if (apiProvider == null) {
+            throw new BusinessException("API配置不存在");
+        }
+        if (!Integer.valueOf(1).equals(apiProvider.getStatus())) {
+            throw new BusinessException("API接口已禁用");
+        }
+        return apiProvider;
+    }
+
+    private PlatformDockingStrategy requireStrategy(ApiProvider apiProvider) {
+        PlatformDockingStrategy strategy = strategyFactory.getStrategy(apiProvider.getProviderType());
+        if (strategy == null) {
+            throw new BusinessException("不支持的接口类型: " + apiProvider.getProviderType());
+        }
+        return strategy;
+    }
+
+    private BigDecimal normalizeMultiplier(BigDecimal priceMultiplier) {
+        if (priceMultiplier == null) {
+            return BigDecimal.ONE;
+        }
+        if (priceMultiplier.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("价格倍率必须大于0");
+        }
+        return priceMultiplier;
     }
 
     @Override

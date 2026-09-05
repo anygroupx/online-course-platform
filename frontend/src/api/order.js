@@ -280,3 +280,13 @@ export function exportOrders(data) {
         : "json",
   });
 }
+
+/**
+ * 获取第三方订单日志（管理员）
+ */
+export function getProviderOrderLogs(id) {
+  return request({
+    url: `/admin/orders/${id}/provider-logs`,
+    method: "get",
+  });
+}

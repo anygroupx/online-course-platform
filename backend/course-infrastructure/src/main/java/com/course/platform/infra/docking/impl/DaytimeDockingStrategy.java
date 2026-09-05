@@ -9,6 +9,7 @@ import com.course.platform.common.exception.BusinessException;
 import com.course.platform.domain.dto.DockResult;
 import com.course.platform.domain.dto.OrderProgressResult;
 import com.course.platform.domain.dto.PlatformItem;
+import com.course.platform.domain.dto.ProviderOrderLog;
 import com.course.platform.domain.dto.QueryCourseRequest;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.entity.CourseOrder;
@@ -164,30 +165,93 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
 
     @Override
     public List<PlatformItem> fetchPlatformList(ApiProvider apiProvider) {
+        return fetchPlatformList(apiProvider, null);
+    }
+
+    @Override
+    public List<PlatformItem> fetchPlatformList(ApiProvider apiProvider, String categoryId) {
         Map<String, Object> params = authParams(apiProvider);
+        if (StrUtil.isNotBlank(categoryId)) {
+            params.put("fenlei", categoryId);
+        }
         JSONObject json = parseResponse(post(apiProvider, "getclass", "商品列表", params), "商品列表");
         if (isCode(json, -1)) {
             throw new BusinessException("获取商品列表失败: " + message(json, "第三方接口返回失败"));
         }
 
         List<PlatformItem> items = new ArrayList<>();
-        JSONArray data = json.getJSONArray("data");
+        JSONArray data = responseArray(json, "data", "list", "class");
         if (data == null) {
             return items;
         }
         for (int i = 0; i < data.size(); i++) {
             JSONObject item = data.getJSONObject(i);
+            String id = firstNonBlank(item.getStr("cid"), item.getStr("id"), item.getStr("kcid"));
+            String name = firstNonBlank(item.getStr("name"), item.getStr("kcname"), item.getStr("title"));
+            if (StrUtil.isBlank(id) || StrUtil.isBlank(name)) {
+                continue;
+            }
             items.add(PlatformItem.builder()
-                    .id(firstNonBlank(item.getStr("cid"), item.getStr("id")))
-                    .name(firstNonBlank(item.getStr("name"), item.getStr("kcname")))
-                    .price(item.getBigDecimal("price", BigDecimal.ZERO))
-                    .categoryId(item.getStr("fenlei"))
-                    .categoryName(firstNonBlank(item.getStr("category_name"), item.getStr("fenleiname")))
+                    .id(id)
+                    .name(name)
+                    .price(firstBigDecimal(item, null, "price", "money", "cost"))
+                    .categoryId(firstNonBlank(item.getStr("fenlei"), item.getStr("category_id")))
+                    .categoryName(firstNonBlank(item.getStr("category_name"), item.getStr("fenleiname"), item.getStr("fenlei_name")))
                     .type(getProviderType())
-                    .content(item.getStr("content"))
+                    .content(firstNonBlank(item.getStr("content"), item.getStr("description"), item.getStr("desc")))
                     .build());
         }
         return items;
+    }
+
+    @Override
+    public BigDecimal queryBalance(ApiProvider apiProvider) {
+        JSONObject json = parseResponse(post(apiProvider, "getmoney", "余额查询", authParams(apiProvider)), "余额查询");
+        if (isCode(json, -1)) {
+            throw new BusinessException("余额查询失败: " + message(json, "第三方接口返回失败"));
+        }
+
+        BigDecimal balance = firstBigDecimal(json, null, "money", "balance", "amount", "je");
+        Object data = json.get("data");
+        if (balance == null && data instanceof JSONObject dataObject) {
+            balance = firstBigDecimal(dataObject, null, "money", "balance", "amount", "je");
+        } else if (balance == null && data != null) {
+            balance = toBigDecimal(data);
+        }
+        if (balance == null) {
+            throw new BusinessException("余额查询成功，但响应中没有余额字段");
+        }
+        return balance;
+    }
+
+    @Override
+    public List<ProviderOrderLog> fetchOrderLogs(CourseOrder order, ApiProvider apiProvider) {
+        String thirdOrderId = requireThirdOrderId(order, "查询订单日志");
+        Map<String, Object> params = authParams(apiProvider);
+        params.put("oid", thirdOrderId);
+
+        JSONObject json = parseResponse(post(apiProvider, "getOrderLogs", "订单日志", params), "订单日志");
+        if (isCode(json, -1)) {
+            throw new BusinessException("订单日志查询失败: " + message(json, "第三方接口返回失败"));
+        }
+
+        JSONArray data = responseArray(json, "data", "logs", "list");
+        List<ProviderOrderLog> logs = new ArrayList<>();
+        if (data == null) {
+            return logs;
+        }
+        for (int i = 0; i < data.size(); i++) {
+            JSONObject item = data.getJSONObject(i);
+            logs.add(ProviderOrderLog.builder()
+                    .id(firstNonBlank(item.getStr("id"), item.getStr("log_id")))
+                    .title(firstNonBlank(item.getStr("title"), item.getStr("type"), item.getStr("action")))
+                    .content(firstNonBlank(item.getStr("content"), item.getStr("message"), item.getStr("msg"), item.getStr("text"), item.getStr("log")))
+                    .status(firstNonBlank(item.getStr("status"), item.getStr("state")))
+                    .operator(firstNonBlank(item.getStr("operator"), item.getStr("admin"), item.getStr("username"), item.getStr("name")))
+                    .createTime(firstNonBlank(item.getStr("create_time"), item.getStr("createTime"), item.getStr("addtime"), item.getStr("time")))
+                    .build());
+        }
+        return logs;
     }
 
     protected Map<String, Object> authParams(ApiProvider apiProvider) {
@@ -220,6 +284,46 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
             return JSONUtil.parseObj(response);
         } catch (Exception e) {
             throw new BusinessException(operation + "失败: 第三方接口返回格式错误");
+        }
+    }
+
+    private JSONArray responseArray(JSONObject json, String... keys) {
+        for (String key : keys) {
+            Object value = json.get(key);
+            if (value instanceof JSONArray array) {
+                return array;
+            }
+            if (value instanceof JSONObject object) {
+                for (String nestedKey : new String[]{"list", "data", "logs"}) {
+                    Object nested = object.get(nestedKey);
+                    if (nested instanceof JSONArray array) {
+                        return array;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private BigDecimal firstBigDecimal(JSONObject json, BigDecimal defaultValue, String... keys) {
+        for (String key : keys) {
+            BigDecimal value = toBigDecimal(json.get(key));
+            if (value != null) {
+                return value;
+            }
+        }
+        return defaultValue;
+    }
+
+    private BigDecimal toBigDecimal(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            String normalized = String.valueOf(value).replace(",", "").replace("¥", "").trim();
+            return StrUtil.isBlank(normalized) ? null : new BigDecimal(normalized);
+        } catch (NumberFormatException ignored) {
+            return null;
         }
     }
 

@@ -353,107 +353,140 @@
       </template>
     </el-dialog>
 
-    <!-- 导入对话框 -->
+    <!-- 商品查询与选择导入对话框 -->
     <el-dialog
       v-model="importDialogVisible"
-      title="一键导入平台/课程"
-      width="500px"
+      title="查询并导入第三方商品"
+      width="min(1000px, 96vw)"
       append-to-body
+      destroy-on-close
     >
-      <el-form :model="importForm" label-width="120px" status-icon>
-        <el-form-item label="API接口">
-          <el-select
-            v-model="importForm.apiProviderId"
-            placeholder="请选择API接口"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="item in apiProviders"
-              :key="item.id"
-              :label="item.name"
-              :value="item.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="价格倍率">
-          <el-input-number
-            v-model="importForm.priceMultiplier"
-            :min="0.1"
-            :step="0.1"
-            :precision="2"
-          />
-          <div
-            style="
-              font-size: 12px;
-              color: var(--text-secondary);
-              margin-top: 5px;
-            "
-          >
-            导入的基础价格 = 原价 * 倍率
-          </div>
-        </el-form-item>
-        <el-form-item label="指定分类ID">
-          <el-input
-            v-model="importForm.targetCategoryId"
-            placeholder="输入远程平台的分类ID（可选）"
-            clearable
-          />
-          <div
-            style="
-              font-size: 12px;
-              color: var(--text-secondary);
-              margin-top: 5px;
-            "
-          >
-            输入后只导入该分类下的课程（需精确匹配远程分类ID）
-          </div>
-        </el-form-item>
-        <el-form-item label="同步分类">
-          <el-switch
-            v-model="importForm.syncCategories"
-            :active-value="true"
-            :inactive-value="false"
-          />
-          <span
-            style="
-              font-size: 12px;
-              color: var(--text-secondary);
-              margin-left: 10px;
-            "
-          >
-            启用后自动创建远程分类到本地数据库
-          </span>
-        </el-form-item>
-        <el-form-item label="排除分类">
-          <el-select
-            v-model="importForm.skipCategoryIds"
-            placeholder="输入要排除的分类ID（多个）"
-            multiple
-            filterable
-            allow-create
-            style="width: 100%"
-          >
-          </el-select>
-          <div
-            style="
-              font-size: 12px;
-              color: var(--text-secondary);
-              margin-top: 5px;
-            "
-          >
-            输入分类ID后按回车添加，排除的分类下的课程将不会被导入
-          </div>
-        </el-form-item>
+      <el-form :model="importForm" label-width="100px" class="import-query-form">
+        <el-row :gutter="16">
+          <el-col :xs="24" :md="10">
+            <el-form-item label="API接口" required>
+              <el-select
+                v-model="importForm.apiProviderId"
+                placeholder="请选择API接口"
+                style="width: 100%"
+                @change="handleImportProviderChange"
+              >
+                <el-option
+                  v-for="item in apiProviders"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :md="8">
+            <el-form-item label="远程分类ID">
+              <el-input
+                v-model="importForm.categoryId"
+                placeholder="可选，不传查询全部"
+                clearable
+                @keyup.enter="queryImportProducts"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :md="6">
+            <el-form-item label-width="0">
+              <el-button
+                type="primary"
+                :icon="Search"
+                :loading="productLoading"
+                style="width: 100%"
+                @click="queryImportProducts"
+              >
+                查询商品
+              </el-button>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :xs="24" :md="8">
+            <el-form-item label="价格倍率">
+              <el-input-number
+                v-model="importForm.priceMultiplier"
+                :min="0.01"
+                :step="0.1"
+                :precision="2"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :md="8">
+            <el-form-item label="同步分类">
+              <el-switch v-model="importForm.syncCategories" />
+              <span class="form-tip">自动创建远程分类</span>
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :md="8">
+            <el-form-item label="筛选商品">
+              <el-input
+                v-model="productKeyword"
+                placeholder="商品ID、名称或分类"
+                clearable
+                :disabled="products.length === 0"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
       </el-form>
+
+      <div class="import-summary">
+        <span>查询到 {{ products.length }} 个商品</span>
+        <span>已选择 {{ selectedProducts.length }} 个</span>
+        <span v-if="products.length">
+          已导入 {{ products.filter((item) => item.imported).length }} 个（再次导入将更新）
+        </span>
+      </div>
+
+      <el-table
+        ref="productTableRef"
+        v-loading="productLoading"
+        :data="filteredProducts"
+        row-key="id"
+        max-height="460"
+        empty-text="请先选择接口并查询商品"
+        @selection-change="handleProductSelectionChange"
+      >
+        <el-table-column type="selection" width="48" reserve-selection />
+        <el-table-column prop="id" label="商品ID" width="120" show-overflow-tooltip />
+        <el-table-column prop="name" label="商品名称" min-width="210" show-overflow-tooltip />
+        <el-table-column label="分类" min-width="150" show-overflow-tooltip>
+          <template #default="scope">
+            {{ scope.row.categoryName || "未分类" }}
+            <span v-if="scope.row.categoryId" class="category-id">({{ scope.row.categoryId }})</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="上游价格" width="105" align="right">
+          <template #default="scope">¥{{ formatProductPrice(scope.row.price) }}</template>
+        </el-table-column>
+        <el-table-column label="导入价格" width="105" align="right">
+          <template #default="scope">
+            ¥{{ formatProductPrice(Number(scope.row.price || 0) * Number(importForm.priceMultiplier || 1)) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="105" align="center">
+          <template #default="scope">
+            <el-tag v-if="scope.row.imported" type="warning" effect="plain">已导入/更新</el-tag>
+            <el-tag v-else type="success" effect="plain">新商品</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+
       <template #footer>
         <el-button @click="importDialogVisible = false">取消</el-button>
         <el-button
           type="primary"
           :icon="Download"
           :loading="importLoading"
+          :disabled="selectedProducts.length === 0"
           @click="submitImport"
         >
-          开始导入
+          导入选中商品（{{ selectedProducts.length }}）
         </el-button>
       </template>
     </el-dialog>
@@ -487,7 +520,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed } from "vue";
 import {
   Plus,
   Download,
@@ -506,6 +539,8 @@ import {
   createPlatform,
   updatePlatform,
   deletePlatform,
+  fetchProviderProducts,
+  importSelectedProducts,
 } from "@/api/course";
 import axios from "@/utils/request";
 import { useResponsive } from "@/composables/useResponsive";
@@ -542,12 +577,26 @@ const form = ref({
 
 const importDialogVisible = ref(false);
 const importLoading = ref(false);
+const productLoading = ref(false);
+const products = ref([]);
+const selectedProducts = ref([]);
+const productKeyword = ref("");
+const productTableRef = ref(null);
+let productQueryVersion = 0;
 const importForm = ref({
   apiProviderId: null,
+  categoryId: "",
   priceMultiplier: 1.0,
-  targetCategoryId: null,
   syncCategories: true,
-  skipCategoryIds: [],
+});
+const filteredProducts = computed(() => {
+  const keyword = productKeyword.value.trim().toLowerCase();
+  if (!keyword) return products.value;
+  return products.value.filter((item) =>
+    [item.id, item.name, item.categoryId, item.categoryName]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(keyword))
+  );
 });
 
 // 分类管理相关
@@ -894,62 +943,95 @@ const handleDelete = async (row) => {
   }
 };
 
+const resetImportProducts = () => {
+  products.value = [];
+  selectedProducts.value = [];
+  productKeyword.value = "";
+  productTableRef.value?.clearSelection();
+};
+
 const handleImport = () => {
   importForm.value = {
     apiProviderId: null,
+    categoryId: "",
     priceMultiplier: 1.0,
-    targetCategoryId: null,
     syncCategories: true,
-    skipCategoryIds: [],
   };
+  resetImportProducts();
   importDialogVisible.value = true;
 };
 
-const submitImport = async () => {
+const handleImportProviderChange = () => {
+  productQueryVersion += 1;
+  productLoading.value = false;
+  resetImportProducts();
+};
+
+const queryImportProducts = async () => {
   if (!importForm.value.apiProviderId) {
     ElMessage.warning("请选择API接口");
     return;
   }
-  importLoading.value = true;
+  const providerId = importForm.value.apiProviderId;
+  const queryVersion = ++productQueryVersion;
+  productLoading.value = true;
+  resetImportProducts();
   try {
-    const params = {
-      apiProviderId: importForm.value.apiProviderId,
-      priceMultiplier: importForm.value.priceMultiplier,
-      syncCategories: importForm.value.syncCategories,
-    };
-    if (importForm.value.targetCategoryId) {
-      params.targetCategoryId = importForm.value.targetCategoryId;
+    const params = { apiProviderId: providerId };
+    if (importForm.value.categoryId?.trim()) {
+      params.categoryId = importForm.value.categoryId.trim();
     }
-    if (
-      importForm.value.skipCategoryIds &&
-      importForm.value.skipCategoryIds.length > 0
-    ) {
-      params.skipCategoryIds = importForm.value.skipCategoryIds;
-    }
-
-    const res = await axios.post("/admin/docking/import-platforms", null, {
-      params,
-      timeout: 120000,
-    });
-
-    if (res.code === 1) {
-      let message = `导入成功: 总数${res.data.total}, 成功${res.data.success}, 失败${res.data.fail}`;
-      if (res.data.created !== undefined) {
-        message += `, 新建${res.data.created}, 更新${res.data.updated}`;
-      }
-      if (res.data.categoryCreated !== undefined) {
-        message += `, 创建分类${res.data.categoryCreated}个`;
-      }
-      ElMessage.success(message);
-      importDialogVisible.value = false;
-      loadData();
-      loadCategories();
+    const res = await fetchProviderProducts(params);
+    if (queryVersion !== productQueryVersion || importForm.value.apiProviderId !== providerId) return;
+    products.value = res.data || [];
+    if (products.value.length === 0) {
+      ElMessage.info("未查询到商品");
     } else {
-      ElMessage.error(res.msg || "导入失败");
+      ElMessage.success(`查询到 ${products.value.length} 个商品`);
     }
   } catch (error) {
+    if (queryVersion === productQueryVersion) {
+      console.error("查询第三方商品失败:", error);
+    }
+  } finally {
+    if (queryVersion === productQueryVersion) {
+      productLoading.value = false;
+    }
+  }
+};
+
+const handleProductSelectionChange = (rows) => {
+  selectedProducts.value = rows;
+};
+
+const formatProductPrice = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : "0.00";
+};
+
+const submitImport = async () => {
+  if (selectedProducts.value.length === 0) {
+    ElMessage.warning("请至少选择一个商品");
+    return;
+  }
+  importLoading.value = true;
+  try {
+    const res = await importSelectedProducts({
+      apiProviderId: importForm.value.apiProviderId,
+      productIds: selectedProducts.value.map((item) => String(item.id)),
+      priceMultiplier: importForm.value.priceMultiplier,
+      syncCategories: importForm.value.syncCategories,
+    });
+    const data = res.data || {};
+    let message = `导入完成：成功 ${data.success || 0}，新建 ${data.created || 0}，更新 ${data.updated || 0}`;
+    if (data.missing) message += `，失效 ${data.missing}`;
+    if (data.fail) message += `，失败 ${data.fail}`;
+    ElMessage.success(message);
+    importDialogVisible.value = false;
+    loadData();
+    loadCategories();
+  } catch (error) {
     console.error("导入失败:", error);
-    ElMessage.error("导入失败");
   } finally {
     importLoading.value = false;
   }
@@ -1094,6 +1176,36 @@ onMounted(() => {
 @media (min-width: 1200px) {
   .operation-column {
     min-width: 180px;
+  }
+}
+
+.import-query-form {
+  padding: 4px 0 8px;
+}
+
+.form-tip {
+  margin-left: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.import-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.category-id {
+  color: var(--text-placeholder);
+  font-size: 12px;
+}
+
+@media (max-width: 767px) {
+  .import-query-form :deep(.el-form-item) {
+    margin-bottom: 12px;
   }
 }
 </style>

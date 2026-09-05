@@ -49,4 +49,10 @@ public class PlatformItem {
      * 描述/内容
      */
     private String content;
+
+    /** 是否已经导入到当前系统。 */
+    private Boolean imported;
+
+    /** 已导入时对应的本地课程平台ID。 */
+    private Long localPlatformId;
 }

@@ -3,6 +3,7 @@ package com.course.platform.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.course.platform.application.service.platform.ApiProviderService;
+import com.course.platform.application.service.platform.PlatformDockingService;
 import com.course.platform.application.service.support.OperationLogService;
 import com.course.platform.common.result.Result;
 import com.course.platform.domain.entity.ApiProvider;
@@ -17,6 +18,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+
 /**
  * 第三方API接口管理控制器
  */
@@ -29,6 +32,7 @@ public class ApiProviderController {
 
     private final ApiProviderService apiProviderService;
     private final OperationLogService operationLogService;
+    private final PlatformDockingService platformDockingService;
 
     private void checkAdmin(Long userId) {
         SecurityUtils.requireAuthority("api-provider:update");
@@ -68,6 +72,17 @@ public class ApiProviderController {
         operationLogService.log(userId, "删除API接口",
                 "删除API接口ID：" + id, null, null);
         return Result.success("API接口删除成功");
+    }
+
+    @Operation(summary = "查询接口余额", description = "调用第三方余额接口并保存最新余额")
+    @PostMapping("/{id}/balance")
+    public Result<BigDecimal> refreshBalance(@PathVariable Long id, Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        checkAdmin(userId);
+        BigDecimal balance = platformDockingService.refreshProviderBalance(id);
+        operationLogService.log(userId, "查询API接口余额",
+                "查询API接口余额：ID=" + id + "，余额=" + balance, null, null);
+        return Result.success("余额查询成功", balance);
     }
 
     @Operation(summary = "查询API接口列表", description = "分页查询API接口")

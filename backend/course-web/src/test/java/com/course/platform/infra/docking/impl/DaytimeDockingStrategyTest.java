@@ -3,6 +3,8 @@ package com.course.platform.infra.docking.impl;
 import com.course.platform.common.constant.Constants;
 import com.course.platform.domain.dto.DockResult;
 import com.course.platform.domain.dto.OrderProgressResult;
+import com.course.platform.domain.dto.PlatformItem;
+import com.course.platform.domain.dto.ProviderOrderLog;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.entity.CourseOrder;
 import com.course.platform.domain.entity.CoursePlatform;
@@ -12,6 +14,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -127,4 +131,64 @@ class DaytimeDockingStrategyTest {
         assertFalse(captor.getValue().containsKey("yid"));
         assertTrue(result.isSuccess());
     }
+
+    @Test
+    @DisplayName("商品列表查询应发送分类参数并归一化商品字段")
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void fetchPlatformList_shouldUseCategoryAndNormalizeProducts() {
+        when(apiHttpClient.postForString(eq("https://daytime.example/api.php?act=getclass"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":[{\"cid\":\"88\",\"name\":\"高等数学\",\"money\":\"12.50\",\"fenlei\":\"3\",\"fenleiname\":\"大学课程\"}]}");
+
+        List<PlatformItem> items = strategy.fetchPlatformList(provider, "3");
+
+        ArgumentCaptor<Map> captor = ArgumentCaptor.forClass(Map.class);
+        verify(apiHttpClient).postForString(eq("https://daytime.example/api.php?act=getclass"), captor.capture());
+        assertEquals("provider-uid", captor.getValue().get("uid"));
+        assertEquals("provider-key", captor.getValue().get("key"));
+        assertEquals("3", captor.getValue().get("fenlei"));
+        assertEquals(1, items.size());
+        assertEquals("88", items.get(0).getId());
+        assertEquals("高等数学", items.get(0).getName());
+        assertEquals(new BigDecimal("12.50"), items.get(0).getPrice());
+        assertEquals("大学课程", items.get(0).getCategoryName());
+    }
+
+    @Test
+    @DisplayName("余额查询应调用 getmoney 并解析嵌套余额")
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void queryBalance_shouldUseCredentialsAndParseBalance() {
+        when(apiHttpClient.postForString(eq("https://daytime.example/api.php?act=getmoney"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":{\"balance\":\"1,234.56\"}}");
+
+        BigDecimal balance = strategy.queryBalance(provider);
+
+        ArgumentCaptor<Map> captor = ArgumentCaptor.forClass(Map.class);
+        verify(apiHttpClient).postForString(eq("https://daytime.example/api.php?act=getmoney"), captor.capture());
+        assertEquals("provider-uid", captor.getValue().get("uid"));
+        assertEquals("provider-key", captor.getValue().get("key"));
+        assertEquals(new BigDecimal("1234.56"), balance);
+    }
+
+    @Test
+    @DisplayName("订单日志应使用第三方订单号并归一化日志字段")
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void fetchOrderLogs_shouldUseRemoteOrderIdAndNormalizeLogs() {
+        when(apiHttpClient.postForString(eq("https://daytime.example/api.php?act=getOrderLogs"), anyMap()))
+                .thenReturn("{\"code\":1,\"logs\":[{\"log_id\":\"9\",\"action\":\"同步进度\",\"msg\":\"进度更新为50%\",\"state\":\"成功\",\"admin\":\"system\",\"addtime\":\"2026-09-05 10:00:00\"}]}");
+
+        List<ProviderOrderLog> logs = strategy.fetchOrderLogs(order, provider);
+
+        ArgumentCaptor<Map> captor = ArgumentCaptor.forClass(Map.class);
+        verify(apiHttpClient).postForString(eq("https://daytime.example/api.php?act=getOrderLogs"), captor.capture());
+        assertEquals("third-123", captor.getValue().get("oid"));
+        assertEquals(1, logs.size());
+        ProviderOrderLog log = logs.get(0);
+        assertEquals("9", log.getId());
+        assertEquals("同步进度", log.getTitle());
+        assertEquals("进度更新为50%", log.getContent());
+        assertEquals("成功", log.getStatus());
+        assertEquals("system", log.getOperator());
+        assertEquals("2026-09-05 10:00:00", log.getCreateTime());
+    }
+
 }

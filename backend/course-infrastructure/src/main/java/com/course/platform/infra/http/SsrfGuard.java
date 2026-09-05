@@ -89,8 +89,7 @@ public class SsrfGuard {
         Future<List<InetAddress>> pending = null;
         try {
             pending = DNS_EXECUTOR.submit(() -> resolver.resolve(host));
-            return pending.get(Math.max(1, Math.min(policy.connectTimeout().toMillis(),
-                    policy.callTimeout().toMillis())), TimeUnit.MILLISECONDS);
+            return pending.get(Math.max(1, policy.callTimeout().toMillis()), TimeUnit.MILLISECONDS);
         } catch (TimeoutException ex) {
             throw new SafeHttpException(SafeHttpException.Reason.TIMEOUT);
         } catch (InterruptedException ex) {
