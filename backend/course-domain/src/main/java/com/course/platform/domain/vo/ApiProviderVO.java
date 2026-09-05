@@ -24,6 +24,11 @@ public class ApiProviderVO {
     private BigDecimal balance;
     private Long lastSyncTime;
     private Integer status;
+    private LocalDateTime verifiedAt;
+    private Long verifiedBy;
+    private LocalDateTime checkedAt;
+    private String lastCheckReason;
+    private String lastCheckErrorId;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

@@ -20,6 +20,10 @@ public class ApiProvider implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
+    public static final int STATUS_DISABLED = 0;
+    public static final int STATUS_ACTIVE = 1;
+    public static final int STATUS_PENDING = 2;
+
     /**
      * 接口ID
      */
@@ -91,10 +95,35 @@ public class ApiProvider implements Serializable {
     private Long lastSyncTime;
 
     /**
-     * 状态：0-禁用 1-正常
+     * 状态：0-禁用 1-已启用 2-待验证/待启用
      */
     @TableField("status")
     private Integer status;
+
+    /** Incremented for configuration/status changes to prevent stale test results authorizing new targets. */
+    @TableField("config_version")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private Long configVersion;
+
+    @TableField("verified_at")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private LocalDateTime verifiedAt;
+
+    @TableField("verified_by")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private Long verifiedBy;
+
+    @TableField("checked_at")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private LocalDateTime checkedAt;
+
+    @TableField("last_check_reason")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private String lastCheckReason;
+
+    @TableField("last_check_error_id")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private String lastCheckErrorId;
 
     /**
      * 创建时间

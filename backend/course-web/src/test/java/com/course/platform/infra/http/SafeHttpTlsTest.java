@@ -43,7 +43,7 @@ class SafeHttpTlsTest {
             var policy=new OutboundRequestPolicy("tls-test",Set.of("pinned.invalid"),Set.of(),Set.of(server.getAddress().getPort()),1024,
                     java.time.Duration.ofSeconds(3),java.time.Duration.ofSeconds(3),java.time.Duration.ofSeconds(5));
             var ex=assertThrows(SafeHttpException.class,()->new SafeHttpClient(guard).get(uri,Map.of(),policy));
-            assertEquals(SafeHttpException.Reason.NETWORK_FAILURE,ex.getReason());
+            assertEquals(SafeHttpException.Reason.TLS_FAILURE,ex.getReason());
             assertNull(ex.getCause()); assertFalse(ex.toString().contains("secret-token"));
         } finally {server.stop(0);}
     }

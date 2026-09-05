@@ -2,7 +2,8 @@ package com.course.platform.infra.docking.impl;
 
 import cn.hutool.core.util.URLUtil;
 import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
+import com.course.platform.infra.docking.ProviderResponseParser;
+import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.infra.external.ApiHttpClient;
 import com.course.platform.domain.dto.DockResult;
 import com.course.platform.domain.dto.OrderProgressResult;
@@ -70,15 +71,15 @@ public class IkunDockingStrategy implements PlatformDockingStrategy {
         // 检查 ApiHttpClient
         // 如果没有 get 方法，我需要去添加。
         // 先写在这里，等会去检查 ApiHttpClient。
-        String response = apiHttpClient.getForString(url, null); 
+        String response = apiHttpClient.getForString(apiProvider, url, null);
         log.debug("Ikun下单响应已接收: length={}", response == null ? 0 : response.length());
 
-        JSONObject json = JSONUtil.parseObj(response);
+        JSONObject json = ProviderResponseParser.parseObject(response);
         if (json.getInt("code") == 1) {
             String thirdOrderId = json.getStr("order_token");
             return DockResult.success("下单成功", thirdOrderId);
         } else {
-            return DockResult.fail(json.getStr("msg"));
+            return DockResult.fail(ProviderRequestException.PUBLIC_MESSAGE);
         }
     }
 
@@ -92,6 +93,11 @@ public class IkunDockingStrategy implements PlatformDockingStrategy {
     public DockResult retryOrder(CourseOrder order, CoursePlatform platform, ApiProvider apiProvider) {
         // 复用Benz逻辑
         return new BenzDockingStrategy(apiHttpClient).retryOrder(order, platform, apiProvider);
+    }
+
+    @Override
+    public void testConnection(ApiProvider apiProvider) {
+        fetchPlatformList(apiProvider);
     }
 
     @Override

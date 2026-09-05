@@ -9,3 +9,21 @@ export function refreshApiProviderBalance(id) {
     method: "post",
   });
 }
+
+/** Test saved credentials with a read-only balance/catalog operation; never auto-enables. */
+export function testApiProviderConnection(id) {
+  return request({
+    url: `/admin/api-providers/${id}/test-connection`,
+    method: "post",
+    // DNS and the bounded HTTP operation both run before the response.
+    timeout: 65000,
+  });
+}
+
+export function updateApiProviderStatus(id, status) {
+  return request({
+    url: `/admin/api-providers/${id}/status`,
+    method: "patch",
+    data: { status },
+  });
+}

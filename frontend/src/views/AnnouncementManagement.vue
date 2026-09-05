@@ -128,7 +128,7 @@
       :title="dialogTitle"
       width="800px"
       :close-on-click-modal="false"
-    >
+     append-to-body>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
         <el-form-item label="公告标题" prop="title">
           <el-input v-model="form.title" placeholder="请输入公告标题" />
@@ -188,7 +188,7 @@
     </el-dialog>
 
     <!-- 查看对话框 -->
-    <el-dialog v-model="viewDialogVisible" title="公告详情" width="600px">
+    <el-dialog v-model="viewDialogVisible" title="公告详情" width="600px" append-to-body>
       <div v-if="currentAnnouncement" class="announcement-detail">
         <h3>{{ currentAnnouncement.title }}</h3>
         <div class="announcement-meta">

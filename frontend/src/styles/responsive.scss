@@ -95,7 +95,7 @@ svg {
     padding-inline: 16px;
   }
 
-  .el-drawer {
+  .el-drawer.rtl, .el-drawer.ltr {
     inline-size: min(88vw, 360px) !important;
     max-inline-size: calc(100vw - var(--safe-area-left));
   }
@@ -131,4 +131,77 @@ svg {
   [role="button"] {
     min-block-size: var(--touch-target-min);
   }
+}
+
+/* Also wrap in narrow desktop/tablet containers beside an expanded sidebar. */
+.el-pagination {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+/* A fixed form width must never push its actions outside an enclosing card. */
+.el-form-item, .el-form-item__content, .el-alert__content { min-inline-size: 0; }
+.el-form-item__content > :where(.el-input, .el-select, .el-date-editor, .el-input-number, .el-textarea) { max-inline-size: 100%; }
+.el-dialog__header, .el-dialog__footer, .el-drawer__header, .el-drawer__footer { flex-shrink: 0; }
+
+/* MessageBox is not an el-dialog: it needs its own short-screen / long-secret bounds. */
+.el-message-box {
+  display: inline-flex;
+  flex-direction: column;
+  max-inline-size: calc(100vw - var(--safe-area-left) - var(--safe-area-right) - 24px);
+  max-block-size: calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom) - 24px);
+  text-align: start;
+  vertical-align: middle;
+}
+.el-message-box__header, .el-message-box__btns { flex-shrink: 0; }
+.el-message-box__content { min-block-size: 0; overflow: auto; }
+.el-message-box__message { overflow-wrap: anywhere; }
+.el-message-box__btns { flex-wrap: wrap; gap: 8px; }
+.el-message-box__btns .el-button + .el-button { margin-inline-start: 0; }
+
+@media (max-width: 767px) {
+  .el-form-item { flex-direction: column; align-items: stretch; }
+  .el-form-item__label { justify-content: flex-start; inline-size: auto !important; height: auto; padding: 0 0 6px; line-height: 1.5; }
+  .el-form-item__content { margin-inline-start: 0 !important; }
+  .el-input__inner, .el-textarea__inner, .el-range-input { font-size: 16px; } /* Avoid iOS focus zoom. */
+  .el-dialog__header { padding-inline-end: 44px; }
+  .el-dialog__title { overflow-wrap: anywhere; }
+  .el-dialog__footer, .dialog-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .el-dialog__footer .el-button + .el-button { margin-inline-start: 0; }
+  .el-dialog__footer .el-button { white-space: normal; height: auto; padding-block: 10px; }
+  .el-message-box__btns .el-button { flex: 1 1 auto; height: auto; white-space: normal; padding-block: 10px; }
+
+  /* Date range panels otherwise remain 646px wide even when their input is responsive. */
+  /* A tall calendar cannot fit above/below its input on a phone: use a bounded sheet. */
+  .el-picker__popper {
+    position: fixed !important;
+    inset: auto !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    max-inline-size: calc(100vw - var(--safe-area-left) - var(--safe-area-right) - 24px);
+    max-block-size: calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom) - 24px);
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .el-picker__popper .el-popper__arrow { display: none; }
+  .el-date-range-picker, .el-date-picker {
+    max-inline-size: calc(100vw - var(--safe-area-left) - var(--safe-area-right) - 26px);
+    max-block-size: calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom) - 26px);
+    display: flex;
+    flex-direction: column;
+  }
+  .el-picker-panel__body-wrapper { display: flex; flex-direction: column; min-block-size: 0; overflow: auto; }
+  .el-picker-panel__sidebar { position: static; inline-size: auto; display: flex; flex-wrap: wrap; }
+  .el-picker-panel__sidebar + .el-picker-panel__body { margin-inline-start: 0; }
+  .el-date-range-picker__body { display: flex; flex-direction: column; max-block-size: calc(100dvh - 180px); overflow: auto; }
+  .el-date-range-picker__content { float: none; inline-size: 100%; border: 0; padding: 10px; }
+  .el-date-range-picker__time-header { display: flex; flex-wrap: wrap; }
+  .el-date-range-picker__time-header > .el-icon { display: none; }
+  .el-date-range-picker__editors-wrap { inline-size: 100%; }
+  .el-date-picker .el-picker-panel__content { inline-size: auto; margin: 10px; }
+  .el-date-picker__time-header { flex-wrap: wrap; }
+  .el-picker-panel__footer { flex-shrink: 0; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 }

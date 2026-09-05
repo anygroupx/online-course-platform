@@ -190,6 +190,7 @@ public class SecurityConfig {
 
         // 允许的请求头
         configuration.setAllowedHeaders(List.of("*"));
+        configuration.setExposedHeaders(List.of("Retry-After"));
 
         // 允许携带凭证
         configuration.setAllowCredentials(true);

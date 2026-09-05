@@ -1,6 +1,8 @@
 package com.course.platform.controller;
 
 import com.course.platform.common.result.Result;
+import com.course.platform.domain.dto.ApiKeyRotateRequest;
+import jakarta.validation.Valid;
 import com.course.platform.application.service.auth.ApiKeyService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,6 +25,15 @@ import org.springframework.web.bind.annotation.*;
 public class ApiKeyController {
 
     private final ApiKeyService apiKeyService;
+
+    @Operation(summary = "轮换自己的API密钥", description = "校验当前登录密码；免费轮换，旧密钥立即失效，新密钥仅显示一次")
+    @PostMapping("/rotate")
+    public ResponseEntity<Result<String>> rotateApiKey(@Valid @RequestBody ApiKeyRotateRequest request,
+                                                       Authentication authentication) {
+        String apiKey = apiKeyService.rotateApiKey((Long) authentication.getPrincipal(), request.getCurrentPassword());
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).header("Pragma", "no-cache")
+                .body(Result.success("API密钥已轮换（仅显示一次）", apiKey));
+    }
 
     /**
      * 开通API密钥

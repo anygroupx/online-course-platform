@@ -2,7 +2,8 @@ package com.course.platform.infra.docking.impl;
 
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
+import com.course.platform.infra.docking.ProviderResponseParser;
+import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.infra.docking.DockingLogSanitizer;
 import com.course.platform.infra.external.ApiHttpClient;
@@ -59,12 +60,12 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         params.put("kcid", ""); // QueryCourseRequest 中没有 courseId 字段
 
         log.info("暗网查课请求: params={}", DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.postForString(url, params);
+        String response = apiHttpClient.postForString(apiProvider, url, params);
         log.debug("暗网查课响应已接收: length={}", response == null ? 0 : response.length());
         
-        JSONObject json = JSONUtil.parseObj(response);
+        JSONObject json = ProviderResponseParser.parseObject(response);
         if (json.getInt("code") == -1) {
-            throw new BusinessException("查课失败: " + json.getStr("msg"));
+            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
         }
 
         List<CourseInfoResponse.CourseItem> courseItems = new ArrayList<>();
@@ -107,14 +108,14 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         params.put("score", "");
 
         log.info("暗网下单请求: params={}", DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.postForString(url, params);
+        String response = apiHttpClient.postForString(apiProvider, url, params);
         log.debug("暗网下单响应已接收: length={}", response == null ? 0 : response.length());
 
-        JSONObject json = JSONUtil.parseObj(response);
+        JSONObject json = ProviderResponseParser.parseObject(response);
         if (json.getInt("code") == 0) {
             return DockResult.success("下单成功", null);
         } else {
-            return DockResult.fail(json.getStr("msg"));
+            return DockResult.fail(ProviderRequestException.PUBLIC_MESSAGE);
         }
     }
 
@@ -132,13 +133,13 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         params.put("cid", platform.getDockParam());
 
         log.info("暗网进度查询请求: params={}", DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.getForString(url, params);
+        String response = apiHttpClient.getForString(apiProvider, url, params);
         log.debug("暗网进度查询响应已接收: length={}", response == null ? 0 : response.length());
 
-        JSONObject json = JSONUtil.parseObj(response);
+        JSONObject json = ProviderResponseParser.parseObject(response);
         
         if (json.getInt("code") != 1) {
-            throw new BusinessException("进度查询失败: " + json.getStr("msg"));
+            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
         }
 
         // 暗网API返回的是数组，取第一个元素
@@ -200,15 +201,20 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         params.put("id", order.getThirdOrderId());
 
         log.info("暗网补刷请求: params={}", DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.postForString(url, params);
+        String response = apiHttpClient.postForString(apiProvider, url, params);
         log.debug("暗网补刷响应已接收: length={}", response == null ? 0 : response.length());
 
-        JSONObject json = JSONUtil.parseObj(response);
+        JSONObject json = ProviderResponseParser.parseObject(response);
         if (json.getInt("code") == 0) {
             return DockResult.success("补刷成功", null);
         } else {
-            return DockResult.fail(json.getStr("msg"));
+            return DockResult.fail(ProviderRequestException.PUBLIC_MESSAGE);
         }
+    }
+
+    @Override
+    public void testConnection(ApiProvider apiProvider) {
+        fetchPlatformList(apiProvider);
     }
 
     @Override
@@ -221,16 +227,16 @@ public class AnwangDockingStrategy implements PlatformDockingStrategy {
         params.put("key", apiProvider.getApiKey());
 
         log.info("暗网一键导入请求: params={}", DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.postForString(url, params);
+        String response = apiHttpClient.postForString(apiProvider, url, params);
         log.debug("暗网一键导入响应已接收: length={}", response == null ? 0 : response.length());
 
-        JSONObject json = JSONUtil.parseObj(response);
+        JSONObject json = ProviderResponseParser.parseObject(response);
         if (json.getInt("code") != 1) {
-            throw new BusinessException("获取平台列表失败: " + json.getStr("msg"));
+            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
         }
 
         List<PlatformItem> items = new ArrayList<>();
-        JSONArray data = json.getJSONArray("data");
+        JSONArray data = ProviderResponseParser.requireArray(json, "data");
         if (data != null) {
             for (int i = 0; i < data.size(); i++) {
                 JSONObject item = data.getJSONObject(i);

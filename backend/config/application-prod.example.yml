@@ -103,10 +103,13 @@ course:
       interval-milliseconds: 1800000
 
 app:
+  provider-health:
+    enabled: ${PROVIDER_HEALTH_ENABLED:false}
+    interval-millis: ${PROVIDER_HEALTH_INTERVAL_MILLIS:1800000}
+    initial-delay-millis: 60000
   security:
     outbound:
       dns-mode: ${OUTBOUND_DNS_MODE:system}
-      provider-allowed-hosts: ${OUTBOUND_PROVIDER_ALLOWED_HOSTS:}
       provider-http-allowed-hosts: ${OUTBOUND_PROVIDER_HTTP_ALLOWED_HOSTS:}
       provider-allowed-ports: ${OUTBOUND_PROVIDER_ALLOWED_PORTS:}
       alert-webhook-allowed-hosts: ${OUTBOUND_ALERT_ALLOWED_HOSTS:}

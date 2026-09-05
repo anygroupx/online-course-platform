@@ -7,6 +7,9 @@ import com.course.platform.application.service.platform.PlatformDockingService;
 import com.course.platform.application.service.support.OperationLogService;
 import com.course.platform.common.result.Result;
 import com.course.platform.domain.entity.ApiProvider;
+import com.course.platform.domain.dto.ApiProviderSaveRequest;
+import com.course.platform.domain.dto.ApiProviderStatusRequest;
+import com.course.platform.domain.vo.ProviderConnectionTestResult;
 import com.course.platform.domain.vo.ApiProviderVO;
 import com.course.platform.security.SecurityUtils;
 import com.course.platform.security.SensitiveDataMasker;
@@ -40,26 +43,52 @@ public class ApiProviderController {
 
     @Operation(summary = "创建API接口", description = "添加新的第三方API接口")
     @PostMapping
-    public Result<Long> createApiProvider(@Valid @RequestBody ApiProvider apiProvider,
+    public Result<Long> createApiProvider(@Valid @RequestBody ApiProviderSaveRequest request,
                                           Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         checkAdmin(userId);
+        ApiProvider apiProvider = request.toProvider();
         Long id = apiProviderService.createApiProvider(apiProvider);
         operationLogService.log(userId, "创建API接口",
                 "创建API接口：" + apiProvider.getName(), null, null);
-        return Result.success("API接口创建成功", id);
+        return Result.success("API接口已保存，请测试连接后启用", id);
     }
 
     @Operation(summary = "更新API接口", description = "修改API接口信息")
     @PutMapping
-    public Result<Void> updateApiProvider(@Valid @RequestBody ApiProvider apiProvider,
+    public Result<Void> updateApiProvider(@Valid @RequestBody ApiProviderSaveRequest request,
                                           Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         checkAdmin(userId);
+        ApiProvider apiProvider = request.toProvider();
         apiProviderService.updateApiProvider(apiProvider);
         operationLogService.log(userId, "更新API接口",
                 "更新API接口：" + apiProvider.getName(), null, null);
         return Result.success("API接口更新成功");
+    }
+
+    @Operation(summary = "测试连接", description = "使用保存的凭据执行只读余额/商品查询，不自动启用接口")
+    @PostMapping("/{id}/test-connection")
+    public Result<ProviderConnectionTestResult> testConnection(@PathVariable Long id,
+                                                              Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        checkAdmin(userId);
+        ProviderConnectionTestResult result = apiProviderService.testConnection(id, userId);
+        operationLogService.log(userId, "测试API接口连接", "API接口ID：" + id, null, null);
+        return Result.success("连接测试通过，可启用接口", result);
+    }
+
+    @Operation(summary = "启用或禁用接口", description = "启用要求当前配置已通过连接测试；禁用不访问第三方")
+    @PatchMapping("/{id}/status")
+    public Result<Void> updateStatus(@PathVariable Long id,
+                                     @Valid @RequestBody ApiProviderStatusRequest request,
+                                     Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        checkAdmin(userId);
+        apiProviderService.updateStatus(id, request.status());
+        operationLogService.log(userId, "更新API接口状态",
+                "API接口ID：" + id + "，状态：" + request.status(), null, null);
+        return Result.success(request.status() == ApiProvider.STATUS_ACTIVE ? "接口已启用" : "接口已禁用");
     }
 
     @Operation(summary = "删除API接口", description = "删除指定API接口")

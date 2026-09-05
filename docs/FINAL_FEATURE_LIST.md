@@ -45,7 +45,9 @@
 | 平台 CRUD | ✅ | `/admin/platforms` |
 | 分类管理 | ✅ | 含远程分类映射 |
 | 价格倍率导入 | ✅ | docking import |
-| API 提供商管理 | ✅ | `/admin/api-providers` |
+| API 提供商管理 | ✅ | `/admin/api-providers`；保存、只读测试、显式启用、敏感修改重新验证 |
+| Provider 动态单目标出站 | ✅ | 无需全局域名白名单，保留运行时 DNS/SSRF/IP 固定/TLS/重定向防护 |
+| Provider 健康检查 | ✅ | 可选、默认关闭，独立只读工作线程，不自动启用/停用 |
 | 批量进度同步 | ✅ | 当前以 Benz 等对接为主 |
 
 ## 4. 自营 AQKS / 倒计时

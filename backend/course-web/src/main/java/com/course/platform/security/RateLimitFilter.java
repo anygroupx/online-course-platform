@@ -85,10 +85,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         if (path.startsWith("/external/")) {
             values.add(new Limit("external:ip", ip, properties.getExternalIp(), "external"));
-            String apiKey = firstNonBlank(request.getParameter("key"), request.getParameter("apiKey"));
+            String apiKey = firstNonBlank(request.getParameter("key"), request.getParameter("api_key"));
             if (apiKey != null) values.add(new Limit("external:key", apiKey, properties.getExternalKey(), "external"));
         }
-        if (path.contains("password") && isWrite(method)) {
+        if (isWrite(method) && path.startsWith("/api-keys/")) {
+            values.add(new Limit("api-key:" + (user == null ? "ip" : "user"),
+                    user == null ? ip : user, properties.getApiKeyUser(), "api-key"));
+        }
+        if ((path.contains("password") || path.equals("/api-keys/rotate")) && isWrite(method)) {
             values.add(new Limit("password:ip", ip, properties.getPasswordIp(), "password"));
             if (user != null) {
                 values.add(new Limit("password:user", user, properties.getPasswordUser(), "password"));

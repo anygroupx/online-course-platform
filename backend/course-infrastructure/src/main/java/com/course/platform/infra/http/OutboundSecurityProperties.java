@@ -18,7 +18,6 @@ public class OutboundSecurityProperties {
     private int readTimeoutMillis = 15_000;
     private int callTimeoutMillis = 20_000;
     private int maxResponseBytes = 1_048_576;
-    private List<String> providerAllowedHosts = new ArrayList<>();
     private List<String> providerHttpAllowedHosts = new ArrayList<>();
     private List<Integer> providerAllowedPorts = new ArrayList<>();
     private List<String> alertWebhookAllowedHosts = new ArrayList<>();

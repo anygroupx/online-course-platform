@@ -113,7 +113,7 @@
           title="筛选条件"
           direction="rtl"
           size="80%"
-        >
+         append-to-body>
           <el-form :model="queryForm" label-position="top" ref="queryFormRef">
             <el-form-item label="订单编号">
               <el-input

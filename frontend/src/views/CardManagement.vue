@@ -25,7 +25,7 @@
           <el-select
             v-model="statusFilter"
             placeholder="状态筛选"
-            style="width: 120px; margin-left: 10px"
+            style="width: 120px"
             @change="loadCards"
           >
             <el-option label="全部" value="" />
@@ -349,14 +349,21 @@ onMounted(() => {
 
 .operation-bar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .search-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  gap: 10px;
 }
+.search-bar > * { max-width: 100%; }
 
 .table-card {
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
@@ -374,7 +381,7 @@ onMounted(() => {
 
 .card-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 15px;
 }
 
@@ -411,6 +418,14 @@ onMounted(() => {
 .card-amount {
   color: var(--color-success);
   font-weight: bold;
+}
+
+.card-info { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 767px) {
+  .card-management { padding: 0; }
+  .operation-bar, .search-bar { flex-direction: column; align-items: stretch; gap: 12px; min-width: 0; }
+  .search-bar > * { width: 100% !important; margin: 0 !important; }
+  .card-item { align-items: flex-start; gap: 10px; flex-wrap: wrap; }
 }
 
 /* Dark Mode Overrides */

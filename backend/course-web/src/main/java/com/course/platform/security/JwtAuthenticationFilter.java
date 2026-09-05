@@ -35,6 +35,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final RefreshSessionService refreshSessionService;
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        // Third-party credentials have their own lifecycle/scopes, independent of browser sessions.
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        return path.startsWith("/external/");
+    }
+
+    @Override
     protected void doFilterInternal(
             @NonNull HttpServletRequest request,
             @NonNull HttpServletResponse response,

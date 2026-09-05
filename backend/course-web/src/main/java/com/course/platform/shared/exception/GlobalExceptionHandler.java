@@ -2,6 +2,8 @@ package com.course.platform.shared.exception;
 
 import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.common.exception.BusinessException;
+import com.course.platform.domain.exception.ProviderRequestException;
+import com.course.platform.security.SecurityUtils;
 import com.course.platform.common.result.Result;
 import com.course.platform.common.result.ResultCode;
 import com.course.platform.security.RateLimitExceededException;
@@ -10,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpMethod;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
@@ -19,6 +23,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -37,6 +43,23 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     private final SecurityAuditService securityAuditService;
+
+    @ExceptionHandler(ProviderRequestException.class)
+    public ResponseEntity<Result<?>> handleProviderRequestException(ProviderRequestException e,
+                                                                    HttpServletRequest request) {
+        // The URL alone is not authorization. Ordinary users (including non-provider admins)
+        // keep the generic error even if they reach another endpoint that uses a provider.
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        boolean admin = path.startsWith("/admin/") && SecurityUtils.hasAuthority("api-provider:update");
+        Result<?> body = admin
+                ? new Result<>(ResultCode.ERROR.getCode(), e.getReason().getAdminMessage(),
+                    java.util.Map.of("reason", e.getReason().name()))
+                : Result.error(ProviderRequestException.PUBLIC_MESSAGE);
+        body.setErrorId(e.getErrorId());
+        log.warn("Provider failure: reason={}, errorId={}", e.getReason(), e.getErrorId());
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store").body(body);
+    }
 
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<Result<?>> handleRateLimitExceeded(RateLimitExceededException e) {
@@ -103,6 +126,23 @@ public class GlobalExceptionHandler {
         Result<?> body = Result.error(ResultCode.PARAM_ERROR.getCode(), errorMessage);
         body.setErrorId(errorId);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Result<?>> handleRequestMethodException(HttpRequestMethodNotSupportedException e) {
+        Result<?> body = Result.error(ResultCode.PARAM_ERROR.getCode(), "请求方法不支持");
+        body.setErrorId(newErrorId());
+        HttpMethod[] allowed = e.getSupportedHttpMethods() == null ? new HttpMethod[0]
+                : e.getSupportedHttpMethods().toArray(HttpMethod[]::new);
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).allow(allowed).body(body);
+    }
+
+    @ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<Result<?>> handleRequestParameterException(Exception e) {
+        Result<?> body = Result.error(ResultCode.PARAM_ERROR.getCode(), "请求参数缺失或格式错误");
+        body.setErrorId(newErrorId());
+        // No exception message: conversion errors may include secret parameter values.
+        return ResponseEntity.badRequest().body(body);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -187,12 +227,14 @@ public class GlobalExceptionHandler {
         if (code == null) {
             return HttpStatus.BAD_REQUEST;
         }
-        if (code.equals(ResultCode.UNAUTHORIZED.getCode()) || code.equals(ResultCode.TOKEN_EXPIRED.getCode())
+        if (code.equals(ResultCode.API_KEY_INVALID.getCode())
+                || code.equals(ResultCode.UNAUTHORIZED.getCode()) || code.equals(ResultCode.TOKEN_EXPIRED.getCode())
                 || code.equals(ResultCode.TOKEN_INVALID.getCode())
                 || code.equals(ResultCode.REFRESH_TOKEN_REUSE.getCode())) {
             return HttpStatus.UNAUTHORIZED;
         }
-        if (code.equals(ResultCode.FORBIDDEN.getCode())
+        if (code.equals(ResultCode.ACCOUNT_DISABLED.getCode())
+                || code.equals(ResultCode.FORBIDDEN.getCode())
                 || code.equals(ResultCode.MFA_REQUIRED.getCode())
                 || code.equals(ResultCode.MFA_CODE_INVALID.getCode())
                 || code.equals(ResultCode.MFA_CHALLENGE_INVALID.getCode())

@@ -2,7 +2,8 @@ package com.course.platform.infra.docking.impl;
 
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
+import com.course.platform.infra.docking.ProviderResponseParser;
+import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.common.constant.Constants;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.infra.docking.DockingLogSanitizer;
@@ -71,14 +72,14 @@ public class OligeiDockingStrategy implements PlatformDockingStrategy {
         // params.put("miaoshua", order.getIsFlash() == 1 ? "1" : "0");
 
         log.info("Oligei下单请求: params={}", DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.postForString(url, params);
+        String response = apiHttpClient.postForString(apiProvider, url, params);
         log.debug("Oligei下单响应已接收: length={}", response == null ? 0 : response.length());
 
-        JSONObject json = JSONUtil.parseObj(response);
+        JSONObject json = ProviderResponseParser.parseObject(response);
         if (json.getInt("code") == 0) {
             return DockResult.success("下单成功", null);
         } else {
-            return DockResult.fail(json.getStr("msg"));
+            return DockResult.fail(ProviderRequestException.PUBLIC_MESSAGE);
         }
     }
 
@@ -100,6 +101,11 @@ public class OligeiDockingStrategy implements PlatformDockingStrategy {
     }
 
     @Override
+    public void testConnection(ApiProvider apiProvider) {
+        fetchPlatformList(apiProvider);
+    }
+
+    @Override
     public List<PlatformItem> fetchPlatformList(ApiProvider apiProvider) {
         String url = apiProvider.getApiUrl() + "/api/getclass.php";
         
@@ -107,17 +113,15 @@ public class OligeiDockingStrategy implements PlatformDockingStrategy {
         params.put("token", apiProvider.getToken());
 
         log.info("Oligei获取课程列表请求: params={}", DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.postForString(url, params);
+        String response = apiHttpClient.postForString(apiProvider, url, params);
 
-        JSONObject json = JSONUtil.parseObj(response);
+        JSONObject json = ProviderResponseParser.parseObject(response);
         if (json.getInt("code") != 1 && json.getInt("code") != 0) {
-             if (json.getInt("code") == -1) {
-                 throw new BusinessException("获取课程列表失败: " + json.getStr("msg"));
-             }
+            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
         }
 
         List<PlatformItem> items = new ArrayList<>();
-        JSONArray data = json.getJSONArray("data");
+        JSONArray data = ProviderResponseParser.requireArray(json, "data");
         if (data != null) {
             for (int i = 0; i < data.size(); i++) {
                 JSONObject item = data.getJSONObject(i);

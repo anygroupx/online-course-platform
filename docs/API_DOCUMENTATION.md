@@ -1,6 +1,6 @@
 # API 接口文档
 
-> 更新时间：2026-07-12
+> 更新时间：2026-09-06
 > Base Path：`/api`
 > 开发：`http://localhost:8080/api`
 > Docker/生产容器：`http://localhost:8082/api`
@@ -13,21 +13,21 @@
 
 ```json
 {
-  "code": 200,
-  "message": "success",
+  "code": 1,
+  "message": "操作成功",
   "data": {}
 }
 ```
 
-> 部分历史接口可能使用 `code: 1` 表示成功，联调时以实际返回与 `Result` / `ResultCode` 为准。
+> 统一成功码为 `code: 1`；失败需同时检查 HTTP 状态、`code`、`message`，并记录 `errorId`（如有）。
 
 ### 鉴权
 
 | 类型 | 说明 |
 |------|------|
 | JWT | Header：`Authorization: Bearer <access_token>` |
-| API Key | 外部接口 `/external/**` 使用用户 API Key |
-| 白名单 | `/auth/**`、`/register/**`、`/health`、`/ping`、`/payment/notify`、`/payment/return`、`/external/**`、文档路径等 |
+| API Key | `/external/**` 使用 UUID `uid` + `api_key`（兼容 `key`）表单体认证，不需要 JWT |
+| 匿名入口 | 仅 `/auth/login`、`/auth/refresh`、`/auth/mfa/verify`、`/register`、`/register/validate-invite-code`、健康/支付回调/只读主题/文档等明确路径；`auth/current` 和 `auth/logout` 必须认证 |
 
 ### 角色
 
@@ -36,6 +36,8 @@
 - `USER`：普通用户 / 代理
 
 ---
+
+> 第三方七个业务接口、在线测试与安全兼容性详见 [EXTERNAL_API_GUIDE.md](./EXTERNAL_API_GUIDE.md)。
 
 ## 1. 健康检查
 
@@ -80,7 +82,8 @@ curl -X POST http://localhost:8080/api/auth/login \
 |------|----------|------|
 | 用户管理 | `/users/**` | 管理员用户 CRUD、费率、余额等 |
 | 个人信息 | UserInfo 相关接口 | 资料、改密 |
-| API Key | `POST /api-keys/enable` | 开通 API 密钥 |
+| API Key | `POST /api-keys/enable` | 开通 API 密钥，明文仅返回一次 |
+| API Key 轮换 | `POST /api-keys/rotate` | JWT + 当前密码验证，免费轮换自己的密钥，旧密钥立即失效 |
 
 前端封装：`frontend/src/api/user.js`、`auth.js`
 
@@ -141,11 +144,16 @@ curl -X POST http://localhost:8080/api/auth/login \
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| CRUD | `/admin/api-providers` | API 提供商配置 |
+| CRUD | `/admin/api-providers` | API 提供商配置；新建/敏感修改后待验证 |
+| POST | `/admin/api-providers/{id}/test-connection` | 只读连接测试，记录验证人/时间，不自动启用 |
+| PATCH | `/admin/api-providers/{id}/status` | `status=1` 启用（须验证通过）；`status=0` 禁用 |
+| POST | `/admin/api-providers/{id}/balance` | 已启用接口余额刷新 |
 | POST | `/admin/docking/import-platforms` | 一键导入平台 |
 | POST | `/admin/docking/batch-sync` | 批量同步订单进度 |
 
 详见 [batch-sync-usage.md](./batch-sync-usage.md)。
+
+Provider 配置、单目标出站安全、错误分类及迁移详见 [PROVIDER_OUTBOUND_GOVERNANCE.md](./PROVIDER_OUTBOUND_GOVERNANCE.md)。
 
 参数说明：
 

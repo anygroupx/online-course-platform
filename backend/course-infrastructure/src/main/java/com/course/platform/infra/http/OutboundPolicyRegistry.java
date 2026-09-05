@@ -27,11 +27,6 @@ public class OutboundPolicyRegistry {
         return policy("turnstile", TURNSTILE_HOSTS, Set.of(), Set.of());
     }
 
-    public OutboundRequestPolicy provider() {
-        return policy("api-provider", set(properties.getProviderAllowedHosts()),
-                set(properties.getProviderHttpAllowedHosts()), new LinkedHashSet<>(properties.getProviderAllowedPorts()));
-    }
-
     public OutboundRequestPolicy alertWebhook() {
         return policy("security-alert", set(properties.getAlertWebhookAllowedHosts()),
                 set(properties.getAlertWebhookHttpAllowedHosts()), Set.of());

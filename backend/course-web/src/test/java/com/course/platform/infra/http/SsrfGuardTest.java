@@ -36,7 +36,7 @@ class SsrfGuardTest {
             "::ffff:127.0.0.1","64:ff9b::7f00:1","3fff::1"})
     void rejectsNonPublicDnsAnswers(String address) {
         SsrfGuard guard = new SsrfGuard(host -> List.of(InetAddress.getByName(address)));
-        assertEquals(SafeHttpException.Reason.BLOCKED_DESTINATION,
+        assertEquals(SafeHttpException.Reason.PRIVATE_ADDRESS,
                 assertThrows(SafeHttpException.class, () -> guard.validate(URI.create("https://api.example/"), policy)).getReason());
     }
 
