@@ -25,6 +25,7 @@ import com.course.platform.application.service.platform.PlatformDockingService;
 import com.course.platform.domain.dto.DockResult;
 import com.course.platform.domain.dto.OrderProgressResult;
 import com.course.platform.domain.entity.ApiProvider;
+import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
 import com.course.platform.service.impl.AccountLedgerServiceImpl;
 import lombok.RequiredArgsConstructor;
@@ -333,40 +334,46 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         CourseOrder order = getOrderById(orderId, userId);
         authorizationService.requireCanUpdateOrder(order);
 
-        // 如果是自营平台，使用模拟进度
         CoursePlatform platform = coursePlatformMapper.selectById(order.getPlatformId());
-        if (platform.getIsSelfOperated() == 1) {
+        if (platform == null) {
+            // 历史订单保留原关联，不能按名称匹配新商品或静默改绑供应商。
+            throw new BusinessException(ResultCode.NOT_FOUND,
+                    "订单关联的课程平台已删除，无法刷新进度，请联系管理员处理");
+        }
+        if (Integer.valueOf(1).equals(platform.getIsSelfOperated())) {
             calculateProgressBasedOnCountdown(order);
             return;
         }
 
-        // 第三方平台，调用API查询进度
-        if (platform.getDockApiId() != null) {
-            ApiProvider apiProvider = apiProviderMapper.selectById(platform.getDockApiId());
-            if (apiProvider != null && apiProvider.getStatus() == 1) {
-                try {
-                    OrderProgressResult result = platformDockingService.queryOrderProgress(order, platform, apiProvider);
-
-                    // 更新订单状态和进度
-                    order.setProgress(result.getProgress());
-                    order.setOrderStatus(result.getOrderStatus());
-                    if (StrUtil.isNotBlank(result.getRemarks())) {
-                        order.setRemarks(result.getRemarks());
-                    }
-
-                    if (result.getCourseStartTime() != null) order.setCourseStartTime(result.getCourseStartTime());
-                    if (result.getCourseEndTime() != null) order.setCourseEndTime(result.getCourseEndTime());
-                    if (result.getExamStartTime() != null) order.setExamStartTime(result.getExamStartTime());
-                    if (result.getExamEndTime() != null) order.setExamEndTime(result.getExamEndTime());
-
-                    courseOrderMapper.updateById(order);
-                    log.info("订单进度更新成功：orderId={}, progress={}", orderId, result.getProgress());
-                } catch (Exception e) {
-                    log.error("更新订单进度失败：orderId={}, error={}", orderId, e.getMessage(), e);
-                    // 不抛出异常，避免中断批量操作，仅记录日志
-                }
-            }
+        if (platform.getDockApiId() == null) {
+            throw new BusinessException("订单关联的课程平台未配置对接接口，无法刷新进度");
         }
+        if (order.getApiProviderId() != null && !order.getApiProviderId().equals(platform.getDockApiId())) {
+            throw new BusinessException(ResultCode.CONFLICT,
+                    "订单原对接接口与当前课程配置不一致，无法刷新进度，请联系管理员处理");
+        }
+        ApiProvider apiProvider = apiProviderMapper.selectById(platform.getDockApiId());
+        if (apiProvider == null || !Integer.valueOf(ApiProvider.STATUS_ACTIVE).equals(apiProvider.getStatus())) {
+            throw new ProviderRequestException(ProviderRequestException.Reason.PROVIDER_NOT_ACTIVE);
+        }
+
+        // 手动刷新失败必须返回失败；批量同步由独立入口逐单隔离，不能在这里吞掉异常。
+        OrderProgressResult result = platformDockingService.queryOrderProgress(order, platform, apiProvider);
+        if (result == null) {
+            throw new ProviderRequestException(ProviderRequestException.Reason.INVALID_RESPONSE);
+        }
+        order.setProgress(result.getProgress());
+        order.setOrderStatus(result.getOrderStatus());
+        if (StrUtil.isNotBlank(result.getRemarks())) {
+            order.setRemarks(result.getRemarks());
+        }
+        if (result.getCourseStartTime() != null) order.setCourseStartTime(result.getCourseStartTime());
+        if (result.getCourseEndTime() != null) order.setCourseEndTime(result.getCourseEndTime());
+        if (result.getExamStartTime() != null) order.setExamStartTime(result.getExamStartTime());
+        if (result.getExamEndTime() != null) order.setExamEndTime(result.getExamEndTime());
+
+        courseOrderMapper.updateById(order);
+        log.info("订单进度更新成功：orderId={}, progress={}", orderId, result.getProgress());
     }
 
     /**

@@ -44,12 +44,37 @@ Turnstile、AQKS、安全告警 Webhook 等固定系统集成仍使用各自的�
 | `OUTBOUND_PROVIDER_HTTP_ALLOWED_HOSTS` | 空；按精确 ASCII 域名允许 HTTP，不支持 URL 或通配符 |
 | `OUTBOUND_PROVIDER_ALLOWED_PORTS` | 空；允许使用的额外端口。每个请求仍仅授权该 Provider 自己的端口 |
 | `OUTBOUND_DNS_MODE` | `system`；Fake-IP 网络可用 `cloudflare-doh`，仍检查真实解析结果，不降级绕过 |
+| `OUTBOUND_PROVIDER_READ_TIMEOUT_MILLIS` | `35000`；供应商读/写等待上限，独立于固定集成的 15 秒 |
+| `OUTBOUND_PROVIDER_CALL_TIMEOUT_MILLIS` | `40000`；供应商 HTTP 总预算（不含预先 DNS），不得小于连接/读等待上限，最大 120 秒 |
+| `OUTBOUND_PROVIDER_MAX_RESPONSE_BYTES` | `8388608`（8 MiB）；供应商解压后响应上限，可配置至最大 16 MiB，固定集成仍为 1 MiB |
 | `PROVIDER_HEALTH_ENABLED` | `false`；可选的已启用接口只读健康检查 |
 | `PROVIDER_HEALTH_INTERVAL_MILLIS` | `1800000`；检查调度间隔，默认 30 分钟 |
 
 修改部署级例外或健康检查开关需要重建/重启后端容器；这与新增普通 Provider 无需重启是两回事。
 
 健康检查使用独立单线程、分页扫描和防重叠保护，不占用订单/支付调度线程，不会自动启用、停用、下单或生成管理员验证记录。健康状态变更时才记录探测日志。
+
+### 运行时限制与历史订单
+
+供应商聚合查课实测可能需约 31 秒才返回；完整商品目录也可能达到约 5.3 MB。不能继续套用固定系统集成的 15 秒 / 1 MiB 默认限制。供应商专用预算仍限制整个调用及解压后响应，且不启用重试、不跳过 SSRF/TLS 或跟随重定向。
+
+浏览器默认等待 60 秒，覆盖默认 40 秒 HTTP 预算及可信 DNS 解析；现有前端 Nginx 的读取等待上限为 60 秒。如果提高供应商总预算，需要同步调整浏览器及所有反向代理的超时，否则代理/浏览器可能先断开，而服务端仍在处理。对于写操作不要因客户端超时自动重试。
+
+查课及手动刷新保留 `ProviderRequestException` 的原始安全分类和 `errorId`，通过统一处理器返回 HTTP 502，不再包装成无法关联的通用业务异常，也不把刷新失败伪装成成功。
+
+历史订单关联平台已删除时，刷新返回明确业务错误（HTTP 404），保留订单与进度，不按名称匹配新商品、不自动更换供应商。当前平台供应商与订单原供应商不一致时同样阻止刷新。管理员应核实原配置后恢复关联，或按业务规则处理历史订单，不能仅因名称相同就改绑。
+
+### 分类商品导入
+
+`POST /api/admin/docking/import-products` 接受可选 `categoryId`（最多 50 字符）。前端提交的是**商品列表查询成功时的分类**，不是提交时输入框中可能已改动的值。后端重新查询该分类，并再次按分类和所选 ID 过滤，价格与商品详情仍以上游实时数据为准。不支持远程分类过滤的策略会回退完整目录，再执行本地筛选；旧客户端未传分类时保持全目录行为及 8 MiB 上限。
+
+```json
+{"apiProviderId":6,"categoryId":"60","productIds":["REMOTE_PRODUCT_ID"],"priceMultiplier":1.0,"syncCategories":true}
+```
+
+2026-09-06 08:40 / 08:43 的 Cloudflare 502：VPS3 记录全目录查询和导入返回 502（193 字节），分类 60 查询成功；该长度与原 `RESPONSE_TOO_LARGE` 响应一致。分类导入过去再次获取全量目录，因旧 1 MiB 上限失败；不是 Nginx 超时。09:06 部署已提高供应商独立上限，后续修正又保留查询分类，避免不必要的全目录读取。
+
+Docker 后端通过 `LOGGING_FILE_NAME=/app/logs/application.log` 写入 `backend_logs` 持久卷。运行用户为 UID/GID 1000，旧卷若仍属于 1001，需要仅修正该日志卷的所有权。轮转上限由生产配置控制（单文件 50 MB、30 天、总计 1 GB）；重建前也可保留 `docker logs` 快照供历史排查。
 
 ## 管理端 API
 

@@ -116,7 +116,11 @@ try {
     return respond(null, "Unexpected mocked endpoint", 500);
   });
   page.setDefaultTimeout(15000);
-  await page.goto(`${baseURL}/__provider_workflow`);
+  // Vite cold compilation can exceed the normal 15s UI-action timeout during backend builds.
+  await page.goto(`${baseURL}/__provider_workflow`, { timeout: 60000 });
+  const requestTimeout = await page.evaluate(async () =>
+    (await import("/src/utils/request.js")).default.defaults.timeout);
+  assert.equal(requestTimeout, 60000, "Browser must wait for the provider HTTP and DNS budgets");
   await page.getByRole("button", { name: "添加接口", exact: true }).click();
   await page.getByPlaceholder("请输入接口名称", { exact: true }).fill("Daytime 浏览器测试");
   await page.getByPlaceholder("https://provider.example.com 或 /openapi 基础目录").fill("HTTPS://New-Provider.Example:443/api.php/");

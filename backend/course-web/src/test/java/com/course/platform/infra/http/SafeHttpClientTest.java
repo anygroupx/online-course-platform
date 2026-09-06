@@ -67,6 +67,28 @@ class SafeHttpClientTest {
         respond(200, buffer.toByteArray(), false, Map.of("Content-Encoding","gzip"));
         assertReason(SafeHttpException.Reason.RESPONSE_TOO_LARGE);
     }
+    @Test void providerCatalogLargerThanOneMebibyteCanBeRead() {
+        useProviderPolicy();
+        respond(200, new byte[5_264_980], false, Map.of());
+        assertEquals(5_264_980, client.get(uri, Map.of(), policy).body().length());
+        assertEquals(1, calls.get());
+    }
+    @Test void providerCatalogStillHasAFiniteResponseLimit() {
+        useProviderPolicy();
+        respond(200, new byte[8_388_609], false, Map.of());
+        assertReason(SafeHttpException.Reason.RESPONSE_TOO_LARGE);
+        assertEquals(1, calls.get());
+    }
+    private void useProviderPolicy() {
+        var properties = new OutboundSecurityProperties();
+        properties.setProviderHttpAllowedHosts(List.of("pinned.invalid"));
+        properties.setProviderAllowedPorts(List.of(uri.getPort()));
+        var provider = new com.course.platform.domain.entity.ApiProvider();
+        provider.setId(42L);
+        provider.setStatus(com.course.platform.domain.entity.ApiProvider.STATUS_ACTIVE);
+        provider.setApiUrl("http://pinned.invalid:" + uri.getPort());
+        policy = new ProviderOutboundPolicyFactory(properties, new ProviderUrlNormalizer()).forProvider(provider, uri);
+    }
     @Test void exactLimitAndErrorStatusAreReturned() {
         respond(503, new byte[1024], false, Map.of());
         var response = client.get(uri, Map.of(), policy);

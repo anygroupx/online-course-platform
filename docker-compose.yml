@@ -107,6 +107,8 @@ services:
         condition: service_healthy
     environment:
       - SPRING_PROFILES_ACTIVE=prod
+      # 标准 Spring 日志属性，指向持久卷而非不可写的 /var/log。
+      - LOGGING_FILE_NAME=/app/logs/application.log
       - TZ=Asia/Shanghai
       # 共享 external network 上使用唯一容器名，避免命中其他项目的同名别名
       - SPRING_DATASOURCE_URL=jdbc:mysql://course-mysql:3306/${MYSQL_DATABASE:-online_course}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
@@ -123,6 +125,9 @@ services:
       - PROVIDER_HEALTH_ENABLED=${PROVIDER_HEALTH_ENABLED:-false}
       - PROVIDER_HEALTH_INTERVAL_MILLIS=${PROVIDER_HEALTH_INTERVAL_MILLIS:-1800000}
       - OUTBOUND_DNS_MODE=${OUTBOUND_DNS_MODE:-system}
+      - OUTBOUND_PROVIDER_READ_TIMEOUT_MILLIS=${OUTBOUND_PROVIDER_READ_TIMEOUT_MILLIS:-35000}
+      - OUTBOUND_PROVIDER_CALL_TIMEOUT_MILLIS=${OUTBOUND_PROVIDER_CALL_TIMEOUT_MILLIS:-40000}
+      - OUTBOUND_PROVIDER_MAX_RESPONSE_BYTES=${OUTBOUND_PROVIDER_MAX_RESPONSE_BYTES:-8388608}
       - OUTBOUND_PROVIDER_HTTP_ALLOWED_HOSTS=${OUTBOUND_PROVIDER_HTTP_ALLOWED_HOSTS:-}
       - OUTBOUND_PROVIDER_ALLOWED_PORTS=${OUTBOUND_PROVIDER_ALLOWED_PORTS:-}
       - OUTBOUND_ALERT_ALLOWED_HOSTS=${OUTBOUND_ALERT_ALLOWED_HOSTS:-}
