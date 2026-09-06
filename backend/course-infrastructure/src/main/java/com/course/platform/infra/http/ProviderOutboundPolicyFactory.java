@@ -71,10 +71,10 @@ public class ProviderOutboundPolicyFactory {
         }
 
         return new OutboundRequestPolicy(name, hosts, httpHosts, ports,
-                properties.getMaxResponseBytes(),
+                properties.getProviderMaxResponseBytes(),
                 Duration.ofMillis(properties.getConnectTimeoutMillis()),
-                Duration.ofMillis(properties.getReadTimeoutMillis()),
-                Duration.ofMillis(properties.getCallTimeoutMillis()));
+                Duration.ofMillis(properties.getProviderReadTimeoutMillis()),
+                Duration.ofMillis(properties.getProviderCallTimeoutMillis()));
     }
 
     private void requireSameOrigin(URI base, URI endpoint) {

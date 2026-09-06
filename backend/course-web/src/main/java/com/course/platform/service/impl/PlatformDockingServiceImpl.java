@@ -186,8 +186,13 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
             throw new BusinessException("请至少选择一个有效商品");
         }
 
-        // 重新从第三方拉取，商品名称、价格和分类均以后端实时数据为准。
-        List<PlatformItem> selectedItems = new ArrayList<>(invokeProvider(apiProvider, "products", () -> strategy.fetchPlatformList(apiProvider)).stream()
+        // 沿用列表查询的分类，避免选择小分类后仍拉取整个供应商目录。
+        // 不信任前端快照：商品、价格仍实时取自上游，并在本地再次校验分类。
+        String categoryId = StrUtil.trimToNull(request.getCategoryId());
+        List<PlatformItem> selectedItems = new ArrayList<>(invokeProvider(apiProvider, "products",
+                () -> categoryId == null ? strategy.fetchPlatformList(apiProvider)
+                        : strategy.fetchPlatformList(apiProvider, categoryId)).stream()
+                .filter(item -> categoryId == null || categoryId.equals(item.getCategoryId()))
                 .filter(item -> selectedIds.contains(item.getId()))
                 .filter(item -> StrUtil.isNotBlank(item.getId()))
                 .collect(Collectors.toMap(PlatformItem::getId, Function.identity(),

@@ -7,6 +7,7 @@ import com.course.platform.domain.dto.QueryCourseRequest;
 import com.course.platform.domain.dto.aqks.AqksLoginResult;
 import com.course.platform.domain.entity.CoursePlatform;
 import com.course.platform.domain.entity.User;
+import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.infra.persistence.mapper.CoursePlatformMapper;
 import com.course.platform.infra.external.AqksApiClient;
 import com.course.platform.infra.persistence.mapper.UserMapper;
@@ -64,6 +65,9 @@ public class CourseQueryServiceImpl implements CourseQueryService {
         if (platform.getQueryApiId() != null) {
             try {
                 courses = platformDockingService.queryCourses(platform, request);
+            } catch (ProviderRequestException e) {
+                // 保留安全分类和同一个 errorId，交给全局处理器返回 502。
+                throw e;
             } catch (Exception e) {
                 log.warn("第三方查课失败: reason={}", e.getClass().getSimpleName());
                 throw new BusinessException("第三方查课服务暂不可用");

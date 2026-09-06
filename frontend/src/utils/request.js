@@ -11,7 +11,8 @@ import {
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
-  timeout: 30000,
+  // 覆盖 Provider 的 40s HTTP 总预算及可信 DNS 解析，避免服务端完成前浏览器先超时。
+  timeout: 60000,
   withCredentials: true,
   headers: { "Content-Type": "application/json;charset=utf-8" },
 });

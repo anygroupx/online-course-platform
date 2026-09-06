@@ -39,6 +39,49 @@ class ProviderOutboundPolicyFactoryTest {
     }
 
     @Test
+    void providerLimitsAccommodateSlowQueriesAndLargeCatalogsWithoutRelaxingFixedIntegrations() {
+        var properties = new OutboundSecurityProperties();
+        properties.validate();
+        var policy = factory(properties).forProvider(provider("https://provider.example"),
+                URI.create("https://provider.example/api.php"));
+        assertEquals(5_000, policy.connectTimeout().toMillis());
+        assertEquals(35_000, policy.readTimeout().toMillis());
+        assertEquals(40_000, policy.callTimeout().toMillis());
+        assertEquals(8_388_608, policy.maxResponseBytes());
+        var fixed = new OutboundPolicyRegistry(properties).turnstile();
+        assertEquals(15_000, fixed.readTimeout().toMillis());
+        assertEquals(20_000, fixed.callTimeout().toMillis());
+        assertEquals(1_048_576, fixed.maxResponseBytes());
+    }
+
+    @Test
+    void providerLimitsAreConfigurableAndValidated() {
+        var properties = new OutboundSecurityProperties();
+        properties.setProviderReadTimeoutMillis(45_000);
+        properties.setProviderCallTimeoutMillis(50_000);
+        properties.setProviderMaxResponseBytes(12_582_912);
+        properties.validate();
+        var policy = factory(properties).forProvider(provider("https://provider.example"),
+                URI.create("https://provider.example/api.php"));
+        assertEquals(45_000, policy.readTimeout().toMillis());
+        assertEquals(50_000, policy.callTimeout().toMillis());
+        assertEquals(12_582_912, policy.maxResponseBytes());
+
+        properties.setProviderMaxResponseBytes(16_777_217);
+        assertThrows(IllegalStateException.class, properties::validate);
+        properties.setProviderMaxResponseBytes(0);
+        assertThrows(IllegalStateException.class, properties::validate);
+        properties.setProviderMaxResponseBytes(8_388_608);
+        properties.setProviderCallTimeoutMillis(40_000);
+        assertThrows(IllegalStateException.class, properties::validate);
+        properties.setProviderCallTimeoutMillis(120_001);
+        assertThrows(IllegalStateException.class, properties::validate);
+        properties.setProviderCallTimeoutMillis(50_000);
+        properties.setProviderReadTimeoutMillis(0);
+        assertThrows(IllegalStateException.class, properties::validate);
+    }
+
+    @Test
     void rejectsEndpointThatDoesNotMatchProviderOrigin() {
         OutboundSecurityProperties properties = new OutboundSecurityProperties();
         ApiProvider provider = provider("https://provider.example");

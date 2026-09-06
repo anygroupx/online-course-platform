@@ -162,6 +162,9 @@ app:
       read-timeout-millis: 15000
       call-timeout-millis: 20000
       max-response-bytes: 1048576
+      provider-read-timeout-millis: ${OUTBOUND_PROVIDER_READ_TIMEOUT_MILLIS:35000}
+      provider-call-timeout-millis: ${OUTBOUND_PROVIDER_CALL_TIMEOUT_MILLIS:40000}
+      provider-max-response-bytes: ${OUTBOUND_PROVIDER_MAX_RESPONSE_BYTES:8388608}
     auth-cookie:
       secure: ${AUTH_COOKIE_SECURE:false}
       same-site: Strict

@@ -577,6 +577,8 @@ const importLoading = ref(false);
 const productLoading = ref(false);
 const products = ref([]);
 const selectedProducts = ref([]);
+// 绑定已展示的商品列表，不能读取用户查询后又编辑过的分类输入框。
+const productSourceCategoryId = ref(null);
 const productKeyword = ref("");
 const productTableRef = ref(null);
 let productQueryVersion = 0;
@@ -941,6 +943,7 @@ const handleDelete = async (row) => {
 };
 
 const resetImportProducts = () => {
+  productSourceCategoryId.value = null;
   products.value = [];
   selectedProducts.value = [];
   productKeyword.value = "";
@@ -948,6 +951,8 @@ const resetImportProducts = () => {
 };
 
 const handleImport = () => {
+  productQueryVersion += 1;
+  productLoading.value = false;
   importForm.value = {
     apiProviderId: null,
     categoryId: "",
@@ -980,6 +985,7 @@ const queryImportProducts = async () => {
     }
     const res = await fetchProviderProducts(params);
     if (queryVersion !== productQueryVersion || importForm.value.apiProviderId !== providerId) return;
+    productSourceCategoryId.value = params.categoryId || null;
     products.value = res.data || [];
     if (products.value.length === 0) {
       ElMessage.info("未查询到商品");
@@ -1016,6 +1022,7 @@ const submitImport = async () => {
     const res = await importSelectedProducts({
       apiProviderId: importForm.value.apiProviderId,
       productIds: selectedProducts.value.map((item) => String(item.id)),
+      categoryId: productSourceCategoryId.value,
       priceMultiplier: importForm.value.priceMultiplier,
       syncCategories: importForm.value.syncCategories,
     });
