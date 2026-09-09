@@ -460,7 +460,7 @@ const handleEnableApiKey = async () => {
 const handleRotateApiKey = async () => {
   try {
     const { value: password } = await ElMessageBox.prompt(
-      '轮换免费，旧密钥将立即失效，请及时更新第三方配置。请输入当前登录密码确认。',
+      '轮换免费，旧密钥将立即失效，请及时更新调用配置。请输入当前登录密码确认。',
       '确认轮换 APIKey',
       { inputType: 'password', inputPlaceholder: '当前登录密码', inputValidator: (value) => !!value || '请输入当前登录密码', confirmButtonText: '验证并轮换', cancelButtonText: '取消', closeOnClickModal: false }
     );

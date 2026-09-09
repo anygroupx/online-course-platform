@@ -3,7 +3,7 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>第三方接口管理</span>
+          <span>服务接口管理</span>
           <div class="provider-header-actions">
           <el-button @click="router.push('/admin/plugin-integrations')">插件集成</el-button>
           <el-button type="primary" @click="handleCreate">
@@ -154,13 +154,13 @@
             <el-option label="黑鲨（服务接口）" value="heisha" />
             <el-option label="极光（服务接口）" value="jiguang" />
             <el-option label="无心闪动（服务接口）" value="wuxin" />
-            <el-option label="sxdk_tw 实习（直接上游 API）" value="sxdk_tw" />
+            <el-option label="sxdk_tw 实习（直接 API）" value="sxdk_tw" />
             <el-option label="syyv5 多项目与子钱包" value="syyv5" />
           </el-select>
         </el-form-item>
         <el-alert v-if="isReadOnlyProviderType(form.providerType)" type="info" :closable="false" class="provider-notice"
-          title="服务模板接口：账号填写上游 UID，API Key 填写上游密钥。"
-          :description="form.providerType === 'syyv5' ? '填写已授权的 HTTPS 上游 API 完整地址及主 API 密钥。连接测试只读取项目目录，不开户、不兑换；项目中心需另外核实成本并发布。主密钥变更不能自动迁移既有用户子钱包。' : form.providerType === 'sxdk_tw' ? '填写已获授权的直接上游 API 完整地址，不是旧 sxdk_tw PHP 宿主页面。GET 使用已保存的 UID / key 查询鉴权，POST 业务字段按表单发送；连接检查不读取或猜测价格。上架时必须核实合同单价。' : '地址填模板安装根目录，不要加插件目录或 API 文件名。无心协议须通过 HTTPS 查询参数鉴权，平台不记录该查询串。连接测试只读。用户下单请在服务商品上架；不要绑定普通课程。'" />
+          title="服务接口：账号填写 UID，API Key 填写访问密钥。"
+          :description="form.providerType === 'syyv5' ? '填写已授权的 HTTPS API 完整地址及主访问密钥。连接测试只读取项目目录，不开户、不兑换；项目中心需另外核实成本并发布。主密钥变更不能自动迁移既有用户子钱包。' : form.providerType === 'sxdk_tw' ? '填写已获授权的 HTTPS API 完整地址，不是旧 sxdk_tw PHP 页面。GET 使用已保存的 UID / key 查询，POST 业务字段按表单发送；连接检查不读取或猜测价格。上架时必须核实合同单价。' : '地址填写服务根目录，不要添加插件目录或 API 文件名。无心协议须通过 HTTPS 查询参数验证，系统不记录该查询串。连接测试只读。用户下单请在服务商品中上架；不要绑定普通课程。'" />
         <el-form-item label="API地址" prop="apiUrl">
           <el-input v-model="form.apiUrl" placeholder="https://provider.example.com 或 /openapi 基础目录" maxlength="2048" />
           <div class="field-help">默认仅允许 HTTPS 公网域名，不接受 IP、查询参数或片段。Daytime / 29 兼容以 /api.php 结尾的地址。</div>

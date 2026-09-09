@@ -1,7 +1,7 @@
 <template>
   <el-drawer
     v-model="open"
-    :title="subject === 'OWNER' ? '本平台项目 OpenAPI 密钥' : '客户 API 密钥'"
+    :title="subject === 'OWNER' ? '项目 OpenAPI 密钥' : '客户 API 密钥'"
     size="min(600px,100vw)"
     :close-on-click-modal="false"
     :close-on-press-escape="!busy"
@@ -9,16 +9,16 @@
     destroy-on-close
     class="project-keys"
   >
-    <span class="eyebrow">LOCAL OPENAPI / 不使用供应商密钥</span>
+    <span class="eyebrow">LOCAL OPENAPI / 独立访问密钥</span>
     <h2>
       {{
         subject === "OWNER"
-          ? "为你的下游系统授权。"
+          ? "为你的业务系统授权。"
           : "为这个客户开放查询与售后。"
       }}
     </h2>
     <p class="muted">
-      凭据仅供本平台接口使用，不是上游项目登录密钥。不会自动生成或收费；签发、轮换、撤销须验证当前登录密码。新密钥只显示一次。
+      凭据仅供项目接口使用，不是账号登录密码。不会自动生成或收费；签发、轮换、撤销须验证当前登录密码。新密钥只显示一次。
     </p>
     <el-alert
       v-if="error"
@@ -77,7 +77,7 @@
           >
           <el-alert
             v-if="access === 'MANAGE' && subject === 'OWNER'"
-            title="管理密钥可为你的客户开户、充值及转回，会影响你的平台钱包。请只交给你控制的服务端。"
+            title="管理密钥可为你的客户开户、充值及转回，会影响你的平台钱包。请只交给你控制的业务系统。"
             type="warning"
             :closable="false"
           />

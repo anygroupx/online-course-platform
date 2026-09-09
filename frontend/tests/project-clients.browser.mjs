@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import { chromium } from "playwright";
-import { createServer } from "vite";
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
 const customerId = "bab323d2-ccbd-45fe-a88f-08b4ce19c4ba",
   operationId = "bbb323d2-ccbd-45fe-a88f-08b4ce19c4ba";
 const fullKey = "npo_" + "a".repeat(64),
@@ -234,10 +234,10 @@ try {
     .getByRole("textbox", { name: "客户别名", exact: true })
     .fill("示例客户甲");
   await dialog
-    .getByRole("textbox", { name: "初始本地额度（可为0）" })
+    .getByRole("textbox", { name: "初始额度（可为 0）" })
     .fill("10");
   await dialog
-    .getByText("我已确认客户和用途，知晓此操作只处理本平台本地额度", {
+    .getByText("我已确认客户和用途，知晓此操作只处理客户额度", {
       exact: true,
     })
     .click();
@@ -258,7 +258,7 @@ try {
     true,
   );
   await dialog
-    .getByText("我已核对客户、数量及平台金额，确认这一次本地结算", {
+    .getByText("我已核对客户、数量及平台金额，确认这一次结算", {
       exact: true,
     })
     .click();
@@ -296,7 +296,7 @@ try {
   });
   await page.getByRole("button", { name: "暂停客户", exact: true }).click();
   await page
-    .getByRole("dialog", { name: "暂停本地客户" })
+    .getByRole("dialog", { name: "暂停客户" })
     .getByRole("button", { name: "确认变更" })
     .click();
   await page.getByRole("button", { name: "恢复客户", exact: true }).waitFor();
@@ -316,7 +316,7 @@ try {
     .getByRole("button", { name: "项目 OpenAPI 密钥", exact: true })
     .click();
   const keys = page.getByRole("dialog", {
-    name: "本平台项目 OpenAPI 密钥",
+    name: "项目 OpenAPI 密钥",
     exact: true,
   });
   await keys.getByText("未配置", { exact: true }).waitFor();

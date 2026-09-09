@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import { chromium } from "playwright";
-import { createServer } from "vite";
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
 const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:24px"><div id="app"></div><script type="module">
 import {createApp,h} from 'vue';import {createRouter,createMemoryHistory,RouterView} from 'vue-router';import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';import '/src/styles/variables.scss';import '/src/styles/global.css';import '/src/styles/element-overrides.scss';
@@ -206,7 +206,7 @@ try {
     await page.goto(`${base}/__flashauth`);
     await page.getByRole("button", { name: "选择服务", exact: true }).click();
     await page
-      .getByText("我有权使用此账号及信息，并授权本平台向所选上游提交", {
+      .getByText("我有权使用此账号及信息，并授权提交", {
         exact: true,
       })
       .click();
@@ -233,7 +233,7 @@ try {
     await page.getByLabel("收到的短信验证码", { exact: true }).count(),
     0,
   );
-  await page.getByRole("button", { name: "刷新上游规则", exact: true }).click();
+  await page.getByRole("button", { name: "刷新可用规则", exact: true }).click();
   await page
     .getByRole("dialog", { name: product.title, exact: true })
     .getByText("刷新后的计划", { exact: true })
@@ -283,7 +283,7 @@ try {
   const count = verifications;
   await page.getByRole("button", { name: "检查授权状态", exact: true }).click();
   await page
-    .getByText("上游结果无法确认，本会话不会再次提交。请核对后重新授权。", {
+    .getByText("处理结果无法确认，本会话不会再次提交。请核对后重新授权。", {
       exact: true,
     })
     .waitFor();
@@ -328,7 +328,7 @@ try {
     animations: "disabled",
   });
   await page
-    .getByText("我有权使用此账号及信息，并授权本平台向所选上游提交", {
+    .getByText("我有权使用此账号及信息，并授权提交", {
       exact: true,
     })
     .click();
@@ -337,7 +337,7 @@ try {
     .isDisabled()
     .then((v) => assert.equal(v, true));
   await page
-    .getByText("我有权使用此账号及信息，并授权本平台向所选上游提交", {
+    .getByText("我有权使用此账号及信息，并授权提交", {
       exact: true,
     })
     .click();

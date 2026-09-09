@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { createServer } from 'vite';
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
 import { UID, KEY, user, order, routes, fixture } from './mobile-fixtures.mjs';
 import { runMobileFlows } from './mobile-flows.mjs';
 

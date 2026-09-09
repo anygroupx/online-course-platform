@@ -471,28 +471,37 @@ API_DOC_ENABLED=false
 
 开户/资金操作状态：READY、DISPATCHING、UNKNOWN、SUCCEEDED、NOT_ACCEPTED、EXPIRED。用户账户状态：NEW、ACTIVE、DISABLED、BUSY、UNKNOWN。重复确认返回原状态；失联不自动退款。核对要求 `api-provider:update` 与 `payment:reconcile` 同时存在，并提供至少十字的依据。接口主密钥或地址变化会阻断旧账户，不能借此替换上游客户。相同规范化地址和主密钥的重复接口配置不能重复绑定同一客户或工单。金额数值不经过 double；异常指数在展开/格式化之前被拒绝。人工核对保留当前上游明确的停用状态。
 
-## 24. 项目文字工单与补偿审核（代码已部署，默认关闭）
+## 24. 项目图文工单与补偿审核（图片扩展未部署，默认关闭）
 
-依赖迁移 022。只访问本平台已绑定的本人项目工单，不转发上游宽范围列表，不允许用户填写任意上游工单号。所有写请求无自动重试，正文与审核记录在服务端加密保存；附件只返回“存在附件”标记，不返回 URL 或图片数据。
+依赖迁移 022，图片扩展复用既有加密 MEDIUMTEXT 草稿/快照，无新增上游工单 DDL。只访问本平台已绑定的本人项目工单，不转发上游宽范围列表，不允许用户填写任意上游工单号。所有写请求无自动重试，正文、图片与审核记录服务端加密保存。普通 DTO 仅返回 `hasAttachment` / `attachmentAvailable` 等标记，不返回图片正文、外链或密文。
 
 | 方法 | 路径 | 参数 / 行为 |
 |------|------|------|
 | GET | `/project-tickets`、`/project-tickets/{id}` | 本地列表/详情；page/pageSize、可选 accountId；不会自动访问上游 |
-| POST | `/project-accounts/{id}/tickets` | `{type:suggestion/bug/compensation,title,description,compensationAmount,confirmedPolicy:true}`；仅生成本地草稿与操作编号 |
-| POST | `/project-tickets/{id}/reply-quotes` | `{content,version,confirmedPolicy:true}`；本人回复预览 |
+| POST | `/project-accounts/{id}/tickets` | `{type:suggestion/bug/compensation,title,description,compensationAmount,imageData?,confirmedPolicy:true}`；仅生成本地草稿与操作编号 |
+| POST | `/project-tickets/{id}/reply-quotes` | `{content,imageData?,version,confirmedPolicy:true}`；本人回复预览；文字/图片至少一项非空 |
 | POST | `/project-tickets/{id}/refresh` | 显式读取原绑定上游工单，不会按回复相似度解决 UNKNOWN |
+| GET | `/project-tickets/{id}/image` | 可选 replyId；仅读取本地加密快照中的主图/指定回复图片，不访问上游 |
 | GET | `/project-ticket-operations/{id}` | 查询原操作；普通用户不能读取尚未确认的管理员审核说明 |
-| POST | `/project-ticket-operations/{id}/confirm` | 原草稿编号，确认发送本人提交/回复，最多一次 |
+| GET | `/project-ticket-operations/{id}/image` | 原操作的私有草稿图片，不发送或刷新工单 |
+| POST | `/project-ticket-operations/{id}/confirm` | 原草稿编号，确认发送本人图文提交/回复，最多一次 |
 | GET | `/admin/project-tickets`、`/admin/project-tickets/{id}` | 接口管理权限；仅本平台已绑定工单 |
+| GET | `/admin/project-tickets/{id}/image`、`/admin/project-ticket-operations/{id}/image` | `api-provider:update`；与本人图片接口相同的私有缓存读取 |
 | POST | `/admin/project-tickets/{id}/refresh` | 接口管理权限，显式更新上游回执 |
 | POST | `/admin/project-tickets/{id}/review-quotes` | 双权限；`{result:approved/rejected,note,version,upstreamChecked:true}` |
 | GET | `/admin/project-ticket-operations/{id}` | 管理查询原操作 |
 | POST | `/admin/project-ticket-operations/{id}/confirm` | 双权限，只有原审核人可发送自己的 REVIEW 草稿 |
 | POST | `/admin/project-ticket-operations/{id}/resolve` | 双权限；`{outcome:ACCEPTED/NOT_ACCEPTED,evidence,upstreamChecked:true}`；只核对原请求，不重发 |
 
-草稿十分钟有效。重复确认不重复发送；过期、供应商配置变化或快照更新阻断旧预览。补偿申请额度大于零且最多六位小数；非补偿类型不得携带非零额度。标题至多 120 字、正文/回复至多 4000 字。上游响应受 256 KiB、单文本 8192 字符和 100 条回复限制，超过限制不会截断后伪称成功；更多回复与附件仍需上游有界协议。
+草稿十分钟有效。重复确认不重复发送；过期、供应商配置变化或快照更新阻断旧预览。已关闭/已解决工单不再回复或审核。补偿申请额度大于零且最多六位小数；非补偿类型不得携带非零额度。标题至多 120 字、正文/回复至多 4000 字。
 
-**审核通过不等于付款。** REVIEW 不增加平台余额、项目充值预算或账本流水。未知的新工单缺少可独立验证的客户归属，禁止 ACCEPTED 认领；只有已经绑定的回复/审核可在真实证据和只读回执核对后完成本地结算。完整附件、安全上游项目登录及真实上游密钥生命周期仍未实现；独立的本平台项目密钥与原生 OpenAPI 见第25节。
+`imageData` 为 PNG/JPEG data URL，原图最多 2MiB、单边 4096、总 400 万像素；服务端只复制像素并重编码 PNG（最多 4MiB），清除元数据。含图片的完整 JSON（包括 chunked）最多 3MiB，超限 HTTP 413。前端选图只作本地预览，用户须明确同意经平台转发至当前绑定上游。私有图片须 JWT 与 owner/真实管理员权限校验，返回 PNG、no-store、nosniff、限制 CSP 与同源资源策略；前端按需读取 Blob，关闭/换图释放临时 URL，不持久化正文。
+
+仅工单回执允许最多 8MiB 响应、100 条回复和总计 6MiB 的规范化内嵌图片字符串；普通文本仍限 8192 字符，资金/目录等非工单响应仍限 256KiB，安全出站策略不变。上游外链、SVG 或无法安全解析的附件只保留标记，绝不下载；超限或解码并发过载不会截断后伪称成功。
+
+确认时转发规范化的 `image_data`，图像回显不匹配/丢失或本地快照结算失败均保留 UNKNOWN，不重发。回复预览冻结既有回复 ID；确认和人工已受理核对必须匹配本次文字/图片及新增回复 ID，不能用先前同内容回复冒充本次成功，刷新也不清除该证据。历史纯文本草稿保持兼容。
+
+**审核通过不等于付款。** REVIEW 不增加平台余额、项目充值预算或账本流水。未知的新工单缺少可独立验证的客户归属，禁止 ACCEPTED 认领；只有已经绑定的回复/审核可在真实证据和只读回执核对后完成本地结算。其他文件/外链附件、安全上游项目登录及真实上游密钥生命周期仍未实现；独立的本平台项目密钥与原生 OpenAPI 见第25节。
 
 
 ## 25. 下游客户、本地子账与项目 OpenAPI（代码已部署，默认关闭）
@@ -547,20 +556,50 @@ API_DOC_ENABLED=false
 
 ## 26. 下游客户本地售后（代码已部署，默认关闭）
 
-依赖迁移026及025，不复用上游 `project-tickets`。JWT网页前缀 `/project-client-tickets`；`X-Project-Key`外部调用前缀 `/external/projects/v1/tickets`，后缀与请求体一致。
+文字售后依赖迁移026及025；可选图片另需迁移027，本轮图片变更未部署。不复用上游 `project-tickets`。JWT网页前缀 `/project-client-tickets`；`X-Project-Key`外部调用前缀 `/external/projects/v1/tickets`，后缀与请求体一致。
 
 | 方法 | 后缀 | 行为 |
 |------|------|------|
 | GET | 空 | 本人列表，clientId/status/kind可选，page/pageSize默认1/20，最多100条；客户密钥强制限定自身clientId |
 | GET | `/{id}` | 工单、申请金额、状态、版本、公开审核结论，不含owner私有费率或密钥 |
-| GET | `/{id}/replies` | 纯文本沟通记录，按版本升序分页，author为OWNER/CUSTOMER |
+| GET | `/{id}/replies` | 沟通记录，按版本升序分页，author为OWNER/CUSTOMER，可有imageId |
+| GET | `/images/{imageId}` | 同owner/确切客户鉴权，按需返回PNG二进制而非Result/base64；no-store/nosniff，不公开直链 |
 | GET | `/by-request/{requestId}` | 仅查询当前调用身份的不可变请求回执；无记录返回null，不产生工单 |
-| POST | 空 | `{requestId,clientId,kind,title,description,requestedAmount,consent:true}` 新建 |
-| POST | `/{id}/replies` | `{requestId,version,content,consent:true}` 回复当前版本 |
+| POST | 空 | `{requestId,clientId,kind,title,description,requestedAmount,consent:true,imageData?}` 新建 |
+| POST | `/{id}/replies` | `{requestId,version,content,consent:true,imageData?}` 回复当前版本；content可为空但必须有图片 |
 | POST | `/{id}/decision` | `{requestId,version,action,note,consent:true}` 经营者处理；仅JWT本人/MANAGE主密钥 |
 
-- kind为SUGGESTION/BUG/COMPENSATION；标题1…120字，描述/回复1…5000字，审核说明1…2000字，均为纯文本。requestedAmount为非负十进制金额，最多两位小数、99999999.99，仅补偿申请可非零；其余传`"0"`。金额只是申请参考，不是支付指令。附件与账号凭据禁止混入正文。
+- kind为SUGGESTION/BUG/COMPENSATION；标题1…120字，描述/回复1…5000字，审核说明1…2000字，均为纯文本。requestedAmount为非负十进制金额，最多两位小数、99999999.99，仅补偿申请可非零；其余传`"0"`。金额只是申请参考，不是支付指令。图片走独立imageData字段，账号凭据禁止混入文字或图片。
 - 状态OPEN→IN_PROGRESS（回复）；普通工单action为RESOLVE/CLOSE，补偿申请为APPROVE/REJECT，结束后不可继续回复/处理。APPROVE写APPROVED+RESOLVED，REJECT写REJECTED+CLOSED；只改变审核记录，**不创建任何余额、退款或账本交易**。未接入上游发送、项目消费或补偿付款。
 - 每次写入的UUID requestId由调用方生成并保存；`owner + 调用身份(OWNER或确切客户) + requestId`唯一。同参数返回原回执，异参数拒绝；主密钥与JWT经营者共享OWNER命名空间，客户各自独立，不能查询其他身份的回执。
 - 写入响应为`{requestId,ticketId,action,version,createdAt,notice}`。响应丢失后先GET原请求；仅在查无回执后，才可显式重试**同编号、同参数、同版本**。版本过期应读取最新内容并重新确认，不自动换号/升级版本。工单与回复/审核、请求回执一起回滚。
 - 客户READ_ONLY只能读自己的工单，SUPPORT可提单/回复自己的工单；不能审单、操作资金或访问同项目其他客户。轮换/撤销/过期/暂停立即阻断旧凭据，写入事务持有owner锁后重新检查。关闭功能时JWT本人仍可查询既有记录；不再接受写入。
+
+
+### 26.1 可选私有图片（027）
+
+`imageData`仅接受`data:image/png;base64,...`或`data:image/jpeg;base64,...`，可省略。每次提单/回复最多一张；原文件≤2MiB、每边≤4096、总像素≤400万。服务端核实格式并去除源元数据，复制像素重新编码PNG后加密保存（输出≤4MiB），不保留原文件名。SVG/GIF/HTML/外部URL/伪造类型一律拒绝。包含图片的完整JSON体≤3MiB，超限HTTP413且不进入业务写入。
+
+工单/回复DTO只额外返回`imageId`，没有图片原文、公开URL或密文。`GET /project-client-tickets/images/{imageId}`使用JWT；外部地址`GET /external/projects/v1/tickets/images/{imageId}`必须恰好一个`X-Project-Key`。图片ID不是访问令牌；其他owner或同项目不同客户均不可读取，已暂停客户的密钥也不可读取。前端按需取Blob，关闭时释放临时URL，不用带密钥URL展示图片。
+
+图片与工单、回复版本和请求回执一起提交。响应丢失仍只查原UUID；重试须保持同一图文内容，换图不能沿用编号。图片格式/加密/写入失败会回滚此次工单/回复，不遗留孤儿图片，不改变资金。此类附件仅属于本地下游售后，不自动发给上游；独立的上游图文工单需另行预览并明确确认，见第24节。
+
+
+## 27. 项目用量与只读运营统计（本轮新增，未部署）
+
+复用迁移021/025/026，无新增DDL。以下统计只读取本平台已有记录，不调用供应商、不刷新上游余额、不产生任何资金结算。本人范围从登录身份/主密钥派生，不接受客户端指定其他owner。所有成功响应 `Cache-Control: no-store`。
+
+| 方法 | 路径 | 权限 / 行为 |
+|------|------|------|
+| GET | `/project-clients/usage` | 登录本人；安全动作、结果、客户、本地工单与已结算本地资金汇总 |
+| GET | `/project-clients/usage/projects` | 登录本人；按项目分页的本地额度；page 1–10000、pageSize 1–50，前端固定20 |
+| GET | `/external/projects/v1/usage`、`/external/projects/v1/usage/projects` | 恰好一个 `X-Project-Key` 主密钥；READ_ONLY/MANAGE均可读，客户密钥即使有SUPPORT也不可读经营者汇总 |
+| GET | `/admin/project-reports/overview` | `api-provider:update` 与 `payment:reconcile` 双权限；角色名称不能替代权限 |
+
+- `window.from` / `through` / `timezone` 明示 Asia/Shanghai 下的滚动24小时，**不是自然日“今日”**。窗口起点/终点均包含，未来时间的调用日志不计入。各响应内使用只读、可重复读事务；项目分页各自读取当前状态，不承诺跨页冻结快照。
+- `calls` 返回累计/窗口调用与未完成数；`actions` 最多50类，按累计调用降序、动作名稳定排序，`moreActions`说明是否还有未展示分类。总数不因分类上限截断。日志为尽力记录：鉴权前拒绝、日志写入失败可能不在统计内；`OK`只表示本平台处理返回，**不是供应商下单成功，也不是计费凭证**。本次外部统计请求在计算完成后才记日志，因此该次结果不包含自身。
+- 客户数、工单数仅指本地下游；补偿待审核数不代表已付款。项目额度按projectId分别返回活跃/暂停额度与剩余实付可退预算，不相加不同项目单位，不混同上游余额。普通返回无密钥、客户明细、图片、工单正文或请求内容。
+- `localFunding`仅合计APPLIED的本地开户/充值/转回；`upstreamFunding`仅合计SUCCEEDED的上游项目兑换。金额为精确CNY字符串，`netDebited = debited - returned`。含零额度开户的操作数不是销售单数；上游DISPATCHING/UNKNOWN另计为`unresolvedOperations`，不纳入已结算金额。两组金额不相加当作收入或利润。
+- 全局项目/绑定数只反映本地发布配置和已有客户号的ACTIVE绑定，不证明上游实时可用或已验收。接口统一限流至每用户/IP每分钟12次（外部接口仍保留原有密钥/IP防护）。失败、残缺响应不展示伪零；刷新/切换视图/关闭页面取消过期读取，不缓存报告到浏览器存储。
+
+用户从“客户与项目 API → 用量与统计”进入；管理页“运营统计”读取全局概览。按经营者分页明细、项目钻取等仍未完成；本节不表示P07全部业务兼容，更不表示真实项目消费已实现。

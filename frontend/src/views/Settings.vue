@@ -185,9 +185,9 @@
               </el-button>
             </el-form-item>
 
-            <el-form-item label="第三方登录配置">
+            <el-form-item label="快捷登录配置">
               <el-alert
-                title="第三方登录功能待开发"
+                title="快捷登录功能待开发"
                 type="info"
                 :closable="false"
               />

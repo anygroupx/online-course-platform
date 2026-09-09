@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
-import { createServer } from 'vite';
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
 
 // Real Vue dialog, intercepted API only: never imports or modifies production products.
 const html = `<!doctype html><html><head><meta charset="UTF-8"></head><body><div id="app"></div>
@@ -62,7 +62,7 @@ try {
     return route.abort();
   });
   await page.goto(`${baseURL}/__product_import`, { timeout: 60000 });
-  const dialog = page.getByRole('dialog', { name: '查询并导入第三方商品' });
+  const dialog = page.getByRole('dialog', { name: '查询并导入商品' });
   const providerSelect = dialog.locator('.el-select').first();
   const categoryInput = dialog.getByPlaceholder('可选，不传查询全部');
   const submit = dialog.getByRole('button', { name: /导入选中商品/ });

@@ -16,5 +16,6 @@ public class ProjectClientTicketReply {
     private Long ticketVersion;
     private String author;
     private String content;
+    private String imageId;
     private LocalDateTime createTime;
 }

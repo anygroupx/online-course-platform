@@ -3,7 +3,7 @@ import { providerCheckLabel } from "./providerStatus.js";
 export const readOnlyProviderTypes = Object.freeze(["flash", "heisha", "jiguang", "wuxin", "sxdk_tw", "syyv5"]);
 export const isReadOnlyProviderType = (type) => readOnlyProviderTypes.includes(type);
 export const integrationStatuses = Object.freeze({
-  NATIVE_PARTIAL: { label: "原生业务（部分）", tone: "warning" },
+  NATIVE_PARTIAL: { label: "服务能力（部分）", tone: "warning" },
   READ_ONLY: { label: "只读接入", tone: "success" },
   EXISTING: { label: "已有能力", tone: "primary" },
   PLANNED: { label: "待独立重写", tone: "warning" },

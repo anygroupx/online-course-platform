@@ -8,6 +8,10 @@ public interface ProjectTicketService {
 
     TicketView ticket(String id, boolean admin);
 
+    byte[] image(String ticketId, String replyId, boolean admin);
+
+    byte[] operationImage(String operationId, boolean admin);
+
     TicketView refresh(String id, boolean admin);
 
     OperationView submit(String accountId, SubmitForm form);

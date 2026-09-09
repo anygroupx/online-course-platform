@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
-import { createServer } from "vite";
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
 
 // Mount the real management page against an in-memory, intercepted HTTP contract. No live
 // provider, backend credentials or external network is used by this browser regression test.

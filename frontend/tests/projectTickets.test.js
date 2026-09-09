@@ -30,6 +30,8 @@ test("only unblocked owned active tickets can receive a new reply or first compe
     reviewResult: "",
   };
   assert.equal(canReplyToTicket(ticket), true);
+  assert.equal(canReplyToTicket({ ...ticket, status: "resolved" }), false);
+  assert.equal(canReviewTicket({ ...ticket, status: "closed" }), false);
   assert.equal(canReviewTicket(ticket), true);
   assert.equal(canReviewTicket({ ...ticket, reviewResult: "approved" }), false);
   assert.equal(canReviewTicket({ ...ticket, type: "bug" }), false);

@@ -55,7 +55,7 @@ export const adminOrdersColumns = [
   },
   {
     key: "dockStatus",
-    label: "对接状态",
+    label: "执行状态",
     width: 100,
     align: "center",
     component: StatusDisplay,
@@ -128,7 +128,7 @@ export const adminOrdersActions = [
   },
   {
     key: "dock",
-    label: "对接",
+    label: "执行",
     icon: "Connection",
     type: "success",
     link: true,

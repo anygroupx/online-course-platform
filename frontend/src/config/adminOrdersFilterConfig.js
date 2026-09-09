@@ -56,9 +56,9 @@ export const adminOrdersFilterConfig = {
     },
     {
       key: "dockStatus",
-      label: "对接状态",
+      label: "执行状态",
       type: "select",
-      placeholder: "选择对接状态",
+      placeholder: "选择执行状态",
       width: "120px",
       optionsGetter: (options) => options.statusOptions?.dock_status || [],
     },

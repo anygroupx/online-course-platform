@@ -26,7 +26,8 @@ class Syyv5ProjectGatewayTest {
     @BeforeEach
     void setup() {
         http = mock(ApiHttpClient.class);
-        gateway = new Syyv5ProjectGateway(http, new ProviderUrlNormalizer());
+        gateway = new Syyv5ProjectGateway(http, new ProviderUrlNormalizer(),
+                new ProjectTicketImagePolicy(new com.course.platform.infra.projectclient.ProjectTicketImageCodec()));
         provider = new ApiProvider();
         provider.setProviderType("syyv5");
         provider.setApiUrl("https://supplier.example/path/openapi.php");

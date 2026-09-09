@@ -29,7 +29,8 @@ class Syyv5TicketGatewayTest {
     @BeforeEach
     void setup() {
         http = mock(ApiHttpClient.class);
-        gateway = new Syyv5ProjectGateway(http, new ProviderUrlNormalizer());
+        gateway = new Syyv5ProjectGateway(http, new ProviderUrlNormalizer(),
+                new ProjectTicketImagePolicy(new com.course.platform.infra.projectclient.ProjectTicketImageCodec()));
         provider = new ApiProvider();
         provider.setProviderType("syyv5");
         provider.setApiUrl("https://supplier.example/openapi.php");
@@ -301,4 +302,84 @@ class Syyv5TicketGatewayTest {
                 ProviderRequestException.class,
                 () -> gateway.replyTicket(provider, "5", CUSTOMER, "31", "未返回的回复"));
     }
+    private String raster(String format, int color) throws Exception {
+        return com.course.platform.infra.projectclient.ProjectTicketImageCodecTest.data(format, color);
+    }
+    private String canonical(String raw) {
+        return new ProjectTicketImagePolicy(new com.course.platform.infra.projectclient.ProjectTicketImageCodec()).outgoing(raw);
+    }
+
+    @Test void uploadUsesCanonicalPngInOneFormPostAndChecksImageEcho() throws Exception {
+        String raw = raster("jpeg", 0x123456), clean = canonical(raw);
+        row.put("image_data", clean);
+        when(http.postForString(any(), anyString(), anyMap())).thenReturn(response());
+        var f = form();
+        var result = gateway.submitTicket(provider,"5",CUSTOMER,new SubmitForm(f.type(),f.title(),f.description(),f.compensationAmount(),true,raw));
+        assertEquals(clean,result.imageData()); assertTrue(result.hasAttachment());
+        verify(http,times(1)).postForString(eq(provider),eq(provider.getApiUrl()),argThat(v -> clean.equals(v.get("image_data")) && CUSTOMER.equals(v.get("api_key"))));
+        verify(http,never()).getForString(any(),anyString(),anyMap());
+    }
+
+    @Test void missingOrDifferentUploadImageEchoNeverCountsAsAccepted() throws Exception {
+        String raw=raster("png",0x123456);var f=form();
+        for (String actual : List.of("",raster("png",0x654321),"https://outside.example/private.png")) {
+            row.put("image_data",actual); when(http.postForString(any(),anyString(),anyMap())).thenReturn(response());
+            assertThrows(ProviderRequestException.class,()->gateway.submitTicket(provider,"5",CUSTOMER,new SubmitForm(f.type(),f.title(),f.description(),f.compensationAmount(),true,raw)));
+        }
+        verify(http,times(3)).postForString(any(),anyString(),anyMap());
+        verify(http,never()).getForString(any(),anyString(),anyMap());
+    }
+
+    @Test void imageOnlyReplyRequiresMatchingCustomerPixelsAndText() throws Exception {
+        String raw=raster("png",0x123456), clean=canonical(raw);
+        var r=reply();r.put("content","");r.put("image_data",clean);row.put("replies",List.of(r));
+        when(http.postForString(any(),anyString(),anyMap())).thenReturn(response());
+        assertEquals(clean,gateway.replyTicketWithImage(provider,"5",CUSTOMER,"31","",raw).replies().get(0).imageData());
+        r.put("image_data",raster("png",0xFEDCBA));when(http.postForString(any(),anyString(),anyMap())).thenReturn(response());
+        assertThrows(ProviderRequestException.class,()->gateway.replyTicketWithImage(provider,"5",CUSTOMER,"31","",raw));
+        r.put("image_data",clean);r.put("sender_type","owner");when(http.postForString(any(),anyString(),anyMap())).thenReturn(response());
+        assertThrows(ProviderRequestException.class,()->gateway.replyTicketWithImage(provider,"5",CUSTOMER,"31","",raw));
+    }
+
+    @Test void inlineDataIsNormalizedButRemoteUrlsVectorsAndMalformedImagesStayOpaque() throws Exception {
+        row.put("image_data",raster("jpeg",0x123456));
+        for (String source : List.of("https://outside.example/?key="+CUSTOMER,"data:image/svg+xml;base64,PHN2Zy8+","data:image/png;base64,broken")) {
+            var r=reply();r.put("image_data",source);row.put("replies",List.of(r));
+            when(http.getForString(any(),anyString(),anyMap())).thenReturn(response());
+            var result=gateway.ticket(provider,"5",CUSTOMER,"31");
+            assertTrue(result.imageData().startsWith("data:image/png;base64,"));
+            assertTrue(result.replies().get(0).hasAttachment());assertNull(result.replies().get(0).imageData());
+            assertFalse(json.writeValueAsString(result).contains(source));
+        }
+        verify(http,times(3)).getForString(eq(provider),eq(provider.getApiUrl()),anyMap());
+        verifyNoMoreInteractions(http);
+    }
+
+    @Test void malformedOutgoingImagesAreRejectedBeforeAnyHttpCall() {
+        var f=form();
+        assertThrows(com.course.platform.common.exception.BusinessException.class,()->gateway.submitTicket(provider,"5",CUSTOMER,new SubmitForm(f.type(),f.title(),f.description(),f.compensationAmount(),true,"https://outside.example/x.png")));
+        assertThrows(ProviderRequestException.class,()->gateway.replyTicketWithImage(provider,"5",CUSTOMER,"31","",null));
+        verifyNoInteractions(http);
+    }
+
+    @Test void ticketResponseLimitDoesNotWidenCatalogueLimit() throws Exception {
+        row.put("ignored","x".repeat(270000));when(http.getForString(any(),anyString(),anyMap())).thenReturn(response());
+        assertNotNull(gateway.ticket(provider,"5",CUSTOMER,"31"));
+        assertThrows(ProviderRequestException.class,()->gateway.projects(provider));
+        when(http.getForString(any(),anyString(),anyMap())).thenReturn("x".repeat(8*1024*1024+1));
+        assertThrows(ProviderRequestException.class,()->gateway.ticket(provider,"5",CUSTOMER,"31"));
+    }
+
+    @Test void normalizedImageBudgetBoundsManyCompressedSupplierAttachments() throws Exception {
+        var image=new java.awt.image.BufferedImage(1024,512,java.awt.image.BufferedImage.TYPE_INT_RGB);
+        var random=new Random(7); for(int y=0;y<512;y++)for(int x=0;x<1024;x++)image.setRGB(x,y,random.nextInt());
+        var bytes=new java.io.ByteArrayOutputStream();javax.imageio.ImageIO.write(image,"png",bytes);image.flush();
+        String data="data:image/png;base64,"+Base64.getEncoder().encodeToString(bytes.toByteArray());
+        var policy=new ProjectTicketImagePolicy(new com.course.platform.infra.projectclient.ProjectTicketImageCodec());
+        var budget=policy.receipt();int copies=ProjectTicketImagePolicy.MAX_RECEIPT_IMAGE_CHARS/canonical(data).length();
+        assertTrue(copies>=1 && copies<10);
+        for(int i=0;i<copies;i++)assertNotNull(budget.image(data));
+        assertThrows(com.course.platform.common.exception.BusinessException.class,()->budget.image(data));
+    }
+
 }

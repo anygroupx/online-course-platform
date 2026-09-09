@@ -4,6 +4,7 @@ import com.course.platform.security.JwtAuthenticationFilter;
 import com.course.platform.security.MustChangePasswordFilter;
 import com.course.platform.security.JwtAuthenticationEntryPoint;
 import com.course.platform.security.RateLimitFilter;
+import com.course.platform.security.ProjectClientTicketBodyFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -119,7 +120,7 @@ public class SecurityConfig {
                         // Native-service controllers enforce finer, dual financial permissions at method level.
                         .requestMatchers("/admin/service-products/**", "/admin/service-orders/**", "/admin/service-order-operations/**",
                                 "/admin/plugin-integrations/**", "/admin/service-projects/**", "/admin/service-project-catalog", "/admin/project-operations/**",
-                                "/admin/project-tickets/**", "/admin/project-ticket-operations/**")
+                                "/admin/project-tickets/**", "/admin/project-ticket-operations/**", "/admin/project-reports/overview")
                                 .hasAuthority("api-provider:update")
                         .requestMatchers("/admin/platforms/**", "/admin/platform-categories/**").hasAuthority("platform:update")
                         .requestMatchers("/admin/security/**").authenticated()
@@ -132,7 +133,8 @@ public class SecurityConfig {
                 // JWT first; business/user rate limits then see the trusted SecurityContext.
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(rateLimitFilter, JwtAuthenticationFilter.class)
-                .addFilterAfter(mustChangePasswordFilter, RateLimitFilter.class);
+                .addFilterAfter(mustChangePasswordFilter, RateLimitFilter.class)
+                .addFilterAfter(new ProjectClientTicketBodyFilter(), MustChangePasswordFilter.class);
 
         return http.build();
     }

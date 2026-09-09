@@ -15,6 +15,7 @@ import com.course.platform.application.service.projectclient.ProjectApiKeyServic
 import com.course.platform.domain.projectclient.ProjectClientTypes;
 import com.course.platform.application.service.projectcenter.ProjectCenterService;
 import com.course.platform.application.service.projectcenter.ProjectTicketService;
+import com.course.platform.application.service.projectcenter.ProjectReportingService;
 import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.application.service.servicecommerce.ServiceCommerceService;
 import com.course.platform.application.service.servicenotification.ServiceNotificationService;
@@ -53,6 +54,7 @@ class ProjectCenterHttpSecurityTest {
         SecurityConfig.class,
         ProjectCenterController.class,
         ProjectClientController.class,
+        ProjectReportingController.class,
         ProjectClientTicketController.class,
         ExternalProjectClientController.class,
         CatalogRefreshController.class,
@@ -69,6 +71,7 @@ class ProjectCenterHttpSecurityTest {
     static class Config {
         @Bean ProjectClientTicketService clientTickets(){return mock(ProjectClientTicketService.class);}
         @Bean ProjectClientService clients(){return mock(ProjectClientService.class);}
+        @Bean ProjectReportingService reports(){return mock(ProjectReportingService.class);}
         @Bean ProjectApiKeyService projectKeys(){return mock(ProjectApiKeyService.class);}
 
         @Bean com.course.platform.application.service.catalogrefresh.CatalogRefreshService catalogue(){return mock(com.course.platform.application.service.catalogrefresh.CatalogRefreshService.class);}
@@ -144,7 +147,9 @@ class ProjectCenterHttpSecurityTest {
 
     @Autowired WebApplicationContext context;
     @Autowired ProjectCenterService projects;
+    @Autowired ProjectTicketService tickets;
     @Autowired ProjectClientService clients;
+    @Autowired ProjectReportingService reports;
     @Autowired ProjectClientTicketService clientTickets;
     @Autowired ProjectApiKeyService projectKeys;
     @Autowired ServiceCommerceService commerce;
@@ -154,7 +159,7 @@ class ProjectCenterHttpSecurityTest {
 
     @BeforeEach
     void setup() {
-        reset(projects, commerce, plugins, limiter, clients, projectKeys, clientTickets);
+        reset(projects, commerce, plugins, limiter, clients, projectKeys, clientTickets, tickets, reports);
         when(limiter.check(any())).thenReturn(RateLimitDecision.allowed(1));
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
     }
@@ -189,6 +194,117 @@ class ProjectCenterHttpSecurityTest {
         mvc.perform(get(root+"/self").contextPath("/api").header("X-Project-Key",key)).andExpect(status().isForbidden());
         verify(projectKeys).record(caller,"SELF",false);
         verify(projectKeys,never()).web();
+    }
+
+    @Test
+    void usageIsOwnerDerivedNoStoreAndRateLimitedWithNoUrlKeySubstitution() throws Exception {
+        var caller = new ProjectClientTypes.Caller(7L, null, null, null, true);
+        when(projectKeys.web()).thenReturn(caller);
+        for (String path : List.of("/project-clients/usage", "/project-clients/usage/projects")) {
+            mvc.perform(get("/api" + path).contextPath("/api").header("X-Project-Key", "npo_" + "a".repeat(64)))
+                    .andExpect(status().isUnauthorized());
+            mvc.perform(get("/api" + path).contextPath("/api").param("ownerId", "8")
+                            .with(authentication(auth("ROLE_USER"))))
+                    .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
+        }
+        verify(reports).owner(caller);
+        verify(reports).projects(caller, 1, 20);
+        verify(reports, never()).system();
+        verify(projectKeys, never()).authenticate(anyString());
+        verify(limiter, atLeastOnce()).check(argThat(r -> "project-report:user".equals(r.dimension())));
+    }
+
+    @Test
+    void globalReportsRequireBothFinancialAuthoritiesOnTheActualFilterChain() throws Exception {
+        String path = "/api/admin/project-reports/overview";
+        mvc.perform(get(path).contextPath("/api")).andExpect(status().isUnauthorized());
+        for (String permission : List.of("ROLE_SUPER_ADMIN", "api-provider:update", "payment:reconcile"))
+            mvc.perform(get(path).contextPath("/api").with(authentication(auth(permission))))
+                    .andExpect(status().isForbidden());
+        verifyNoInteractions(reports);
+        mvc.perform(get(path).contextPath("/api").with(authentication(auth("api-provider:update", "payment:reconcile"))))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
+        verify(reports).system();
+        mvc.perform(get(path + "/unknown").contextPath("/api").with(authentication(auth("api-provider:update", "payment:reconcile"))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void externalUsageUsesHeaderOnlyNativeOwnerContextAndRecordsNoPayload() throws Exception {
+        String path = "/api/external/projects/v1/usage", key = "npo_" + "b".repeat(64);
+        var caller = new ProjectClientTypes.Caller(7L, "credential", 1L, null, false);
+        when(projectKeys.authenticate(key)).thenReturn(caller);
+        mvc.perform(get(path).contextPath("/api").param("api_key", key)).andExpect(status().isUnprocessableEntity());
+        mvc.perform(get(path).contextPath("/api").with(authentication(auth("ROLE_SUPER_ADMIN")))).andExpect(status().isUnauthorized());
+        mvc.perform(get(path).contextPath("/api").header("X-Project-Key", key, key)).andExpect(status().isUnauthorized());
+        mvc.perform(get(path).contextPath("/api").header("X-Project-Key", key))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
+        mvc.perform(get(path + "/projects").contextPath("/api").header("X-Project-Key", key).param("page", "2").param("pageSize", "10"))
+                .andExpect(status().isOk());
+        verify(reports).owner(caller);
+        verify(reports).projects(caller, 2, 10);
+        verify(projectKeys).record(caller, "USAGE", true);
+        verify(projectKeys).record(caller, "USAGE_PROJECTS", true);
+        verify(projectKeys, never()).web();
+        verify(reports, never()).system();
+    }
+
+    @Test
+    void upstreamTicketImagesRequireWebLoginOrSpecificAdminPermissionAndRemainPrivate() throws Exception {
+        String id="b038e810-6a0d-461c-8dc6-a2aa1aa061bd";byte[] png=new byte[]{(byte)137,80,78,71};
+        when(tickets.image(id,null,false)).thenReturn(png);when(tickets.image(id,"45",true)).thenReturn(png);
+        when(tickets.operationImage(id,false)).thenReturn(png);when(tickets.operationImage(id,true)).thenReturn(png);
+        for(String path:List.of("/project-tickets/"+id+"/image","/project-ticket-operations/"+id+"/image")) {
+            mvc.perform(get("/api"+path).contextPath("/api")).andExpect(status().isUnauthorized());
+            mvc.perform(get("/api"+path).contextPath("/api").with(authentication(auth("ROLE_USER"))))
+                    .andExpect(status().isOk()).andExpect(content().bytes(png)).andExpect(content().contentType("image/png"))
+                    .andExpect(header().string("Cache-Control","no-store")).andExpect(header().string("X-Content-Type-Options","nosniff"));
+            for(String role:List.of("ROLE_USER","ROLE_ADMIN","payment:reconcile"))
+                mvc.perform(get("/api/admin"+path).contextPath("/api").with(authentication(auth(role)))).andExpect(status().isForbidden());
+        }
+        mvc.perform(get("/api/admin/project-tickets/"+id+"/image").contextPath("/api").param("replyId","45").with(authentication(auth("api-provider:update"))))
+                .andExpect(status().isOk()).andExpect(content().bytes(png)).andExpect(header().string("Content-Security-Policy","default-src 'none'; sandbox"));
+        mvc.perform(get("/api/admin/project-ticket-operations/"+id+"/image").contextPath("/api").with(authentication(auth("api-provider:update"))))
+                .andExpect(status().isOk()).andExpect(content().bytes(png));
+        verify(tickets).image(id,"45",true);verify(tickets).operationImage(id,true);
+        verify(limiter,atLeastOnce()).check(argThat(r->"project-ticket-image:user".equals(r.dimension())));
+        verify(tickets,never()).refresh(anyString(),anyBoolean());verify(tickets,never()).confirm(anyString(),anyBoolean());
+    }
+
+    @Test
+    void upstreamImageBodiesAreLimitedOnActualSecurityChainNotOnlyInServiceValidation() throws Exception {
+        String large="x".repeat(ProjectClientTicketBodyFilter.MAX_BODY+1);
+        for(String path:List.of("/project-accounts/id/tickets","/project-tickets/id/reply-quotes"))
+            mvc.perform(post("/api"+path).contextPath("/api").with(authentication(auth("ROLE_USER"))).contentType("application/json").content(large))
+                    .andExpect(status().isPayloadTooLarge()).andExpect(header().string("Cache-Control","no-store"));
+        verifyNoInteractions(tickets);
+    }
+
+    @Test
+    void privateTicketImagesUseAuthenticatedBinaryResponseNotUrlCredentialsOrPublicDtos() throws Exception {
+        String id="b038e810-6a0d-461c-8dc6-a2aa1aa061bd",key="npc_"+"a".repeat(64);
+        byte[] png=new byte[]{(byte)137,80,78,71};
+        var web=new ProjectClientTypes.Caller(7L,null,null,null,true);
+        when(projectKeys.web()).thenReturn(web);when(clientTickets.image(web,id)).thenReturn(png);
+        mvc.perform(get("/api/project-client-tickets/images/"+id).contextPath("/api")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/project-client-tickets/images/"+id).contextPath("/api").with(authentication(auth("ROLE_USER"))))
+                .andExpect(status().isOk()).andExpect(content().bytes(png)).andExpect(content().contentType("image/png"))
+                .andExpect(header().string("Cache-Control","no-store")).andExpect(header().string("X-Content-Type-Options","nosniff"))
+                .andExpect(header().string("Content-Security-Policy","default-src 'none'; sandbox"));
+        var api=new ProjectClientTypes.Caller(7L,"image-key",1L,id,false);
+        when(projectKeys.authenticate(key)).thenReturn(api);when(clientTickets.image(api,id)).thenReturn(png);
+        mvc.perform(get("/api/external/projects/v1/tickets/images/"+id).contextPath("/api").header("X-Project-Key",key))
+                .andExpect(status().isOk()).andExpect(content().bytes(png)).andExpect(header().string("Cross-Origin-Resource-Policy","same-origin"));
+        verify(projectKeys).record(api,"TICKET_IMAGE",true);
+        mvc.perform(get("/api/external/projects/v1/tickets/images/"+id).contextPath("/api").param("key",key)).andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    void realFilterChainBoundsTicketImageJsonBeforeCallingBusinessService() throws Exception {
+        mvc.perform(post("/api/project-client-tickets").contextPath("/api").with(authentication(auth("ROLE_USER")))
+                .contentType("application/json").content("x".repeat(ProjectClientTicketBodyFilter.MAX_BODY+1)))
+                .andExpect(status().isPayloadTooLarge()).andExpect(header().string("Cache-Control","no-store"));
+        verifyNoInteractions(clientTickets);
     }
 
     @Test

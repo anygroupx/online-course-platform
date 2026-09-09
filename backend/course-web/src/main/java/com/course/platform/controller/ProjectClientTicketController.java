@@ -24,6 +24,18 @@ public class ProjectClientTicketController {
         return ok(tickets.list(keys.web(), clientId, status, kind, page, pageSize));
     }
 
+    @GetMapping("/images/{id}")
+    public ResponseEntity<byte[]> image(@PathVariable String id) { return imageResponse(tickets.image(keys.web(), id)); }
+
+    static ResponseEntity<byte[]> imageResponse(byte[] png) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.IMAGE_PNG)
+                .header("X-Content-Type-Options", "nosniff")
+                .header("Content-Security-Policy", "default-src 'none'; sandbox")
+                .header("Content-Disposition", "inline; filename=attachment.png")
+                .header("Cross-Origin-Resource-Policy", "same-origin")
+                .body(png);
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<?> ticket(@PathVariable String id) { return ok(tickets.ticket(keys.web(), id)); }
 

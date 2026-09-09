@@ -10,10 +10,10 @@
     destroy-on-close
   >
     <div v-loading="loading" class="notification-panel">
-      <span class="eyebrow">NOTIFICATIONS / 本人接收渠道</span>
+      <span class="eyebrow">NOTIFICATIONS / 本人通知接收</span>
       <h2>状态有变化，再通知你。</h2>
       <p class="intro">
-        仅发送已经同步到本平台的订单状态。不是校友帮微信授权或账号绑定，也不会收取“绑定费”。
+        仅发送已同步的订单状态。不是校友帮微信授权或账号绑定，也不会收取“绑定费”。
       </p>
       <el-alert
         v-if="error"
@@ -43,7 +43,7 @@
         </div>
         <ol class="privacy-rules">
           <li>
-            只包含本平台订单编号、已同步状态与计划服务日，不包含账号密码、地点或报告内容。
+            只包含订单编号、已同步状态与计划服务日，不包含账号密码、地点或报告内容。
           </li>
           <li>
             保存密钥不发送。你主动发送验证通知并填写接收到的验证码后，才会启用自动状态通知。
@@ -83,7 +83,7 @@
                   maxlength="128"
                   placeholder="密钥只用于固定的 ShowDoc 官方通道" /></el-form-item
               ><el-checkbox v-model="consent" class="wrapped-check"
-                >此接收渠道由我控制，同意向 ShowDoc
+                >此接收方式由我控制，同意向 ShowDoc
                 发送上述有限订单信息</el-checkbox
               ><el-button
                 type="primary"
@@ -101,7 +101,7 @@
         >
           <h3>2 · 验证你能收到通知</h3>
           <p class="help">
-            点击后会向当前渠道发送一次六位验证码。通知回执丢失时先检查原记录，不要重复发送。
+            点击后会向当前接收方式发送一次六位验证码。通知回执丢失时先检查原记录，不要重复发送。
           </p>
           <el-button
             v-if="notificationCanChallenge(settings) && !challengeAttempted"
@@ -152,11 +152,11 @@
           </p>
         </section>
         <section v-if="settings.enabled" class="enabled-card">
-          <h3>本人接收渠道已验证</h3>
+          <h3>本人接收方式已验证</h3>
           <p>
-            后续本地订单状态变化会进入发送队列。不会额外查询上游；离线期间的多次变化可能合并为最近状态。
+            后续订单状态变化会进入发送队列。不会额外刷新订单；离线期间的多次变化可能合并为最近状态。
           </p>
-          <p>服务周期结束不代表考勤已成功。请返回订单查看上游执行记录。</p>
+          <p>服务周期结束不代表考勤已成功。请返回订单查看执行记录。</p>
         </section>
         <section class="delivery-history">
           <div class="history-heading">
@@ -169,7 +169,7 @@
               >刷新记录</el-button
             >
           </div>
-          <p class="help">仅查询本平台记录，不会重发任何通知。</p>
+          <p class="help">仅查询已有记录，不会重发任何通知。</p>
           <article
             v-for="record in records"
             :key="record.id"

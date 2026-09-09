@@ -16,6 +16,9 @@ public interface ProjectTicketGateway {
             String ticketId,
             String content);
 
+    Receipt replyTicketWithImage(ApiProvider provider, String projectId, String customerKey,
+            String ticketId, String content, String imageData);
+
     Receipt reviewTicket(
             ApiProvider provider, String projectId, String ticketId, String result, String note);
 }

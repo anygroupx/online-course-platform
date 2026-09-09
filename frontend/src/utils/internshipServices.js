@@ -129,7 +129,7 @@ export function internshipReportRangeError(form, paidDates) {
 // Lookup advice is not an entitlement and never changes a plan until the user applies it.
 export function internshipAdviceItems(advice) {
   if (!advice) return [];
-  const labels = { checkInTime: '建议上班时间', checkOutTime: '建议下班时间', endDate: '上游截止日期', weekdays: '建议执行周期', dailyReport: '日报', weeklyReport: '周报', monthlyReport: '月报' };
+  const labels = { checkInTime: '建议上班时间', checkOutTime: '建议下班时间', endDate: '截止日期', weekdays: '建议执行周期', dailyReport: '日报', weeklyReport: '周报', monthlyReport: '月报' };
   return Object.entries(labels).flatMap(([key,label]) => {
     const value=advice[key];
     if(value===null||value===undefined)return [];

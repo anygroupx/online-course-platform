@@ -39,7 +39,7 @@ public class PluginResearchCatalog {
                 List.of("api.php:118–690 / 350–391 / 507–543", "copilot.php:498–566", "qingka_wangke_sxdk.sql")),
             entry(registry, "P07", "syyv5 (1).tar.gz", "syyv5 多项目中心", "项目与账务", "PLAINTEXT", "NATIVE_PARTIAL", "syyv5", null,
                 List.of("项目与客户密钥绑定", "余额兑换、流水与统计", "工单与补偿审核", "OpenAPI"),
-                List.of("原生项目发布、零余额开户、冻结费率充值/转回与人工核对已实现；未部署/真实联调", "上游文字工单/审核、本平台多客户子账、主/客户密钥、原生 REST OpenAPI 及下游本地售后已实现（审核不入账）；未部署/真实联调。客户消费、附件、安全上游登录与未知新上游工单归属恢复仍待完成"),
+                List.of("原生项目发布、零余额开户、冻结费率充值/转回与人工核对代码已部署但默认关闭，尚未真实联调", "上游工单/审核、本平台多客户子账、主/客户密钥及原生 REST OpenAPI 已实现（审核不入账）；本轮新增上下游私有 PNG/JPEG 图文工单、本人用量与双权限全局概览，尚未部署。客户消费、经营者明细统计、其他附件、安全上游登录与未知新上游工单归属恢复仍待完成"),
                 List.of("UniversalAPI.php:45–145 / 1179–1255 / 1669–1707", "api.php:796–799 / 875–879", "openapi.php:18–47")),
             entry(registry, "P08", "toc模板专属对接鲸鱼文件.zip", "鲸鱼 · TOC 版", "运动计划", "OPAQUE", "NEEDS_PROTOCOL", null, null,
                 List.of("乐跑 / Keep / 运动 / 体育 UI", "区域、周期与任务计划", "延期与退款按钮"),

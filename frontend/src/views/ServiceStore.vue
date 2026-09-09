@@ -4,7 +4,7 @@
       <div>
         <span class="eyebrow">SERVICES / 服务商城</span>
         <h1>选好服务，安排接下来的计划。</h1>
-        <p>在本平台下单、管理进度和售后，无需跳转上游后台。</p>
+        <p>下单后可管理进度和售后。</p>
       </div>
       <el-button @click="router.push('/service-orders')"
         >我的服务订单 <el-icon><ArrowRight /></el-icon
@@ -105,7 +105,7 @@
           <section>
             <h3>服务对象</h3>
             <el-checkbox v-model="consent"
-              >我有权使用此账号及信息，并授权本平台向所选上游提交</el-checkbox
+              >我有权使用此账号及信息，并授权提交</el-checkbox
             >
             <InternshipPlanFields
               v-if="selected.providerType === 'sxdk_tw'"
@@ -280,7 +280,7 @@
                   v-else
                   v-model="distance"
                   inputmode="decimal"
-                  placeholder="按上游计划限制填写"
+                  placeholder="按计划限制填写"
               /></el-form-item>
               <el-form-item
                 v-if="selected.providerType === 'heisha'"

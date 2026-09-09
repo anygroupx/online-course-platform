@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
-import { createServer } from "vite";
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
 
 const html = `<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:24px"><div id="app"></div>
 <script type="module">
@@ -214,9 +214,14 @@ try {
     return respond(null, 404);
   });
   await page.goto(`${base}/__native_services`);
-  await page.getByRole("button", { name: "选择服务", exact: true }).click();
+  try {
+    await page.getByRole("button", { name: "选择服务", exact: true }).click();
+  } catch (error) {
+    console.error("Simulated workflow initialization:", { errors, unexpected, body: await page.locator("body").innerText() });
+    throw error;
+  }
   await page
-    .getByText("我有权使用此账号及信息，并授权本平台向所选上游提交", {
+    .getByText("我有权使用此账号及信息，并授权提交", {
       exact: true,
     })
     .click();
@@ -276,11 +281,11 @@ try {
     .getByRole("option", { name: "已授权极光接口 · 极光", exact: true })
     .click();
   await page.getByRole("button", { name: "读取目录", exact: true }).click();
-  await page.getByText("先读取上游目录", { exact: true }).click();
+  await page.getByText("先读取服务目录", { exact: true }).click();
   await page
-    .getByRole("option", { name: "上游晨间商品 · 上游 ¥0.10", exact: true })
+    .getByRole("option", { name: "上游晨间商品 · 成本 ¥0.10", exact: true })
     .click();
-  await page.getByPlaceholder("例如 0.25；不能低于上游单价").fill("0.25");
+  await page.getByPlaceholder("例如 0.25；不能低于成本价").fill("0.25");
   await page.locator(".el-switch__core").click();
   await page.getByRole("button", { name: "保存商品", exact: true }).click();
   await page.getByText("服务商品已保存", { exact: true }).waitFor();

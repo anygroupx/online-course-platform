@@ -24,3 +24,9 @@ export const confirmTicketOperation = (id, admin = false) =>
   write(`${root(admin)}/project-ticket-operations/${key(id)}/confirm`);
 export const resolveTicketOperation = (id, form) =>
   write(`/admin/project-ticket-operations/${key(id)}/resolve`, form);
+
+// Private local image cache, not an upstream refresh and never an API key in an <img> URL.
+export const getProjectTicketImage = (id, replyId = null, admin = false) =>
+  request.get(`${root(admin)}/project-tickets/${key(id)}/image`, { params: replyId ? { replyId } : undefined, responseType: 'blob' });
+export const getProjectTicketOperationImage = (id, admin = false) =>
+  request.get(`${root(admin)}/project-ticket-operations/${key(id)}/image`, { responseType: 'blob' });

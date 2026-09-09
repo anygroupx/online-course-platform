@@ -3,7 +3,7 @@
     <el-card class="header-card">
       <template #header>
         <div class="card-header">
-          <h1>第三方 API 对接文档</h1>
+          <h1>开放 API 使用文档</h1>
           <el-tag type="info">在线测试工具</el-tag>
         </div>
       </template>
@@ -13,7 +13,7 @@
           <p>基础请求 URL：<code>{{ apiBaseUrl }}</code>，接口路径为 <code>/external/...</code>，不要重复拼接 <code>/api</code>。</p>
           <p>使用 POST 和 <code>application/x-www-form-urlencoded</code> 请求体。请勿把密钥或学生密码放在 URL 中，也不要发送 JSON 请求体。</p>
           <p>UID 是个人中心的 UUID。APIKey 明文仅在签发时显示一次，密钥前缀不能用于调用；旧数字 UID 需改为 UUID；已完成哈希迁移的旧密钥仍可继续使用。</p>
-          <p>生产环境请使用 HTTPS。IP / 密钥限流、密钥有效期、作用域、订单归属和上游安全校验始终生效。</p>
+          <p>生产环境请使用 HTTPS。IP / 密钥限流、密钥有效期、作用域、订单归属和服务安全校验始终生效。</p>
         </div>
       </el-alert>
       <section class="api-key-section" aria-label="在线测试凭证">
@@ -86,7 +86,7 @@
         <el-table-column prop="message" label="说明" min-width="185" />
         <el-table-column prop="solution" label="处理建议" min-width="270" />
       </el-table>
-      <p>安全迭代不会要求第三方获取 JWT。查课 / 下单依赖上游配置；连接失败应由管理员检查接口验证状态、出站域名白名单、DNS 和 TLS，不能关闭防护来恢复调用。</p>
+      <p>API 调用方无需获取 JWT。查课 / 下单依赖已启用的服务配置；连接失败请联系管理员检查配置和网络状态，不要通过关闭安全保护恢复调用。</p>
     </el-card>
   </div>
 </template>

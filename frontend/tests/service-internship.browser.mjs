@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
-import { createServer } from "vite";
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
 const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:24px"><div id="app"></div><script type="module">
 import {createApp,h} from 'vue';import {createRouter,createMemoryHistory,RouterView} from 'vue-router';import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';import '/src/styles/variables.scss';import '/src/styles/global.css';import '/src/styles/element-overrides.scss';
@@ -154,7 +154,7 @@ try {
       return respond({
         suggested: publicFields,
         choices: [],
-        notice: "上游资料已读取，请核对后填写服务周期。",
+        notice: "资料已读取，请核对后填写服务周期。",
       });
     }
     if (endpoint === "/services/3/quotes") {
@@ -290,7 +290,7 @@ try {
   await page.goto(`${base}/__internship`);
   await page.getByRole("button", { name: "选择服务", exact: true }).click();
   await page
-    .getByText("我有权使用此账号及信息，并授权本平台向所选上游提交", {
+    .getByText("我有权使用此账号及信息，并授权提交", {
       exact: true,
     })
     .click();
@@ -302,7 +302,7 @@ try {
     .getByRole("button", { name: "读取本人实习资料", exact: true })
     .click();
   await page
-    .getByText("上游资料已读取，请核对后填写服务周期。", { exact: true })
+    .getByText("资料已读取，请核对后填写服务周期。", { exact: true })
     .waitFor();
   assert.equal(lookups, 1);
   await page
@@ -421,7 +421,7 @@ try {
   await page
     .getByRole("option", { name: "已授权实习直连接口 · 实习服务", exact: true })
     .click();
-  await publish.getByPlaceholder("例如 0.25；不能低于上游单价").fill("0.25");
+  await publish.getByPlaceholder("例如 0.25；不能低于成本价").fill("0.25");
   await publish
     .getByPlaceholder("填写合同成本，不是原插件的默认值")
     .fill("0.10");
@@ -435,7 +435,7 @@ try {
     .fill("已核实上游合同单价与服务日取消退款规则");
   await publish
     .getByText(
-      "我已核实上游单价、倍率和取消规则，认可本平台按服务日计费与退款条款",
+      "我已核实成本、倍率和取消规则，认可按服务日计费与退款条款",
       { exact: true },
     )
     .click();

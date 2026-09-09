@@ -9,7 +9,7 @@ export const clientStates = Object.freeze({
 });
 export const clientActions = Object.freeze({
   OPEN: "开通客户",
-  TOP_UP: "充值本地额度",
+  TOP_UP: "充值客户额度",
   WITHDRAW: "转回平台余额",
 });
 export const clientState = (value) => clientStates[value] || "待核对";

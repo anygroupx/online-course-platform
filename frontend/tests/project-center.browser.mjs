@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import { chromium } from "playwright";
-import { createServer } from "vite";
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
 
 // Real Vue views, simulated API only. No supplier calls, money, or real customer keys.
 const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:24px"><div id="app"></div><script type="module">
@@ -286,7 +286,7 @@ try {
   assert.equal(mutations.length, beforeSupport, "opening support from the owned account must not auto-submit");
   await supportDraft.getByRole("button", { name: "取消", exact: true }).click();
   await supportDraft.waitFor({ state: "hidden" });
-  await page.getByRole("button", { name: "更新上游余额" }).click();
+  await page.getByRole("button", { name: "更新账户余额" }).click();
   assert.equal(
     mutations.filter((m) => m.endpoint.endsWith("/refresh")).length,
     1,
@@ -373,16 +373,16 @@ try {
   await admin.goto(`${base}/__project_center?page=/admin/service-projects`);
   await admin.getByRole("button", { name: "发布项目", exact: true }).click();
   let drawer = admin.getByRole("dialog", { name: "发布项目", exact: true });
-  await drawer.getByRole("combobox", { name: "已验证的 syyv5 上游" }).click();
+  await drawer.getByRole("combobox", { name: "已验证的 syyv5 配置" }).click();
   await admin.getByRole("option", { name: "已验证项目接口" }).click();
   await drawer.getByRole("button", { name: "读取目录" }).click();
-  await drawer.getByText("先读取已授权的上游项目目录", { exact: true }).click();
+  await drawer.getByText("先读取已授权的项目目录", { exact: true }).click();
   await admin.getByRole("option", { name: "项目乙 · 目录 ¥1.75" }).click();
   await drawer
     .getByRole("textbox", { name: "新账户售价（元 / 额度）" })
     .fill("0.25");
   await drawer
-    .getByRole("textbox", { name: "已核实上游成本（元 / 额度）" })
+    .getByRole("textbox", { name: "已核实实际成本（元 / 额度）" })
     .fill("0.10");
   const expiry = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
   await drawer.getByRole("combobox", { name: "成本核实有效期" }).fill(expiry);
@@ -391,7 +391,7 @@ try {
     .getByRole("textbox", { name: "核实依据" })
     .fill("已查阅合同并逐笔核实上游的实际单位扣款成本。");
   await drawer
-    .getByText("已向上游核实实际单位成本，并了解用户账户冻结售价不会跟随调价", {
+    .getByText("已核实实际单位成本，并了解用户账户冻结售价不会跟随调价", {
       exact: true,
     })
     .click();
@@ -411,7 +411,7 @@ try {
     .getByRole("textbox", { name: "核对证据" })
     .fill("逐项核对原流水，上游确认完全未受理该笔充值。");
   await dialog
-    .getByText("已与上游逐项核实，不凭余额变化推测受理结果", { exact: true })
+    .getByText("已逐项核实，不凭余额变化推测受理结果", { exact: true })
     .click();
   loseResolution = true;
   await dialog.getByRole("button", { name: "确认核对并记账" }).click();

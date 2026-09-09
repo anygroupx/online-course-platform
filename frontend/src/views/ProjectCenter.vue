@@ -48,7 +48,7 @@
           }}
         </p>
         <div class="balance-band">
-          <span>上游最近回执余额</span
+          <span>最近确认余额</span
           ><strong
             >{{ projectAmount(project.account?.remoteBalance) }}
             <small>额度</small></strong
@@ -72,7 +72,7 @@
             </dd>
           </div>
           <div>
-            <dt>本平台未退充值额度</dt>
+            <dt>未退充值额度</dt>
             <dd>{{ projectAmount(project.account?.refundableUnits) }}</dd>
           </div>
         </dl>
@@ -107,7 +107,7 @@
                 !['ACTIVE', 'DISABLED'].includes(project.account.state)
               "
               @click="refreshBalance(project)"
-              >更新上游余额</el-button
+              >更新账户余额</el-button
             ></template
           >
           <el-button
@@ -237,14 +237,14 @@
           </div>
           <div class="policy-note">
             <p v-if="action === 'PROVISION'">
-              仅创建本人专属的零余额项目账户，不会自动充值。上游客户密钥由服务器加密保管。
+              仅创建本人专属的零余额项目账户，不会自动充值。项目账户密钥已加密保管。
             </p>
             <p v-else>
               本账户费率冻结为 ¥{{ selected.account.unitPrice }} /
               额度。充值向上取整到分，转回向下取整到分。
             </p>
             <p>
-              转回只覆盖本平台已充值且未退的额度与金额；外部赠额不自动兑付。上游项目余额和平台余额分别记账。
+              转回只覆盖已充值且未退的额度与金额；赠送额度不自动兑付。项目余额和账户余额分别记账。
             </p>
           </div>
           <el-checkbox v-model="consent" class="policy-check"
@@ -279,7 +279,7 @@
             quote.action === "TOP_UP"
               ? "将扣除平台余额"
               : quote.action === "WITHDRAW"
-                ? "上游扣除成功后才转入平台余额"
+                ? "确认扣除成功后才转入账户余额"
                 : "零余额开户，不扣款"
           }}
         </p>

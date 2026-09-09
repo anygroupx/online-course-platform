@@ -17,4 +17,4 @@ export const notificationCanChallenge = (value) =>
   !value.verified &&
   !value.challengeDeliveryId;
 export const notificationKind = (value) =>
-  value === "VERIFY_RECEIVER" ? "接收渠道验证" : "订单状态更新";
+  value === "VERIFY_RECEIVER" ? "接收方式验证" : "订单状态更新";

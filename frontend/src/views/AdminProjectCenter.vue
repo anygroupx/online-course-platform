@@ -5,17 +5,17 @@
         <span class="eyebrow">PROJECT OPERATIONS / 项目运营</span>
         <h1>项目、费率与资金核对</h1>
         <p>
-          目录展示价不等于最终上游成本。确认合同费率后发布，用户账户保留开通时的冻结售价。
+          目录展示价不等于最终实际成本。确认合同费率后发布，用户账户保留开通时的冻结售价。
         </p>
       </div>
       <el-button type="primary" @click="edit()">发布项目</el-button>
     </header>
     <el-tabs
       v-model="tab"
-      @tab-change="tab === 'review' ? loadOperations() : load()"
+      @tab-change="tab === 'review' ? loadOperations() : tab === 'projects' ? load() : undefined"
       ><el-tab-pane label="项目与费率" name="projects" /><el-tab-pane
         label="资金操作核对"
-        name="review" /><el-tab-pane label="项目工单" name="tickets"
+        name="review" /><el-tab-pane label="项目工单" name="tickets" /><el-tab-pane label="运营统计" name="reports"
     /></el-tabs>
     <el-alert
       v-if="error"
@@ -32,7 +32,7 @@
           min-width="170"
         /><el-table-column
           prop="remoteProjectId"
-          label="上游项目"
+          label="项目"
           width="110"
         /><el-table-column label="新账户售价 / 已核实成本" min-width="210"
           ><template #default="{ row }"
@@ -63,7 +63,7 @@
     /></template>
     <template v-else-if="tab === 'review'"
       ><p class="review-policy">
-        须同时具备接口管理与资金核对权限。先查上游实际流水，再判断是否受理；不能用余额差猜测，不会再次向上游发起兑换。
+        须同时具备接口管理与资金核对权限。先查实际交易流水，再判断是否受理；不能用余额差猜测，也不会再次提交兑换。
       </p>
       <el-button :loading="loading" @click="loadOperations"
         >刷新核对列表</el-button
@@ -103,7 +103,8 @@
         layout="prev,pager,next"
         @current-change="loadOperations"
     /></template>
-    <ProjectTickets v-else admin />
+    <ProjectTickets v-else-if="tab === 'tickets'" admin />
+    <ProjectUsage v-else-if="tab === 'reports'" admin />
     <el-drawer
       v-model="editingOpen"
       destroy-on-close
@@ -112,7 +113,7 @@
       :close-on-click-modal="false"
       :before-close="closeEdit"
       ><el-form label-position="top" :disabled="saving">
-        <el-form-item label="已验证的 syyv5 上游"
+        <el-form-item label="已验证的 syyv5 配置"
           ><el-select
             v-if="!editing"
             v-model="form.providerId"
@@ -135,12 +136,12 @@
             :model-value="`固定绑定接口 #${form.providerId}`"
             disabled
         /></el-form-item>
-        <el-form-item label="上游项目"
+        <el-form-item label="项目"
           ><div class="catalog-line">
             <el-select
               v-model="form.remoteProjectId"
               :disabled="!!editing"
-              placeholder="先读取已授权的上游项目目录"
+              placeholder="先读取已授权的项目目录"
               @change="selectRemote"
               ><el-option
                 v-for="item in catalog"
@@ -158,7 +159,7 @@
             >
           </div></el-form-item
         >
-        <el-form-item label="本平台项目名称"
+        <el-form-item label="项目名称"
           ><el-input v-model="form.title" maxlength="100" /></el-form-item
         ><el-form-item label="项目说明"
           ><el-input
@@ -177,7 +178,7 @@
             ><el-input
               v-model="form.unitPrice"
               inputmode="decimal" /></el-form-item
-          ><el-form-item label="已核实上游成本（元 / 额度）"
+          ><el-form-item label="已核实实际成本（元 / 额度）"
             ><el-input v-model="form.unitCost" inputmode="decimal"
           /></el-form-item>
         </div>
@@ -195,7 +196,7 @@
             maxlength="1000"
             placeholder="至少十个字，记录合同或账务核实依据；不要填写密钥" /></el-form-item
         ><el-checkbox v-model="form.upstreamChecked" class="wrapped-check"
-          >已向上游核实实际单位成本，并了解用户账户冻结售价不会跟随调价</el-checkbox
+          >已核实实际单位成本，并了解用户账户冻结售价不会跟随调价</el-checkbox
         ><el-form-item label="开放状态"
           ><el-switch
             v-model="form.enabled"
@@ -236,7 +237,7 @@
           v-if="operation.state === 'UNKNOWN'"
           label-position="top"
           :disabled="saving || reviewAttempted"
-          ><el-form-item label="上游真实受理结果"
+          ><el-form-item label="实际受理结果"
             ><el-radio-group v-model="review.outcome"
               ><el-radio value="ACCEPTED">已受理</el-radio
               ><el-radio value="NOT_ACCEPTED"
@@ -247,7 +248,7 @@
             v-if="
               operation.action === 'PROVISION' && review.outcome === 'ACCEPTED'
             "
-            label="已核实的上游客户编号"
+            label="已核实的客户编号"
             ><el-input
               v-model="review.customerId"
               inputmode="numeric"
@@ -258,9 +259,9 @@
               type="textarea"
               :rows="3"
               maxlength="1000"
-              placeholder="原操作对应的上游流水与核实过程，至少十个字；不要填密钥" /></el-form-item
+              placeholder="原操作对应的交易流水与核实过程，至少十个字；不要填密钥" /></el-form-item
           ><el-checkbox v-model="review.upstreamChecked" class="wrapped-check"
-            >已与上游逐项核实，不凭余额变化推测受理结果</el-checkbox
+            >已逐项核实，不凭余额变化推测受理结果</el-checkbox
           >
           <p class="review-effect">{{ effect }}</p></el-form
         ></template
@@ -284,6 +285,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref } from "vue";
 import ProjectTickets from "@/components/projectcenter/ProjectTickets.vue";
+import ProjectUsage from "@/components/projectcenter/ProjectUsage.vue";
 import { ElMessage } from "element-plus";
 import request from "@/utils/request";
 import {
@@ -330,11 +332,11 @@ const effect = computed(() =>
     ? ""
     : review.value.outcome === "NOT_ACCEPTED"
       ? operation.value.action === "TOP_UP"
-        ? `返还原充值预扣 ¥${operation.value.amount}；不会调用上游退款。`
+        ? `返还原充值预扣 ¥${operation.value.amount}；不会再次提交退款。`
         : "关闭待核对操作，不增加平台余额。"
       : operation.value.action === "WITHDRAW"
-        ? `确认上游扣除已成功后，向原用户入账 ¥${operation.value.amount}。`
-        : "确认原上游已受理，完成本地绑定或额度记录；不会再次发起上游操作。",
+        ? `确认扣除已成功后，向原用户入账 ¥${operation.value.amount}。`
+        : "确认原操作已受理，完成账户关联或额度记录；不会再次提交操作。",
 );
 async function load() {
   loading.value = true;

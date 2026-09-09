@@ -124,7 +124,7 @@ const routes = [
       },
       {
         path: "project-clients", name: "ProjectClients", component: () => import("@/views/ProjectClients.vue"),
-        meta: { title: "下游客户与项目API", requiresAuth: true },
+        meta: { title: "客户与项目 API", requiresAuth: true },
       },
       {
         path: "admin/service-projects", name: "AdminProjectCenter", component: () => import("@/views/AdminProjectCenter.vue"),

@@ -1,7 +1,20 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import { chromium } from "playwright";
-import { createServer } from "vite";
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
+import { pngFixture } from "./fixtures/ticket-image.mjs";
+const png = pngFixture();
+// A visible drawer can still be translating into view; capture only after its finite CSS transitions settle.
+async function settleDrawer(locator) {
+  await locator.evaluate(async (element) => {
+    await new Promise(requestAnimationFrame);
+    const animations = new Set();
+    for (let node = element; node; node = node.parentElement)
+      for (const animation of node.getAnimations())
+        if (animation.effect?.getTiming().iterations !== Infinity) animations.add(animation);
+    await Promise.all([...animations].map((animation) => animation.finished.catch(() => {})));
+  });
+}
 const accountId = "27c5c14d-2eba-4dd7-a023-52a49a3dcc6b";
 const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:24px"><div id="app"></div><script type="module">
 import {createApp} from 'vue';import ElementPlus from 'element-plus';import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';import '/src/styles/variables.scss';import '/src/styles/global.css';import '/src/styles/element-overrides.scss';
@@ -41,7 +54,7 @@ const listing = (rows) => ({
   current: 1,
   size: 20,
 });
-function operation(ticket, action, content, result = null) {
+function operation(ticket, action, content, result = null, hasAttachment = false) {
   const op = {
     id: id(),
     ticketId: ticket.id,
@@ -49,6 +62,7 @@ function operation(ticket, action, content, result = null) {
     state: "READY",
     content,
     reviewResult: result,
+    hasAttachment,
     expiresAt: new Date(Date.now() + 300000).toISOString(),
     createdAt: "2026-09-08T14:00:00",
     warnings: [
@@ -74,6 +88,12 @@ try {
   context = await browser.newContext({
     viewport: { width: 1440, height: 1080 },
   });
+  await context.addInitScript(() => {
+    window.ticketImageUrls = new Set();
+    const create = URL.createObjectURL.bind(URL), revoke = URL.revokeObjectURL.bind(URL);
+    URL.createObjectURL = blob => { const url = create(blob); ticketImageUrls.add(url); return url; };
+    URL.revokeObjectURL = url => { ticketImageUrls.delete(url); revoke(url); };
+  });
   context.on("page", (p) => p.on("pageerror", (e) => errors.push(e.message)));
   await context.route("**/*", async (route) => {
     const req = route.request(),
@@ -93,6 +113,12 @@ try {
         });
     if (method === "GET") reads.push(path);
     else writes.push({ path, body: body() });
+    if (method === "GET" && /^\/(admin\/)?(project-tickets|project-ticket-operations)\/[^/]+\/image$/.test(path)) {
+      assert.match(req.headers().authorization, /^Bearer /);
+      assert.equal(url.searchParams.has('api_key'), false);
+      assert.equal(url.searchParams.has('token'), false);
+      return route.fulfill({ contentType: 'image/png', body: png });
+    }
     if (method === "GET" && /^\/(admin\/)?project-tickets$/.test(path))
       return respond(listing([...tickets.values()].reverse()));
     if (method === "GET" && /^\/(admin\/)?project-tickets\/[^/]+$/.test(path))
@@ -129,7 +155,8 @@ try {
         status: null,
         reviewResult: "",
         reviewNote: "",
-        hasAttachment: false,
+        hasAttachment: !!b.imageData,
+        attachmentAvailable: !!b.imageData,
         replies: [],
         version: 0,
         pendingOperationId: null,
@@ -137,7 +164,7 @@ try {
         checkedAt: null,
       };
       tickets.set(ticket.id, ticket);
-      return respond(operation(ticket, "SUBMIT", b.description));
+      return respond(operation(ticket, "SUBMIT", b.description, null, !!b.imageData));
     }
     if (
       method === "POST" &&
@@ -148,7 +175,7 @@ try {
       assert.equal(b.version, t.version);
       assert.equal(b.confirmedPolicy, true);
       assert.equal(t.pendingOperationId, null);
-      return respond(operation(t, "REPLY", b.content));
+      return respond(operation(t, "REPLY", b.content, null, !!b.imageData));
     }
     if (
       method === "POST" &&
@@ -171,11 +198,12 @@ try {
       await new Promise((r) => setTimeout(r, 150));
       if (op.action === "REPLY")
         t.replies.push({
-          id: `reply-${seq}`,
+          id: String(100 + seq),
           sender: "customer",
           content: op.content,
           createdAt: "2026-09-08 14:10:00",
-          hasAttachment: false,
+          hasAttachment: op.hasAttachment,
+          attachmentAvailable: op.hasAttachment,
         });
       if (op.action === "REVIEW") {
         t.reviewResult = op.reviewResult;
@@ -246,7 +274,7 @@ try {
     0,
     "initial load never fetches supplier or submits",
   );
-  async function draft(title) {
+  async function draft(title, image = false) {
     await page.getByRole("button", { name: "新建工单" }).click();
     const d = page.getByRole("dialog", { name: "新建项目工单" });
     await d.getByText("补偿申请", { exact: true }).click();
@@ -255,6 +283,12 @@ try {
       .getByRole("textbox", { name: "情况说明" })
       .fill("本人项目未完成服务，请核实已提供的执行记录。");
     await d.getByRole("textbox", { name: "申请补偿的项目额度" }).fill("2.25");
+    if (image) {
+      const noNewWrite = writes.length;
+      await d.locator('input[type=file]').setInputFiles({ name: 'ticket.png', mimeType: 'image/png', buffer: png });
+      await d.getByAltText('待提交附件预览').waitFor();
+      assert.equal(writes.length, noNewWrite, 'local file selection does not upload');
+    }
     await d
       .getByText("确认发送本人项目的问题说明，未包含密码、验证码或密钥", {
         exact: true,
@@ -265,7 +299,12 @@ try {
     await confirm.waitFor();
     return confirm;
   }
-  let dialog = await draft("执行异常 <img src=x onerror=window.__xss=1>");
+  let dialog = await draft("执行异常 <img src=x onerror=window.__xss=1>", true);
+  assert.match(writes.at(-1).body.imageData, /^data:image\/png;base64,/);
+  assert.equal(reads.filter(p=>p.endsWith("/image")).length, 0);
+  await dialog.getByRole("button", { name: "查看私有图片附件", exact: true }).click();
+  await dialog.getByAltText("已清除元数据的工单附件").waitFor();
+  assert.equal(reads.filter(p=>p.endsWith("/image")).length, 1);
   assert.equal(
     writes.filter((w) => w.path.endsWith("/confirm")).length,
     0,
@@ -277,13 +316,18 @@ try {
   await dialog.getByText("已完成", { exact: true }).waitFor();
   assert.equal(writes.filter((w) => w.path.endsWith("/confirm")).length, 1);
   await dialog.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.waitForFunction(() => ticketImageUrls.size === 0);
   assert.equal(await page.locator(".ticket-title img").count(), 0);
   await page.getByRole("button", { name: "查看工单", exact: true }).click();
   dialog = page.getByRole("dialog", { name: "项目工单详情" });
   await dialog.waitFor();
   const before = writes.length;
   assert.equal(writes.filter((w) => w.path.endsWith("/refresh")).length, 0);
-  await dialog.getByRole("button", { name: "读取上游最新回复" }).click();
+  await dialog.getByRole("button", { name: "查看私有图片附件", exact: true }).click();
+  await dialog.getByAltText("已清除元数据的工单附件").waitFor();
+  assert.equal(writes.length, before, 'reading image cache never refreshes supplier');
+  await dialog.getByRole("button", { name: "收起并清除图片", exact: true }).click();
+  await dialog.getByRole("button", { name: "读取最新回复" }).click();
   await dialog
     .getByText("已收到反馈 <script>window.__xss=1</script>", { exact: true })
     .waitFor();
@@ -292,12 +336,17 @@ try {
   await dialog
     .getByRole("textbox", { name: "补充回复" })
     .fill("补充本人情况，请核实原操作。");
+  await dialog.locator('input[type=file]').setInputFiles({ name: 'reply.png', mimeType: 'image/png', buffer: png });
+  await dialog.getByAltText('待提交附件预览').waitFor();
   await dialog
     .getByText("确认发送本人项目工单的回复，未包含凭据", { exact: true })
     .click();
   await dialog.getByRole("button", { name: "预览回复" }).click();
   dialog = page.getByRole("dialog", { name: "发送回复" });
   await dialog.waitFor();
+  assert.match(writes.at(-1).body.imageData, /^data:image\/png;base64,/);
+  await dialog.getByRole("button", { name: "查看私有图片附件", exact: true }).click();
+  await dialog.getByAltText("已清除元数据的工单附件").waitFor();
   loseConfirm = true;
   await dialog.getByRole("button", { name: "确认发送", exact: true }).click();
   await dialog.getByText("提交结果待确认", { exact: true }).waitFor();
@@ -312,13 +361,18 @@ try {
   await dialog.getByRole("button", { name: "关闭", exact: true }).click();
   await page.getByRole("button", { name: "查看工单", exact: true }).click();
   dialog = page.getByRole("dialog", { name: "项目工单详情" });
-  await dialog.getByRole("button", { name: "读取上游最新回复" }).click();
+  await dialog.getByRole("button", { name: "读取最新回复" }).click();
   assert.equal(
     await dialog.getByRole("button", { name: "预览回复" }).count(),
     0,
     "remote text presence does not unlock an uncertain send",
   );
   assert.equal([...operations.values()].at(-1).state, "UNKNOWN");
+  const replyBubble = dialog.locator('.reply-customer');
+  const noRepeat = writes.length;
+  await replyBubble.getByRole('button', { name: '查看私有图片附件', exact: true }).click();
+  await replyBubble.getByAltText('已清除元数据的工单附件').waitFor();
+  assert.equal(writes.length, noRepeat);
   mkdirSync("../.cache/native-service-ui", { recursive: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => document.documentElement.classList.add("dark"));
@@ -329,7 +383,7 @@ try {
   );
   await page.screenshot({
     path: "../.cache/native-service-ui/project-tickets-mobile-dark.png",
-    fullPage: true,
+    fullPage: false,
     animations: "disabled",
   });
   const bounds = await dialog.boundingBox();
@@ -343,6 +397,9 @@ try {
   await admin.goto(`${base}/__project_tickets?admin`);
   await admin.getByRole("button", { name: "查看工单" }).click();
   let detail = admin.getByRole("dialog", { name: "项目工单详情" });
+  await detail.getByRole('button', { name: '查看私有图片附件', exact: true }).first().click();
+  await detail.getByAltText('已清除元数据的工单附件').waitFor();
+  assert.ok(reads.some(p => p.startsWith('/admin/project-tickets/') && p.endsWith('/image')));
   await detail.getByRole("button", { name: "检查原操作" }).click();
   dialog = admin.getByRole("dialog", { name: "发送回复" });
   await dialog.getByText("已受理", { exact: true }).click();
@@ -372,6 +429,20 @@ try {
   assert.equal(writes.length, checkCount);
   assert.equal(resolutionCount, 1);
   await dialog.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.getByRole('dialog', { name: '项目工单详情' }).getByRole('button', { name: 'Close this dialog' }).click();
+  await page.getByRole('button', { name: '查看工单', exact: true }).click();
+  let userDetail = page.getByRole('dialog', { name: '项目工单详情' });
+  await userDetail.locator('input[type=file]').setInputFiles({ name: 'only.png', mimeType: 'image/png', buffer: png });
+  await userDetail.getByAltText('待提交附件预览').waitFor();
+  await userDetail.getByText('确认发送本人项目工单的回复，未包含凭据', { exact: true }).click();
+  await userDetail.getByRole('button', { name: '预览回复' }).click();
+  assert.equal(writes.at(-1).body.content, '');
+  assert.match(writes.at(-1).body.imageData, /^data:image\/png;base64,/);
+  const pureImage = page.getByRole('dialog', { name: '发送回复' });
+  await pureImage.getByRole('button', { name: '确认发送', exact: true }).click();
+  await pureImage.getByText('已完成', { exact: true }).waitFor();
+  await pureImage.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.getByRole('button', { name: '查看工单', exact: true }).click();
   await admin.getByRole("button", { name: "查看工单" }).click();
   detail = admin.getByRole("dialog", { name: "项目工单详情" });
   await detail.getByText("同意申请", { exact: true }).click();
@@ -397,6 +468,7 @@ try {
     await detail.getByRole("button", { name: "预览补偿审核" }).count(),
     0,
   );
+  await settleDrawer(detail);
   await admin.screenshot({
     path: "../.cache/native-service-ui/project-tickets-review-desktop.png",
     fullPage: true,
@@ -437,6 +509,7 @@ try {
       .isDisabled(),
     true,
   );
+  assert.ok(reads.filter(p => p.endsWith('/image')).every(p => !p.includes('key=')));
   assert.deepEqual(unexpected, []);
   assert.deepEqual(errors, []);
   const storage = await page.evaluate(() =>
@@ -447,7 +520,7 @@ try {
   );
   assert.doesNotMatch(storage, /customer[_-]?key|api[_-]?key|补充本人情况/);
   console.log(
-    "Project ticket browser workflow passed: drafts, single sends, exact ownership fixture, plaintext-only replies, GET-only uncertainty, admin resolution/review without money, mobile/dark; simulated APIs only.",
+    "Project ticket browser workflow passed: drafts, single sends, exact ownership fixture, private inline images in draft/submission/reply, image-only replies, GET-only image cache and uncertainty, admin resolution/review without money, mobile/dark; simulated APIs only.",
   );
 } finally {
   await context?.close();

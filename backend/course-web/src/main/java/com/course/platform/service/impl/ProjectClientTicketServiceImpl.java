@@ -7,6 +7,8 @@ import com.course.platform.application.service.projectclient.*;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
 import com.course.platform.common.security.TokenHashUtil;
+import com.course.platform.common.security.SecretCrypto;
+import com.course.platform.infra.projectclient.ProjectTicketImageCodec;
 import com.course.platform.config.RateLimitProperties;
 import com.course.platform.domain.projectclient.*;
 import com.course.platform.domain.projectclient.ProjectClientTypes.Caller;
@@ -31,6 +33,8 @@ import java.util.function.Supplier;
 @RequiredArgsConstructor
 public class ProjectClientTicketServiceImpl implements ProjectClientTicketService {
     private final ProjectClientTicketMapper tickets;
+    private final ProjectClientTicketImageMapper images;
+    private final ProjectTicketImageCodec imageCodec;
     private final ProjectClientTicketReplyMapper replies;
     private final ProjectClientTicketCommandMapper commands;
     private final ProjectClientMapper clients;
@@ -43,6 +47,8 @@ public class ProjectClientTicketServiceImpl implements ProjectClientTicketServic
 
     @Value("${app.native-services.enabled:false}")
     private boolean enabled;
+    @Value("${app.crypto.secret}")
+    private String cryptoSecret;
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Set<String> KINDS = Set.of("SUGGESTION", "BUG", "COMPENSATION");
     private static final Set<String> STATES = Set.of("OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED");
@@ -79,7 +85,33 @@ public class ProjectClientTicketServiceImpl implements ProjectClientTicketServic
         return replies.selectPage(new Page<>(page, size), new LambdaQueryWrapper<ProjectClientTicketReply>()
                 .eq(ProjectClientTicketReply::getTicketId, id)
                 .orderByAsc(ProjectClientTicketReply::getTicketVersion))
-                .convert(r -> new ReplyView(r.getId(), r.getTicketVersion(), r.getAuthor(), r.getContent(), r.getCreateTime()));
+                .convert(r -> new ReplyView(r.getId(), r.getTicketVersion(), r.getAuthor(), r.getContent(), r.getCreateTime(), r.getImageId()));
+    }
+
+    @Override
+    public byte[] image(Caller c, String id) {
+        keys.recheckTickets(c, false);
+        uuid(id);
+        var row = images.selectById(id); // Payload deliberately excluded until ownership passes.
+        if (row == null) throw missing();
+        owned(c, row.getTicketId(), false);
+        readImageRate(c);
+        try {
+            String cipher = images.content(id, row.getTicketId());
+            if (!SecretCrypto.isEncrypted(cipher)) throw bad("附件暂时无法读取");
+            byte[] bytes = Base64.getDecoder().decode(SecretCrypto.decrypt(cipher, cryptoSecret));
+            if (bytes.length != row.getByteSize() || bytes.length > ProjectTicketImageCodec.MAX_OUTPUT
+                    || !digest(bytes).equals(row.getSha256())) throw bad("附件暂时无法读取");
+            return bytes;
+        } catch (RuntimeException e) { throw bad("附件暂时无法读取，请稍后重试"); }
+    }
+
+    private void readImageRate(Caller c) {
+        if (!limits.isEnabled() || !limits.isFailClosed()) throw bad("附件读取要求安全限流");
+        var d = limiter.check(new RateLimitRequest("client-ticket-image", c.ownerId().toString(),
+                60, Duration.ofMinutes(1), "client-ticket-image"));
+        if (d == null) throw bad("安全限流暂不可用");
+        if (!d.allowed()) throw new RateLimitExceededException(d.retryAfterSeconds());
     }
 
     @Override
@@ -100,7 +132,8 @@ public class ProjectClientTicketServiceImpl implements ProjectClientTicketServic
         if (!"COMPENSATION".equals(f.kind()) && f.requestedAmount().signum() != 0)
             throw bad("普通工单不能填写补偿申请金额");
         var amount = f.requestedAmount().setScale(2);
-        String hash = hash("CREATE", f.clientId(), f.kind(), title, description, amount.toPlainString());
+        String hash = imageHash(hash("CREATE", f.clientId(), f.kind(), title, description, amount.toPlainString()), f.imageData());
+        var image = imageCodec.normalize(f.imageData());
         return tx(() -> {
             lockOwner(c);
             var previous = existing(c, f.requestId(), hash);
@@ -123,6 +156,10 @@ public class ProjectClientTicketServiceImpl implements ProjectClientTicketServic
             row.setCreateTime(now());
             row.setUpdateTime(now());
             write(tickets.insert(row));
+            if (image != null) {
+                row.setImageId(saveImage(row, image));
+                write(tickets.updateById(row));
+            }
             return save(c, f.requestId(), hash, row, "CREATE");
         });
     }
@@ -133,8 +170,10 @@ public class ProjectClientTicketServiceImpl implements ProjectClientTicketServic
         start(c, f.consent());
         uuid(id);
         uuid(f.requestId());
-        String content = text(f.content(), 5000);
-        String hash = hash("REPLY", id, f.version(), content);
+        String content = f.content() == null || f.content().isBlank() ? "" : text(f.content(), 5000);
+        var image = imageCodec.normalize(f.imageData());
+        if (content.isEmpty() && image == null) throw bad("回复须包含文字或一张图片");
+        String hash = imageHash(hash("REPLY", id, f.version(), content), f.imageData());
         return tx(() -> {
             lockOwner(c);
             var previous = existing(c, f.requestId(), hash);
@@ -143,7 +182,7 @@ public class ProjectClientTicketServiceImpl implements ProjectClientTicketServic
             version(row, f.version());
             open(row);
             row.setVersion(row.getVersion() + 1);
-            append(c, row, content);
+            append(c, row, content, image);
             row.setStatus("IN_PROGRESS");
             row.setUpdateTime(now());
             write(tickets.updateById(row));
@@ -178,7 +217,7 @@ public class ProjectClientTicketServiceImpl implements ProjectClientTicketServic
                 row.setReviewNote(note);
                 row.setReviewedAt(now());
             } else {
-                append(c, row, ("RESOLVE".equals(f.action()) ? "标记解决：" : "关闭工单：") + note);
+                append(c, row, ("RESOLVE".equals(f.action()) ? "标记解决：" : "关闭工单：") + note, null);
             }
             row.setStatus(Set.of("APPROVE", "RESOLVE").contains(f.action()) ? "RESOLVED" : "CLOSED");
             row.setUpdateTime(now());
@@ -217,7 +256,7 @@ public class ProjectClientTicketServiceImpl implements ProjectClientTicketServic
         return row;
     }
 
-    private void append(Caller c, ProjectClientTicket row, String content) {
+    private void append(Caller c, ProjectClientTicket row, String content, ProjectTicketImageCodec.Image image) {
         var reply = new ProjectClientTicketReply();
         reply.setId(UUID.randomUUID().toString());
         reply.setTicketId(row.getId());
@@ -225,7 +264,34 @@ public class ProjectClientTicketServiceImpl implements ProjectClientTicketServic
         reply.setAuthor(c.clientId() == null ? "OWNER" : "CUSTOMER");
         reply.setContent(content);
         reply.setCreateTime(now());
+        if (image != null) reply.setImageId(saveImage(row, image));
         write(replies.insert(reply));
+    }
+
+    private String saveImage(ProjectClientTicket ticket, ProjectTicketImageCodec.Image image) {
+        var row = new ProjectClientTicketImage();
+        row.setId(UUID.randomUUID().toString());
+        row.setTicketId(ticket.getId());
+        row.setTicketVersion(ticket.getVersion());
+        row.setWidth(image.width());
+        row.setHeight(image.height());
+        row.setByteSize(image.png().length);
+        row.setSha256(digest(image.png()));
+        row.setCreateTime(now());
+        try { row.setContentEncrypted(SecretCrypto.encrypt(Base64.getEncoder().encodeToString(image.png()), cryptoSecret)); }
+        catch (RuntimeException e) { throw bad("附件未能安全保存，本次提交已回滚"); }
+        write(images.insert(row));
+        return row.getId();
+    }
+
+    private static String imageHash(String original, String data) {
+        // Preserve all pre-image request receipts; an image change is a payload change.
+        return data == null || data.isEmpty() ? original : hash(original, TokenHashUtil.sha256(data));
+    }
+
+    private static String digest(byte[] bytes) {
+        try { return HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes)); }
+        catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException("SHA-256 unavailable"); }
     }
 
     private ProjectClientTicketCommand find(Caller c, String requestId) {
@@ -265,7 +331,7 @@ public class ProjectClientTicketServiceImpl implements ProjectClientTicketServic
     private TicketView view(ProjectClientTicket r) {
         return new TicketView(r.getId(), r.getClientId(), r.getProjectId(), r.getProjectTitle(), r.getKind(),
                 r.getTitle(), r.getDescription(), r.getRequestedAmount().toPlainString(), r.getStatus(), r.getVersion(),
-                r.getReviewResult(), r.getReviewNote(), r.getReviewedAt(), r.getCreateTime(), r.getUpdateTime());
+                r.getReviewResult(), r.getReviewNote(), r.getReviewedAt(), r.getCreateTime(), r.getUpdateTime(), r.getImageId());
     }
 
     private void start(Caller c, boolean consent) {
