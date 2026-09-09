@@ -111,6 +111,40 @@ const routes = [
         meta: { title: "接口管理", requiresAuth: true, adminOnly: true },
       },
       {
+        path: "services", name: "ServiceStore", component: () => import("@/views/ServiceStore.vue"),
+        meta: { title: "服务商城", requiresAuth: true },
+      },
+      {
+        path: "service-orders", name: "ServiceOrders", component: () => import("@/views/ServiceOrders.vue"),
+        meta: { title: "服务订单", requiresAuth: true },
+      },
+      {
+        path: "service-projects", name: "ProjectCenter", component: () => import("@/views/ProjectCenter.vue"),
+        meta: { title: "项目中心", requiresAuth: true },
+      },
+      {
+        path: "project-clients", name: "ProjectClients", component: () => import("@/views/ProjectClients.vue"),
+        meta: { title: "下游客户与项目API", requiresAuth: true },
+      },
+      {
+        path: "admin/service-projects", name: "AdminProjectCenter", component: () => import("@/views/AdminProjectCenter.vue"),
+        meta: { title: "项目与子钱包", requiresAuth: true, adminOnly: true },
+      },
+      {
+        path: "admin/service-products", name: "AdminServiceProducts", component: () => import("@/views/AdminServiceProducts.vue"),
+        meta: { title: "服务商品", requiresAuth: true, adminOnly: true },
+      },
+      {
+        path: "admin/service-orders", name: "AdminServiceOrders", component: () => import("@/views/ServiceOrders.vue"),
+        meta: { title: "服务订单与对账", requiresAuth: true, adminOnly: true, serviceAdmin: true },
+      },
+      {
+        path: "admin/plugin-integrations",
+        name: "AdminPluginIntegrations",
+        component: () => import("@/views/AdminPluginIntegrations.vue"),
+        meta: { title: "插件集成", requiresAuth: true, adminOnly: true },
+      },
+      {
         path: "admin/orders",
         name: "AdminOrders",
         component: () => import("@/views/AdminOrders.vue"),

@@ -113,7 +113,8 @@ public class GlobalExceptionHandler {
         log.error("参数校验异常 errorId={} msg={}", errorId, errorMessage);
         Result<?> body = Result.error(ResultCode.PARAM_ERROR.getCode(), errorMessage);
         body.setErrorId(errorId);
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(body);
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .header(HttpHeaders.CACHE_CONTROL, "no-store").body(body);
     }
 
     @ExceptionHandler(BindException.class)

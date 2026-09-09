@@ -101,6 +101,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 第三方API路径 - 优先匹配（注意：context-path=/api，所以这里只需要匹配 /external/**）
                         .requestMatchers("/external/**").permitAll()
+                        // Navigation handoff: only a one-use, owner-issued POST ticket, never a JWT in a URL.
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/service-face-collection/launch").permitAll()
                         // 其他白名单路径
                         .requestMatchers(PERMIT_ALL_PATHS).permitAll()
                         // 管理端路径必须 ADMIN
@@ -114,6 +116,11 @@ public class SecurityConfig {
                         .requestMatchers("/customer-service/admin/**").hasAuthority("customer-service:read")
                         .requestMatchers("/customer-service/session/*/assign").hasAuthority("customer-service:assign")
                         .requestMatchers("/admin/api-providers/**").hasAuthority("api-provider:update")
+                        // Native-service controllers enforce finer, dual financial permissions at method level.
+                        .requestMatchers("/admin/service-products/**", "/admin/service-orders/**", "/admin/service-order-operations/**",
+                                "/admin/plugin-integrations/**", "/admin/service-projects/**", "/admin/service-project-catalog", "/admin/project-operations/**",
+                                "/admin/project-tickets/**", "/admin/project-ticket-operations/**")
+                                .hasAuthority("api-provider:update")
                         .requestMatchers("/admin/platforms/**", "/admin/platform-categories/**").hasAuthority("platform:update")
                         .requestMatchers("/admin/security/**").authenticated()
                         .requestMatchers("/admin/rbac/**").hasAuthority("rbac:manage")

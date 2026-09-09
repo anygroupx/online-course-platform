@@ -22,6 +22,7 @@
             <el-button type="primary" :icon="Plus" @click="handleCreate">
               添加平台
             </el-button>
+            <el-button @click="priceRefreshVisible = true">仅更新价格/说明</el-button>
             <el-button
               type="success"
               :icon="Download"
@@ -36,6 +37,7 @@
       <!-- 树状视图 -->
       <el-tree
         v-if="viewMode === 'tree'"
+        :key="priceRefreshGeneration"
         lazy
         :load="loadNode"
         :props="treeProps"
@@ -513,10 +515,13 @@
         <el-button type="primary" @click="handleCategorySubmit">确定</el-button>
       </template>
     </el-dialog>
+    <ExistingPriceRefresh v-model="priceRefreshVisible" :providers="apiProviders" @applied="handlePricesRefreshed" />
   </div>
 </template>
 
 <script setup>
+import ExistingPriceRefresh from '@/components/catalog/ExistingPriceRefresh.vue';
+import { isReadOnlyProviderType } from "@/utils/pluginIntegrations";
 import { ref, onMounted, computed } from "vue";
 import {
   Plus,
@@ -572,6 +577,12 @@ const form = ref({
   categoryId: null,
 });
 
+const priceRefreshVisible = ref(false);
+const priceRefreshGeneration = ref(0);
+function handlePricesRefreshed() {
+  priceRefreshGeneration.value++;
+  loadData();
+}
 const importDialogVisible = ref(false);
 const importLoading = ref(false);
 const productLoading = ref(false);
@@ -828,7 +839,7 @@ const loadApiProviders = async () => {
       params: { page: 1, pageSize: 100 },
     });
     if (res.code === 1) {
-      apiProviders.value = res.data.records;
+      apiProviders.value = res.data.records.filter((provider) => !isReadOnlyProviderType(provider.providerType));
     }
   } catch (error) {
     console.error("加载API接口失败：", error);

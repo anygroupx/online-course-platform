@@ -4,10 +4,13 @@
       <template #header>
         <div class="card-header">
           <span>第三方接口管理</span>
+          <div class="provider-header-actions">
+          <el-button @click="router.push('/admin/plugin-integrations')">插件集成</el-button>
           <el-button type="primary" @click="handleCreate">
             <el-icon><Plus /></el-icon>
             添加接口
           </el-button>
+          </div>
         </div>
       </template>
 
@@ -26,7 +29,8 @@
         <el-table-column prop="usernameMasked" label="账号" width="120" />
         <el-table-column prop="balance" label="余额" width="170">
           <template #default="scope">
-            <div class="balance-cell">
+            <el-tag v-if="isReadOnlyProviderType(scope.row.providerType)" type="info">仅目录，不查余额</el-tag>
+            <div v-else class="balance-cell">
               <el-tag type="success">¥{{ formatBalance(scope.row.balance) }}</el-tag>
               <el-button
                 link
@@ -96,11 +100,14 @@
               size="small"
               type="success"
               :disabled="scope.row.status !== 1"
+              v-if="!isReadOnlyProviderType(scope.row.providerType)"
               @click="handleBatchSync(scope.row)"
             >
               <el-icon><Refresh /></el-icon>
               批量同步
             </el-button>
+            <el-button v-if="isReadOnlyProviderType(scope.row.providerType)" size="small" type="success"
+              @click="router.push({ path: '/admin/plugin-integrations', query: { plugin: { flash: 'P01', heisha: 'P03', jiguang: 'P04', wuxin: 'P10', sxdk_tw: 'P06', syyv5: 'P07' }[scope.row.providerType] } })">目录查询</el-button>
             <el-button
               size="small"
               type="danger"
@@ -143,8 +150,17 @@
             <el-option label="29同系统（兼容）" value="29" />
             <el-option label="暗网 (yjdj)" value="yjdj" />
             <el-option label="Ikun" value="ikun" />
+            <el-option label="闪电三件套（服务接口）" value="flash" />
+            <el-option label="黑鲨（服务接口）" value="heisha" />
+            <el-option label="极光（服务接口）" value="jiguang" />
+            <el-option label="无心闪动（服务接口）" value="wuxin" />
+            <el-option label="sxdk_tw 实习（直接上游 API）" value="sxdk_tw" />
+            <el-option label="syyv5 多项目与子钱包" value="syyv5" />
           </el-select>
         </el-form-item>
+        <el-alert v-if="isReadOnlyProviderType(form.providerType)" type="info" :closable="false" class="provider-notice"
+          title="服务模板接口：账号填写上游 UID，API Key 填写上游密钥。"
+          :description="form.providerType === 'syyv5' ? '填写已授权的 HTTPS 上游 API 完整地址及主 API 密钥。连接测试只读取项目目录，不开户、不兑换；项目中心需另外核实成本并发布。主密钥变更不能自动迁移既有用户子钱包。' : form.providerType === 'sxdk_tw' ? '填写已获授权的直接上游 API 完整地址，不是旧 sxdk_tw PHP 宿主页面。GET 使用已保存的 UID / key 查询鉴权，POST 业务字段按表单发送；连接检查不读取或猜测价格。上架时必须核实合同单价。' : '地址填模板安装根目录，不要加插件目录或 API 文件名。无心协议须通过 HTTPS 查询参数鉴权，平台不记录该查询串。连接测试只读。用户下单请在服务商品上架；不要绑定普通课程。'" />
         <el-form-item label="API地址" prop="apiUrl">
           <el-input v-model="form.apiUrl" placeholder="https://provider.example.com 或 /openapi 基础目录" maxlength="2048" />
           <div class="field-help">默认仅允许 HTTPS 公网域名，不接受 IP、查询参数或片段。Daytime / 29 兼容以 /api.php 结尾的地址。</div>
@@ -156,7 +172,7 @@
             :placeholder="form.id && form.hasUsername ? '留空则保持原账号' : '请输入账号'"
           />
         </el-form-item>
-        <el-form-item label="密码">
+        <el-form-item v-if="!isReadOnlyProviderType(form.providerType)" label="密码">
           <el-input
             v-model="form.password"
             type="password"
@@ -172,7 +188,7 @@
             :placeholder="form.id && form.hasApiKey ? '已配置，留空则保持不变' : '请输入API Key'"
           />
         </el-form-item>
-        <el-form-item label="Token">
+        <el-form-item v-if="!isReadOnlyProviderType(form.providerType)" label="Token">
           <el-input
             v-model="form.token"
             type="textarea"
@@ -180,7 +196,7 @@
             :placeholder="form.id && form.hasToken ? '已配置，留空则保持不变' : '请输入Token'"
           />
         </el-form-item>
-        <el-form-item label="Cookie">
+        <el-form-item v-if="!isReadOnlyProviderType(form.providerType)" label="Cookie">
           <el-input
             v-model="form.cookie"
             type="textarea"
@@ -232,6 +248,8 @@ import { ref, onMounted, watch } from "vue";
 import { Plus, Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import axios from "@/utils/request";
+import router from "@/router";
+import { isReadOnlyProviderType } from "@/utils/pluginIntegrations";
 import { useResponsive } from "@/composables/useResponsive";
 import dayjs from "dayjs";
 import { refreshApiProviderBalance, testApiProviderConnection, updateApiProviderStatus } from "@/api/apiProvider";
@@ -296,6 +314,8 @@ const loadData = async () => {
 const handleCreate = () => {
   dialogTitle.value = "添加接口";
   form.value = emptyForm();
+  const requestedType = router.currentRoute.value.query.type;
+  if (isReadOnlyProviderType(requestedType)) form.value.providerType = requestedType;
   originalStatus.value = 2;
   formRef.value?.clearValidate();
   dialogVisible.value = true;
@@ -478,13 +498,19 @@ const formatTime = (timestamp) => {
 };
 
 watch([currentPage, pageSize], loadData);
+watch(() => router.currentRoute.value.query.type, (type) => {
+  if (router.currentRoute.value.path === "/admin/api-providers" && isReadOnlyProviderType(type) && !dialogVisible.value) handleCreate();
+});
 
 onMounted(() => {
   loadData();
+  if (isReadOnlyProviderType(router.currentRoute.value.query.type)) handleCreate();
 });
 </script>
 
 <style scoped>
+.provider-header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.provider-header-actions .el-button + .el-button { margin-left: 0; }
 .api-providers-page {
   padding: 20px;
 }

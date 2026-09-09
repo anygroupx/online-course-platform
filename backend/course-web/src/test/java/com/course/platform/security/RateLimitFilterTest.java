@@ -66,6 +66,18 @@ class RateLimitFilterTest {
         assertEquals("42", captor.getValue().keyMaterial());
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"/api/services/1/lookup","/api/services/1/quotes","/api/service-orders/id/quotes","/api/service-order-operations/id/confirm","/api/service-account-sessions/id/send-code","/api/service-account-sessions/id/verify","/api/service-account-sessions/id/refresh-rules"})
+    void nativeServiceMutationsUseExistingUserRateBudget(String path) throws Exception {
+        RateLimitService service=mock(RateLimitService.class);
+        when(service.check(any())).thenReturn(RateLimitDecision.allowed(10));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(7L,null,List.of()));
+        RateLimitFilter filter=new RateLimitFilter(service,new RateLimitProperties(),mock(SecurityAuditService.class),new ObjectMapper());
+        MockHttpServletRequest request=new MockHttpServletRequest("POST",path);request.setContextPath("/api");
+        filter.doFilter(request,new MockHttpServletResponse(),new MockFilterChain());
+        verify(service).check(argThat(rule->"order:user".equals(rule.dimension())&&"7".equals(rule.keyMaterial())));
+    }
+
     @Test
     void redisFailureFailsClosedWith503() throws Exception {
         RateLimitService service = mock(RateLimitService.class);
@@ -82,4 +94,29 @@ class RateLimitFilterTest {
         assertEquals("5", response.getHeader("Retry-After"));
         assertTrue(response.getContentAsString().contains(String.valueOf(ResultCode.RATE_LIMIT_UNAVAILABLE.getCode())));
     }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"/api/services/1/schools", "/api/service-orders/id/logs", "/api/service-orders/id/options","/api/service-account-sessions/id"})
+    void nativeRemoteReadsHaveTheSameBoundedUserBudget(String path) throws Exception {
+        RateLimitService service = mock(RateLimitService.class);
+        when(service.check(any())).thenReturn(RateLimitDecision.allowed(10));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(7L, null, List.of()));
+        RateLimitFilter filter = new RateLimitFilter(service, new RateLimitProperties(), mock(SecurityAuditService.class), new ObjectMapper());
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", path); request.setContextPath("/api");
+        filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+        verify(service).check(argThat(rule -> "order:user".equals(rule.dimension()) && "7".equals(rule.keyMaterial())));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"/api/admin/service-orders/id/refund-quotes", "/api/admin/service-order-operations/id/settle-refund", "/api/admin/service-order-operations/id/resolve"})
+    void adminServiceRefundOperationsUseTheFinancialRateBudget(String path) throws Exception {
+        RateLimitService service = mock(RateLimitService.class);
+        when(service.check(any())).thenReturn(RateLimitDecision.allowed(10));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(7L, null, List.of()));
+        RateLimitFilter filter = new RateLimitFilter(service, new RateLimitProperties(), mock(SecurityAuditService.class), new ObjectMapper());
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", path); request.setContextPath("/api");
+        filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+        verify(service).check(argThat(rule -> "refund:user".equals(rule.dimension()) && "7".equals(rule.keyMaterial())));
+    }
+
 }

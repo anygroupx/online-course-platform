@@ -6,14 +6,15 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.course.platform.application.service.platform.ApiProviderService;
-import com.course.platform.application.service.platform.docking.PlatformDockingStrategy;
+import com.course.platform.application.service.platform.docking.ProviderConnectionProbe;
+import com.course.platform.application.service.integration.PluginReadOnlyConnector;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
 import com.course.platform.common.security.SecretCrypto;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.domain.vo.ProviderConnectionTestResult;
-import com.course.platform.infra.docking.PlatformDockingStrategyFactory;
+import com.course.platform.infra.integration.ProviderConnectionProbeRegistry;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
 import com.course.platform.infra.http.ProviderOutboundPolicyFactory;
 import com.course.platform.infra.http.ProviderUrlNormalizer;
@@ -42,7 +43,7 @@ public class ApiProviderServiceImpl implements ApiProviderService {
     private final SsrfGuard ssrfGuard;
     private final ProviderOutboundPolicyFactory providerPolicyFactory;
     private final ProviderUrlNormalizer providerUrlNormalizer;
-    private final PlatformDockingStrategyFactory strategyFactory;
+    private final ProviderConnectionProbeRegistry probeRegistry;
 
     @Value("${app.crypto.secret:}")
     private String cryptoSecret;
@@ -50,7 +51,7 @@ public class ApiProviderServiceImpl implements ApiProviderService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createApiProvider(ApiProvider input) {
-        requireStrategy(input.getProviderType());
+        requireProbe(input.getProviderType());
         validateStatus(input.getStatus());
         if (!StringUtils.hasText(input.getName())) {
             throw new BusinessException(ResultCode.PARAM_ERROR, "请输入接口名称");
@@ -80,7 +81,13 @@ public class ApiProviderServiceImpl implements ApiProviderService {
         if (!StringUtils.hasText(update.getName())) update.setName(existing.getName());
         if (!StringUtils.hasText(update.getProviderType())) update.setProviderType(existing.getProviderType());
         if (!StringUtils.hasText(update.getApiUrl())) update.setApiUrl(existing.getApiUrl());
-        requireStrategy(update.getProviderType());
+        ProviderConnectionProbe newProbe = requireProbe(update.getProviderType());
+        ProviderConnectionProbe oldProbe = probeRegistry.getProbe(existing.getProviderType());
+        if ((newProbe instanceof com.course.platform.application.service.platform.docking.PlatformDockingStrategy) != (oldProbe instanceof com.course.platform.application.service.platform.docking.PlatformDockingStrategy)) {
+            // Existing course/order references may point at this ID. Do not retype it into a
+            // read-only provider (or the reverse) and strand a paid workflow. Use a new record.
+            throw new BusinessException(ResultCode.PARAM_ERROR, "课程接口与独立服务接口不能互相改类型，请新建独立配置");
+        }
         if (apiProviderMapper.selectCount(new LambdaQueryWrapper<ApiProvider>()
                 .eq(ApiProvider::getName, update.getName()).ne(ApiProvider::getId, existing.getId())) > 0) {
             throw new BusinessException("接口名称已存在");
@@ -181,7 +188,7 @@ public class ApiProviderServiceImpl implements ApiProviderService {
         // activation state is never changed to bypass normal business request authorization.
         candidate.setStatus(ApiProvider.STATUS_ACTIVE);
         try {
-            requireStrategy(candidate.getProviderType()).testConnection(candidate);
+            requireProbe(candidate.getProviderType()).testConnection(candidate);
         } catch (ProviderRequestException ex) {
             throw ex;
         } catch (RuntimeException ex) {
@@ -229,8 +236,8 @@ public class ApiProviderServiceImpl implements ApiProviderService {
         return provider;
     }
 
-    private PlatformDockingStrategy requireStrategy(String type) {
-        PlatformDockingStrategy strategy = StringUtils.hasText(type) ? strategyFactory.getStrategy(type) : null;
+    private ProviderConnectionProbe requireProbe(String type) {
+        ProviderConnectionProbe strategy = StringUtils.hasText(type) ? probeRegistry.getProbe(type) : null;
         if (strategy == null) throw new BusinessException(ResultCode.PARAM_ERROR, "请选择已支持的接口类型");
         return strategy;
     }

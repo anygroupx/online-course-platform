@@ -26,7 +26,7 @@ export const providerCheckMessages = Object.freeze({
   HTTP_ERROR: "上游 HTTP 状态异常",
   INVALID_RESPONSE: "响应格式错误",
   UPSTREAM_REJECTED: "请求被拒绝，请检查凭据和授权",
-  UNSUPPORTED_OPERATION: "暂不支持只读连接测试",
+  UNSUPPORTED_OPERATION: "此操作未实现或尚未完成协议验证",
 });
 
 export function providerCheckLabel(reason) {

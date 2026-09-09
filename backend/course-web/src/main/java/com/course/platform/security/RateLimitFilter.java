@@ -68,6 +68,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
         List<Limit> values = new ArrayList<>();
         String method = request.getMethod();
         String user = currentUserKey();
+        if ("POST".equals(method) && "/service-face-collection/launch".equals(path)) {
+            values.add(new Limit("service-face-launch:ip", ip, new RateLimitProperties.Rule(30, 60), "service-face-launch"));
+        }
         if ("POST".equals(method) && "/auth/login".equals(path)) {
             values.add(new Limit("login:ip", ip, properties.getLoginIp(), "login"));
         } else if ("POST".equals(method) && "/register".equals(path)) {
@@ -99,15 +102,44 @@ public class RateLimitFilter extends OncePerRequestFilter {
             }
         }
         if (isWrite(method) && (path.equals("/orders") || path.startsWith("/orders/create")
-                || path.startsWith("/orders/batch"))) {
+                || path.startsWith("/orders/batch")
+                || path.startsWith("/services/") || path.startsWith("/service-orders/")
+                || path.startsWith("/service-order-operations/") || path.startsWith("/service-account-sessions/")
+                || path.startsWith("/service-projects/") || path.startsWith("/project-accounts/") || path.startsWith("/project-operations/")
+                || path.startsWith("/project-tickets/") || path.startsWith("/project-ticket-operations/"))) {
             values.add(new Limit("order:" + (user == null ? "ip" : "user"),
                     user == null ? ip : user, properties.getOrderUser(), "order"));
+        }
+        if ("GET".equals(method) && (path.startsWith("/service-account-sessions/") || path.matches("/services/[^/]+/schools")
+                || path.matches("/service-orders/[^/]+/(logs|options|notifications(?:/deliveries)?)") || path.startsWith("/service-notification-deliveries/"))) {
+            values.add(new Limit("order:" + (user == null ? "ip" : "user"),
+                    user == null ? ip : user, properties.getOrderUser(), "order"));
+        }
+        if (isWrite(method) && (path.matches("/admin/service-orders/[^/]+/refund-quotes")
+                || path.matches("/admin/service-order-operations/[^/]+/(settle-refund|resolve)")
+                || path.matches("/admin/project-operations/[^/]+/resolve")
+                || path.matches("/admin/project-tickets/[^/]+/(refresh|review-quotes)")
+                || path.matches("/admin/project-ticket-operations/[^/]+/(confirm|resolve)"))) {
+            values.add(new Limit("refund:" + (user == null ? "ip" : "user"),
+                    user == null ? ip : user, properties.getRefundUser(), "refund"));
         }
         if (path.startsWith("/payment/") && isWrite(method) && !path.equals("/payment/notify")) {
             boolean refund = path.contains("refund");
             RateLimitProperties.Rule rule = refund ? properties.getRefundUser() : properties.getPaymentUser();
             values.add(new Limit((refund ? "refund:" : "payment:") + (user == null ? "ip" : "user"),
                     user == null ? ip : user, rule, refund ? "refund" : "payment"));
+        }
+        if (path.startsWith("/project-api-keys/") || path.equals("/project-api-calls")
+                || path.equals("/project-clients") || path.startsWith("/project-clients/")
+                || path.equals("/project-client-tickets") || path.startsWith("/project-client-tickets/")
+                || path.equals("/project-client-operations") || path.startsWith("/project-client-operations/")) {
+            values.add(new Limit("project-client:" + (user == null ? "ip" : "user"),
+                    user == null ? ip : user, properties.getOrderUser(), "project-client"));
+        }
+        if (path.equals("/admin/platforms/price-refreshes") || path.startsWith("/admin/platforms/price-refreshes/")) {
+            boolean preview = "POST".equals(method) && path.equals("/admin/platforms/price-refreshes");
+            values.add(new Limit("catalog-refresh:" + (preview ? "preview:" : "result:") + (user == null ? "ip" : "user"),
+                    user == null ? ip : user, new RateLimitProperties.Rule(preview ? 5 : 30, 60), "catalog-refresh"));
         }
         if (path.contains("export")) {
             values.add(new Limit("export:" + (user == null ? "ip" : "user"),

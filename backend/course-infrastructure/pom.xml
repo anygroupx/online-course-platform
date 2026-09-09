@@ -60,6 +60,12 @@
         </dependency>
 
 
+        <!-- Strict, depth-bounded parsing for read-only plugin contracts (Boot-managed version). -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
         <!-- Hutool -->
         <dependency>
             <groupId>cn.hutool</groupId>

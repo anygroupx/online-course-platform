@@ -94,6 +94,14 @@ public class ProviderUrlNormalizer {
             String url = normalized.toASCIIString();
             return URI.create(url.substring(0, url.length() - "/api.php".length()));
         }
+        if ("flash".equals(providerType) || "heisha".equals(providerType) || "jiguang".equals(providerType) || "wuxin".equals(providerType)) {
+            String path = normalized.getRawPath().toLowerCase(Locale.ROOT);
+            // These protocols append their own fixed plugin path to an installation root.
+            // Do not silently turn a mistyped endpoint into a different target path.
+            if (path.endsWith(".php") || path.matches(".*/(?:flash|heisha|jiguang|wuxin)(?:/.*)?")) {
+                throw blocked();
+            }
+        }
         return normalized;
     }
 

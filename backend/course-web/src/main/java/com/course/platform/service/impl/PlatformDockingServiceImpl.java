@@ -437,6 +437,13 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
             throw new BusinessException("不支持的接口类型: " + apiProvider.getProviderType());
         }
 
+        // Freeze the next watermark before any supplier call, not after a potentially long scan.
+        long syncStartedAt = java.time.Instant.now().getEpochSecond();
+        final int maxPages = 20;
+        if (offset != null && (offset < 0 || offset > Integer.MAX_VALUE - maxPages * 10000)
+                || timestampSeconds != null && (timestampSeconds < 0 || timestampSeconds > syncStartedAt)) {
+            throw new BusinessException("同步时间或分页偏移无效");
+        }
         // 如果未指定时间戳，使用上次同步时间戳（参考 benztb.php）
         Long effectiveTimestamp = timestampSeconds;
         if (effectiveTimestamp == null && apiProvider.getLastSyncTime() != null) {
@@ -445,36 +452,45 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
         
         // 如果还是 null，使用当前时间减去5分钟作为默认值
         if (effectiveTimestamp == null) {
-            effectiveTimestamp = java.time.Instant.now().getEpochSecond() - 300;
+            effectiveTimestamp = syncStartedAt - 300;
         }
 
         // 添加600秒缓冲（benztb.php 第24行）
-        Long bufferedTimestamp = effectiveTimestamp - 600;
+        Long bufferedTimestamp = Math.max(0L, Math.min(effectiveTimestamp, syncStartedAt) - 600);
         log.info("批量同步订单进度: apiProviderId={}, 原始时间戳={}, 缓冲后时间戳={}", 
                 apiProviderId, effectiveTimestamp, bufferedTimestamp);
 
         int totalUpdated = 0;
         int currentOffset = (offset != null) ? offset : 0;
         
-        // 模拟 benztb.php 的 while(true) 循环逻辑（第29-78行）
+        // Retain the evidenced 10000 offset step / <500 terminator; never allow an infinite scan.
+        Set<List<String>> seenPages = new HashSet<>();
+        int pages = 0;
         while (true) {
+            if (++pages > maxPages) throw new BusinessException("本次同步达到安全分页上限，未推进同步水位；请缩小范围后重试");
             int requestedOffset = currentOffset;
             List<OrderProgressResult> results = invokeProvider(apiProvider, "batchProgress",
                     () -> strategy.batchQueryOrderProgress(apiProvider, bufferedTimestamp, requestedOffset));
 
+            if (results == null || results.size() > 10000) {
+                throw new ProviderRequestException(ProviderRequestException.Reason.INVALID_RESPONSE);
+            }
             int batchSize = results.size();
+            if (batchSize >= 500 && !seenPages.add(results.stream().map(OrderProgressResult::getThirdOrderId).toList())) {
+                throw new BusinessException("上游重复返回同一页，已停止同步且未推进水位");
+            }
             log.info("批量查询返回 {} 条订单，offset={}", batchSize, currentOffset);
 
             if (batchSize > 0) {
                 // 批量更新订单
                 for (OrderProgressResult result : results) {
                     try {
-                        // 使用精确匹配：user + pass + kcname + noun + hid (benztb.php 第56行)
+                        // Native orders have a bound remote order ID; do not guess missing IDs from a course name.
                         int updated = courseOrderMapper.updateOrderProgressByFullMatch(
                                 result.getStudentAccount(),
                                 result.getStudentPassword(),
                                 result.getCourseName(),
-                                result.getThirdOrderId(),  // noun/cid
+                                result.getThirdOrderId(),  // exact upstream order ID, not the product cid
                                 apiProviderId,
                                 result.getOrderStatus(),
                                 result.getProgress(),
@@ -488,7 +504,8 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
                             totalUpdated += updated;
                         }
                     } catch (Exception e) {
-                        log.error("更新订单进度失败: apiProviderId={}", apiProviderId, e);
+                        // Roll back the batch and retain its old watermark; SQL messages may contain credentials.
+                        throw new BusinessException("订单进度保存失败，本次同步未完成且未推进水位");
                     }
                 }
             }
@@ -507,7 +524,7 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
         // 解密后的 provider 只用于调用第三方，禁止整体回写，避免明文凭据落库。
         ApiProvider syncTimeUpdate = new ApiProvider();
         syncTimeUpdate.setId(apiProviderId);
-        syncTimeUpdate.setLastSyncTime(java.time.Instant.now().getEpochSecond());
+        syncTimeUpdate.setLastSyncTime(syncStartedAt);
         apiProviderMapper.updateById(syncTimeUpdate);
 
         Map<String, Object> result = new HashMap<>();

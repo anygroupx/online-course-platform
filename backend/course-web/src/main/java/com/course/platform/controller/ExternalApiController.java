@@ -14,10 +14,12 @@ import com.course.platform.domain.dto.OrderCreateRequest;
 import com.course.platform.domain.dto.QueryCourseRequest;
 import com.course.platform.domain.entity.CourseOrder;
 import com.course.platform.domain.entity.CoursePlatform;
+import com.course.platform.domain.entity.PlatformCategory;
 import com.course.platform.domain.entity.User;
 import com.course.platform.domain.vo.CourseInfoResponse;
 import com.course.platform.infra.persistence.mapper.CourseOrderMapper;
 import com.course.platform.infra.persistence.mapper.CoursePlatformMapper;
+import com.course.platform.infra.persistence.mapper.PlatformCategoryMapper;
 import com.course.platform.infra.persistence.mapper.UserMapper;
 import com.course.platform.application.service.order.CourseOrderService;
 import com.course.platform.application.service.course.CourseQueryService;
@@ -34,6 +36,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 外部API控制器
@@ -52,6 +56,7 @@ public class ExternalApiController {
     private final UserMapper userMapper;
     private final CourseOrderMapper courseOrderMapper;
     private final CoursePlatformMapper coursePlatformMapper;
+    private final PlatformCategoryMapper platformCategoryMapper;
     private final CourseOrderService courseOrderService;
     private final CourseQueryService courseQueryService;
 
@@ -328,9 +333,16 @@ public class ExternalApiController {
         // 验证API密钥
         validateApiKey(uid, key, apiKey, "platforms:read");
 
-        // 查询所有在线平台
+        // 查询所有在线平台（排除分类已禁用的课程）
+        Set<Long> enabledCategoryIds = enabledCategoryIds();
         List<CoursePlatform> platforms = coursePlatformMapper.selectList(new LambdaQueryWrapper<CoursePlatform>()
                 .eq(CoursePlatform::getStatus, 1)
+                .and(w -> {
+                    w.isNull(CoursePlatform::getCategoryId);
+                    if (!enabledCategoryIds.isEmpty()) {
+                        w.or().in(CoursePlatform::getCategoryId, enabledCategoryIds);
+                    }
+                })
                 .orderByAsc(CoursePlatform::getSortOrder));
 
         // 构建响应
@@ -346,6 +358,12 @@ public class ExternalApiController {
 
 
         return Result.success(result);
+    }
+
+    private Set<Long> enabledCategoryIds() {
+        return platformCategoryMapper.selectList(new LambdaQueryWrapper<PlatformCategory>()
+                .eq(PlatformCategory::getStatus, 1)).stream()
+                .map(PlatformCategory::getId).collect(Collectors.toSet());
     }
 
     private Long parsePlatformId(String platform) {

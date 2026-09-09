@@ -338,18 +338,20 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         log.info("Benz批量查单响应数据量: {} 字节", response != null ? response.length() : 0);
 
         JSONObject json = ProviderResponseParser.parseObject(response);
+        if (json.getInt("code") != 1 && json.getInt("code") != 0) {
+            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
+        }
+        JSONArray data = ProviderResponseParser.requireArray(json, "data");
+        if (data.size() > 10000) {
+            throw new ProviderRequestException(ProviderRequestException.Reason.INVALID_RESPONSE);
+        }
         List<OrderProgressResult> results = new ArrayList<>();
-        
-        // 根据 benztb.php，直接从 data 数组获取订单列表
-        JSONArray data = json.getJSONArray("data");
-        if (data != null && data.size() > 0) {
-            for (int i = 0; i < data.size(); i++) {
-                JSONObject item = data.getJSONObject(i);
-                OrderProgressResult result = parseBatchProgressItem(item);
-                if (result != null) {
-                    results.add(result);
-                }
+        for (int i = 0; i < data.size(); i++) {
+            // Reject the whole page instead of silently dropping rows and advancing the watermark.
+            if (!(data.get(i) instanceof JSONObject item)) {
+                throw new ProviderRequestException(ProviderRequestException.Reason.INVALID_RESPONSE);
             }
+            results.add(parseBatchProgressItem(item));
         }
         
         log.info("Benz批量查单解析结果: {} 条订单", results.size());
@@ -362,6 +364,14 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
      */
     private OrderProgressResult parseBatchProgressItem(JSONObject item) {
         try {
+            for (String field : java.util.List.of("user", "pass", "kcname", "id")) {
+                Object value = item.get(field);
+                if (!(value instanceof String || value instanceof Number)
+                        || String.valueOf(value).isBlank() || String.valueOf(value).length() > 2048
+                        || String.valueOf(value).codePoints().anyMatch(Character::isISOControl)) {
+                    throw new ProviderRequestException(ProviderRequestException.Reason.INVALID_RESPONSE);
+                }
+            }
             String statusText = item.getStr("status");
             String process = item.getStr("process");
             String remarks = item.getStr("remarks");
@@ -397,8 +407,8 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
                     .thirdOrderId(item.getStr("id"))  // yid
                     .build();
         } catch (Exception e) {
-            log.error("解析批量订单进度失败，已跳过敏感响应内容", e);
-            return null;
+            // Parser messages can contain account/password fields. Do not log or attach the cause.
+            throw new ProviderRequestException(ProviderRequestException.Reason.INVALID_RESPONSE);
         }
     }
 }
