@@ -1,6 +1,6 @@
 # 文档索引
 
-> 最后更新：2026-09-06
+> 最后更新：2026-09-09
 > 对应代码：后端 `2.0.1` / 前端 `1.1.2`
 
 ## 入门
@@ -53,6 +53,12 @@
 | [../frontend/docs/EnterpriseTableSystem.md](../frontend/docs/EnterpriseTableSystem.md) | 企业级表格体系 |
 | [../frontend/docs/EnterpriseTable.md](../frontend/docs/EnterpriseTable.md) | EnterpriseTable 组件 |
 | [../frontend/docs/EnterpriseFilter.md](../frontend/docs/EnterpriseFilter.md) | EnterpriseFilter 组件 |
+
+## 插件调研与集成
+
+| 文档 | 说明 |
+|------|------|
+| [PLUGIN_INTEGRATIONS.md](./PLUGIN_INTEGRATIONS.md) | 原生商城/订单/售后、逐插件缺口、默认关闭及生产发布边界 |
 
 ## 历史归档
 

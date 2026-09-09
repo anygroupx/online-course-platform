@@ -1,0 +1,1273 @@
+package com.course.platform.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.course.platform.application.service.platform.ApiProviderService;
+import com.course.platform.application.service.servicecommerce.*;
+import com.course.platform.common.exception.BusinessException;
+import com.course.platform.common.result.ResultCode;
+import com.course.platform.common.security.SecretCrypto;
+import com.course.platform.domain.dto.PluginPageQuery;
+import com.course.platform.domain.entity.ApiProvider;
+import com.course.platform.domain.exception.ProviderRequestException;
+import com.course.platform.domain.servicecommerce.*;
+import com.course.platform.domain.servicecommerce.ServiceCommerceTypes.*;
+import com.course.platform.domain.vo.plugin.*;
+import com.course.platform.infra.integration.PluginConnectorRegistry;
+import com.course.platform.infra.persistence.mapper.*;
+import com.course.platform.infra.servicecommerce.InternshipNativeServiceGateway;
+import com.course.platform.infra.servicecommerce.PhpNativeServiceGateway;
+import com.course.platform.security.SecurityUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import lombok.RequiredArgsConstructor;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.*;
+import java.util.function.Supplier;
+
+/** Local monetary commits bracket, but NEVER encompass, the non-idempotent remote call. */
+@Service
+@RequiredArgsConstructor
+public class ServiceCommerceServiceImpl implements ServiceCommerceService {
+    private final ServiceProductMapper productMapper;
+    private final ServiceOrderMapper orderMapper;
+    private final ServiceOperationMapper operationMapper;
+    private final ApiProviderMapper providerMapper;
+    private final ApiProviderService providers;
+    private final PluginConnectorRegistry catalogs;
+    private final NativeServiceGateway gateway;
+    private final ServiceAccountSessions accounts;
+    private final AccountLedgerServiceImpl ledger;
+    private final PlatformTransactionManager transactions;
+
+    @Value("${app.crypto.secret}")
+    private String cryptoSecret;
+
+    @Value("${app.native-services.enabled:false}")
+    private boolean enabled;
+
+    private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
+    private static final BigDecimal ZERO = new BigDecimal("0.00");
+    private static final Set<String> FINAL = Set.of("REFUNDED", "CANCELLED");
+
+    @Override
+    public IPage<ProductView> products(int page, int size, boolean admin) {
+        return products(page, size, admin, null);
+    }
+
+    @Override
+    public IPage<ProductView> products(int page, int size, boolean admin, String providerType) {
+        user();
+        if (providerType != null && PhpNativeServiceGateway.capabilities(providerType).isEmpty())
+            throw bad("不支持的服务分类");
+        if (admin) admin();
+        bounds(page, size);
+        var filter =
+                new LambdaQueryWrapper<ServiceProduct>()
+                        .eq(!admin, ServiceProduct::getEnabled, true)
+                        .eq(providerType != null, ServiceProduct::getProviderType, providerType)
+                        .orderByDesc(ServiceProduct::getId);
+        IPage<ServiceProduct> rows = productMapper.selectPage(new Page<>(page, size), filter);
+        return convert(rows, rows.getRecords().stream().map(p -> productView(p, admin)).toList());
+    }
+
+    @Override
+    public ProductView saveProduct(Long id, ProductCommand c) {
+        user();
+        admin();
+        if (c == null
+                || c.providerId() == null
+                || c.project() == null
+                || c.remoteProductId() == null) throw bad("商品参数不完整");
+        if (id != null && !c.enabled())
+            return tx(
+                    () -> {
+                        ServiceProduct stored = productMapper.lock(id);
+                        if (stored == null) throw missing();
+                        if (!Objects.equals(stored.getVersion(), c.version())
+                                || !Objects.equals(stored.getProviderId(), c.providerId())
+                                || !stored.getProject().equals(c.project())
+                                || !stored.getRemoteProductId().equals(c.remoteProductId()))
+                            throw bad("商品版本或绑定已变化");
+                        stored.setEnabled(false);
+                        stored.setVersion(stored.getVersion() + 1);
+                        stamp(stored);
+                        requireWrite(productMapper.updateById(stored));
+                        return productView(stored, true);
+                    });
+        ApiProvider provider = active(c.providerId(), null, null);
+        if (!PhpNativeServiceGateway.supported(
+                provider.getProviderType(), c.project(), c.remoteProductId()))
+            throw bad("仅可上架已支持原生订单的商品");
+        if (c.unitPrice() == null
+                || c.unitPrice().signum() <= 0
+                || c.unitPrice().compareTo(new BigDecimal("9999")) > 0
+                || c.unitPrice().stripTrailingZeros().scale() > 6) throw bad("售价格式错误");
+        if (c.title() == null
+                || c.title().isBlank()
+                || c.title().length() > 100
+                || c.title().codePoints().anyMatch(Character::isISOControl)) throw bad("商品名称格式错误");
+        ServiceProduct candidate = new ServiceProduct();
+        candidate.setProviderId(c.providerId());
+        candidate.setProviderType(provider.getProviderType());
+        candidate.setProject(c.project());
+        candidate.setRemoteProductId(c.remoteProductId());
+        if (c.enabled()
+                && PhpNativeServiceGateway.isHeishaFace(candidate)
+                && !accounts.faceCollectionConfigured()) throw bad("上架人脸商品前必须配置已批准的官方 HTTPS 采集域名");
+        if (daily(candidate)) attestContract(candidate, provider, c.contractPrice());
+        else if (c.contractPrice() != null) throw bad("该服务价格须从上游目录校验，不接受合同价替代");
+        BigDecimal cost = catalogPrice(candidate, provider);
+        if (c.unitPrice().compareTo(cost) < 0) throw bad("售价不能低于当前上游单价");
+        ServiceProduct result =
+                tx(
+                        () -> {
+                            ServiceProduct p = id == null ? candidate : productMapper.lock(id);
+                            if (p == null) throw missing();
+                            if (id != null
+                                    && (!Objects.equals(p.getVersion(), c.version())
+                                            || !Objects.equals(p.getProviderId(), c.providerId())
+                                            || !p.getProject().equals(c.project())
+                                            || !p.getRemoteProductId().equals(c.remoteProductId())))
+                                throw bad("商品已更新，或尝试修改不可变的供应商绑定，请刷新后重试");
+                            if (daily(candidate)) {
+                                p.setContractUnitCost(candidate.getContractUnitCost());
+                                p.setContractValidUntil(candidate.getContractValidUntil());
+                                p.setContractEvidence(candidate.getContractEvidence());
+                                p.setContractReviewedBy(candidate.getContractReviewedBy());
+                                p.setContractReviewedAt(candidate.getContractReviewedAt());
+                                p.setContractProviderIdentity(
+                                        candidate.getContractProviderIdentity());
+                            }
+                            p.setTitle(c.title().trim());
+                            p.setDescription(c.description());
+                            p.setUnitPrice(c.unitPrice());
+                            p.setEnabled(c.enabled());
+                            p.setVersion(id == null ? 0 : p.getVersion() + 1);
+                            stamp(p);
+                            if (id == null) requireWrite(productMapper.insert(p));
+                            else requireWrite(productMapper.updateById(p));
+                            return p;
+                        });
+        return productView(result, true);
+    }
+
+    @Override
+    public Lookup lookup(Long productId, Map<String, String> fields) {
+        user();
+        ServiceProduct p = forSale(productId);
+        return gateway.lookup(active(p.getProviderId(), p.getProviderType(), null), p, fields);
+    }
+
+    @Override
+    public PluginSchoolPage schools(Long productId, int page, String keyword) {
+        user();
+        ServiceProduct p = forSale(productId);
+        if (daily(p))
+            return gateway.schools(
+                    active(p.getProviderId(), p.getProviderType(), null), p, page, keyword);
+        if (!"jiguang".equals(p.getProviderType())) throw bad("该服务不支持学校查询");
+        return catalogs.getConnector(p.getProviderType())
+                .searchSchools(
+                        active(p.getProviderId(), p.getProviderType(), null),
+                        new PluginPageQuery(page, 20, keyword));
+    }
+
+    @Override
+    public QuoteView quote(Long productId, OrderForm form) {
+        Long uid = user();
+        limitQuotes(uid);
+        ServiceProduct p = forSale(productId);
+        validateOrderForm(form, daily(p));
+        ApiProvider provider = active(p.getProviderId(), p.getProviderType(), null);
+        BigDecimal cost = catalogPrice(p, provider);
+        var authorization =
+                form.accountSessionId() == null ? null : accounts.prepare(p, provider, form);
+        PreparedOrder prepared =
+                authorization == null ? gateway.prepare(provider, p, form) : authorization.order();
+        if (cost.compareTo(p.getUnitPrice()) > 0) throw bad("上游价格已变化，暂不能下单，请联系管理员更新售价");
+        ServiceOperation op =
+                newOperation(
+                        uid,
+                        p,
+                        provider.getConfigVersion(),
+                        "CREATE",
+                        UUID.randomUUID().toString(),
+                        null);
+        if (authorization != null) {
+            op.setAccountSessionId(authorization.sessionId());
+            op.setAccountSessionVersion(authorization.version());
+            if (authorization.expiresAt().isBefore(op.getExpiresAt()))
+                op.setExpiresAt(authorization.expiresAt());
+        }
+        if ("flash".equals(p.getProviderType())) limitTaskDeadline(op, form.taskTimes());
+        if (daily(p)) {
+            if (prepared.plan() == null) throw bad("实习订单缺少计费周期");
+            if (!prepared.plan().startDate().equals(ServiceTime.now().toLocalDate()))
+                throw bad("已跨过北京时间零点，请重新预览服务天数");
+            op.setScheduleJson(planJson(prepared.plan()));
+            limitCalendarDeadline(op);
+        }
+        op.setQuantity(prepared.quantity());
+        op.setDistance(prepared.distance());
+        op.setAccountLabel(prepared.accountLabel());
+        op.setUnitCharge(
+                p.getUnitPrice()
+                        .multiply(prepared.billablePerUnit())
+                        .setScale(6, RoundingMode.HALF_UP));
+        op.setAmount(money(op.getUnitCharge().multiply(BigDecimal.valueOf(op.getQuantity()))));
+        if (op.getAmount().signum() <= 0) throw bad("订单金额不足一分，请调整次数或联系管理员");
+        op.setPayloadEncrypted(encrypt(prepared.fields()));
+        requireWrite(operationMapper.insert(op));
+        return quoteView(op);
+    }
+
+    @Override
+    public Lookup orderOptions(String id) {
+        user();
+        ServiceOrder o = owned(id);
+        noPending(o);
+        return gateway.orderOptions(forOrder(o), o);
+    }
+
+    @Override
+    public QuoteView quoteAction(String orderId, ActionForm form) {
+        Long uid = user();
+        if (form == null || form.action() == null || form.quantity() < 0 || form.quantity() > 365)
+            throw bad("操作参数不合法");
+        if (!"ADD_TIMES".equals(form.action()) && form.quantity() != 0) throw bad("此操作不接受增次数量");
+        limitQuotes(uid);
+        ServiceOrder o = owned(orderId);
+        noPending(o);
+        if (!actions(o).contains(form.action())) throw bad("当前订单不支持此操作");
+        ServiceProduct p = product(o.getProductId());
+        ApiProvider provider = forOrder(o);
+        ServiceOperation op =
+                newOperation(
+                        uid,
+                        p,
+                        provider.getConfigVersion(),
+                        form.action(),
+                        o.getId(),
+                        o.getVersion());
+        op.setDistance(o.getDistance());
+        op.setUnitCharge(o.getUnitCharge());
+        op.setAccountLabel(o.getAccountLabel());
+        op.setQuantity(0);
+        op.setAmount(ZERO);
+        Map<String, Object> fields;
+        if (daily(p)) {
+            PreparedAction prepared = gateway.prepareScheduledAction(provider, p, o, form);
+            fields = new LinkedHashMap<>(prepared.fields());
+            op.setQuantity(prepared.quantity());
+            op.setUnitCharge(prepared.unitCharge());
+            op.setAmount(
+                    money(prepared.unitCharge().multiply(BigDecimal.valueOf(prepared.quantity()))));
+            if (prepared.quantity() > 0 && op.getAmount().signum() <= 0)
+                throw bad("本次新增服务金额不足一分，请调整服务日期或联系管理员");
+            if (prepared.plan() != null) op.setScheduleJson(planJson(prepared.plan()));
+            if (isDebit(op) && op.getAmount().signum() > 0) {
+                BigDecimal cost =
+                        catalogPrice(p, provider)
+                                .multiply(
+                                        InternshipNativeServiceGateway.multiplier(
+                                                p.getProject(),
+                                                InternshipNativeServiceGateway.plan(o).schedule()));
+                if (cost.compareTo(o.getUnitCharge()) > 0) throw bad("合同成本变化，原订单单价不足以续期，请联系管理员");
+            }
+            limitCalendarDeadline(op);
+        } else {
+            if (form.schedule() != null) throw bad("该服务不接受实习计划参数");
+            fields =
+                    new LinkedHashMap<>(
+                            gateway.prepareAction(
+                                    provider,
+                                    o,
+                                    form.action(),
+                                    form.fields() == null ? Map.of() : form.fields()));
+        }
+        if ("CHANGE_TIME".equals(form.action())) {
+            if (!(fields.get("start_time") instanceof String time)) throw bad("任务时间格式错误");
+            limitTaskDeadline(op, List.of(time));
+        }
+        if ("EDIT_PLAN".equals(form.action()))
+            op.setDistance(new BigDecimal(fields.get("run_meter").toString()));
+        if ("REFUND".equals(form.action())) {
+            int remaining = gateway.refundRemaining(provider, o);
+            if (remaining < 0 || remaining > o.getQuantity()) throw bad("上游剩余次数异常，需人工核对");
+            op.setQuantity(remaining);
+            op.setAmount(
+                    money(o.getUnitCharge().multiply(BigDecimal.valueOf(remaining)))
+                            .min(o.getPaidAmount().subtract(o.getRefundedAmount())));
+        } else if ("ADD_TIMES".equals(form.action())) {
+            if (form.quantity() < 1
+                    || form.quantity() > 365
+                    || o.getQuantity() + form.quantity() > 9999) throw bad("增次数量不合法");
+            gateway.checkAddTimes(provider, o, form.quantity());
+            op.setQuantity(form.quantity());
+            op.setAmount(money(o.getUnitCharge().multiply(BigDecimal.valueOf(form.quantity()))));
+            if (op.getAmount().signum() <= 0) throw bad("增次金额不足一分");
+            fields.put("delta", form.quantity());
+        }
+        op.setPayloadEncrypted(encrypt(fields));
+        requireWrite(operationMapper.insert(op));
+        return quoteView(op);
+    }
+
+    private record Dispatch(
+            ServiceOperation op,
+            ServiceOrder order,
+            ServiceProduct product,
+            ApiProvider provider) {}
+
+    @Override
+    public QuoteView confirm(String quoteId) {
+        Long uid = user();
+        uuid(quoteId);
+        Dispatch dispatch = tx(() -> reserve(quoteId, uid));
+        if (dispatch == null) return operation(quoteId);
+        try {
+            // One and only one dispatch for this durable operation ID, even with simultaneous
+            // confirmations.
+            RemoteResult result =
+                    gateway.execute(
+                            dispatch.provider(),
+                            dispatch.product(),
+                            dispatch.order(),
+                            dispatch.op().getAction(),
+                            decrypt(dispatch.op().getPayloadEncrypted()));
+            tx(
+                    () -> {
+                        finish(quoteId, result);
+                        return null;
+                    });
+        } catch (Exception ex) {
+            // PHP bridges also return negative codes for downstream timeouts. None prove "not
+            // accepted".
+            String reason =
+                    ex instanceof ProviderRequestException p ? p.getReason().name() : "UNCONFIRMED";
+            tx(
+                    () -> {
+                        ServiceOperation op = operationMapper.lock(quoteId);
+                        if ("DISPATCHING".equals(op.getState())) {
+                            op.setState("UNKNOWN");
+                            op.setErrorCategory(reason);
+                            touch(op);
+                            requireWrite(operationMapper.updateById(op));
+                        }
+                        return null;
+                    });
+        }
+        return operation(quoteId);
+    }
+
+    private Dispatch reserve(String id, Long uid) {
+        ServiceOperation op = operationMapper.lock(id);
+        own(op, uid);
+        if ("SETTLE_REFUND".equals(op.getAction())) throw bad("退款入账须由财务管理员确认");
+        if (!"READY".equals(op.getState())) return null;
+        if (!op.getExpiresAt().isAfter(ServiceTime.now())) throw bad("金额预览已过期，请重新预览");
+        ServiceProduct p = productMapper.lock(op.getProductId());
+        if (p == null) throw missing();
+        if (!Objects.equals(p.getVersion(), op.getProductVersion())) throw bad("商品配置或售价已变化，请重新预览");
+        ApiProvider provider =
+                active(p.getProviderId(), p.getProviderType(), op.getProviderVersion());
+        ServiceOrder o;
+        if (daily(p) && isDebit(op) && op.getAmount().signum() > 0) requireContract(p, provider);
+        if ("CREATE".equals(op.getAction())) {
+            if (!Boolean.TRUE.equals(p.getEnabled())) throw bad("商品已下架");
+            if (op.getAccountSessionId() != null)
+                accounts.consume(
+                        op.getAccountSessionId(), op.getAccountSessionVersion(), p, provider, uid);
+            o = new ServiceOrder();
+            o.setId(op.getOrderId());
+            o.setUserId(uid);
+            o.setProductId(p.getId());
+            o.setProviderId(p.getProviderId());
+            o.setProviderVersion(op.getProviderVersion());
+            o.setProviderIdentity(identity(provider));
+            o.setProviderType(p.getProviderType());
+            o.setProject(p.getProject());
+            o.setRemoteProductId(p.getRemoteProductId());
+            o.setTitle(p.getTitle());
+            o.setAccountLabel(op.getAccountLabel());
+            o.setStatus("SUBMITTING");
+            o.setQuantity(op.getQuantity());
+            o.setCompleted(0);
+            o.setDistance(op.getDistance());
+            o.setScheduleJson(op.getScheduleJson());
+            o.setUnitCharge(op.getUnitCharge());
+            o.setPaidAmount(op.getAmount());
+            o.setRefundedAmount(ZERO);
+            o.setVersion(0L);
+            o.setPendingOperationId(id);
+            o.setCreateTime(ServiceTime.now());
+            o.setUpdateTime(ServiceTime.now());
+            requireWrite(orderMapper.insert(o));
+        } else {
+            o = orderMapper.lock(op.getOrderId());
+            if (o == null || !uid.equals(o.getUserId())) throw missing();
+            noPending(o);
+            if (!Objects.equals(o.getVersion(), op.getOrderVersion())
+                    || !actions(o).contains(op.getAction())) throw bad("订单状态已变化，请重新预览");
+            if (!identity(provider).equals(o.getProviderIdentity()))
+                throw bad("供应商账号或地址已变化，旧订单需管理员核对");
+            o.setPendingOperationId(id);
+            o.setVersion(o.getVersion() + 1);
+            o.setUpdateTime(ServiceTime.now());
+            requireWrite(orderMapper.updateById(o));
+        }
+        if (isDebit(op) && op.getAmount().signum() > 0)
+            ledger.debit(
+                    uid,
+                    op.getAmount(),
+                    AccountLedgerServiceImpl.BIZ_ORDER,
+                    "SERVICE:" + id,
+                    "服务订单确认");
+        op.setState("DISPATCHING");
+        touch(op);
+        requireWrite(operationMapper.updateById(op));
+        return new Dispatch(op, o, p, provider);
+    }
+
+    private void finish(String id, RemoteResult result) {
+        ServiceOperation op = operationMapper.lock(id);
+        if (op == null || !("DISPATCHING".equals(op.getState()) || "UNKNOWN".equals(op.getState())))
+            return;
+        ServiceOrder o = orderMapper.lock(op.getOrderId());
+        if (o == null || !id.equals(o.getPendingOperationId())) throw bad("订单操作版本冲突");
+        if ("CREATE".equals(op.getAction())) {
+            if (result.externalOrderNo() == null
+                    || !result.externalOrderNo().matches("[A-Za-z0-9_-]{1,64}"))
+                throw bad("上游缺少订单号");
+            o.setExternalOrderNo(result.externalOrderNo());
+            o.setExternalSubOrderNo(result.externalSubOrderNo());
+            o.setStatus("ACTIVE");
+        } else if ("ADD_TIMES".equals(op.getAction())) {
+            o.setQuantity(o.getQuantity() + op.getQuantity());
+            o.setPaidAmount(o.getPaidAmount().add(op.getAmount()));
+            o.setStatus("ACTIVE");
+        } else if ("EDIT_SCHEDULE".equals(op.getAction())) {
+            if (op.getScheduleJson() == null) throw bad("缺少新实习周期");
+            o.setScheduleJson(op.getScheduleJson());
+            o.setQuantity(o.getQuantity() + op.getQuantity());
+            o.setPaidAmount(o.getPaidAmount().add(op.getAmount()));
+            if ("COMPLETED".equals(o.getStatus())) o.setStatus("ACTIVE");
+        } else if ("RUN_NOW".equals(op.getAction())) {
+            o.setPaidAmount(o.getPaidAmount().add(op.getAmount()));
+        } else if ("REFUND".equals(op.getAction())) {
+            applyRefund(op, o, result.refundedUnits());
+        } else if ("EDIT_PLAN".equals(op.getAction())) {
+            o.setDistance(op.getDistance());
+        } else if (!Set.of("CHANGE_TIME", "DELAY_TASK", "REPORT").contains(op.getAction()))
+            o.setStatus("PAUSE".equals(op.getAction()) ? "PAUSED" : "ACTIVE");
+        completeOperation(op, o);
+    }
+
+    private void applyRefund(ServiceOperation op, ServiceOrder o, Integer units) {
+        if (units == null || units < 0 || units > o.getQuantity() - o.getCompleted())
+            throw bad("退款回执次数不合法");
+        BigDecimal amount =
+                money(o.getUnitCharge().multiply(BigDecimal.valueOf(units)))
+                        .min(op.getAmount())
+                        .min(o.getPaidAmount().subtract(o.getRefundedAmount()));
+        if (amount.signum() > 0)
+            ledger.credit(
+                    o.getUserId(),
+                    amount,
+                    AccountLedgerServiceImpl.BIZ_REFUND,
+                    "SERVICE:" + op.getId(),
+                    "服务订单退款",
+                    false);
+        op.setQuantity(units);
+        op.setAmount(amount);
+        o.setRefundedAmount(o.getRefundedAmount().add(amount));
+        o.setStatus("REFUNDED");
+    }
+
+    private void completeOperation(ServiceOperation op, ServiceOrder o) {
+        o.setPendingOperationId(null);
+        o.setVersion(o.getVersion() + 1);
+        o.setUpdateTime(ServiceTime.now());
+        requireWrite(orderMapper.updateById(o));
+        op.setState("SUCCEEDED");
+        op.setPayloadEncrypted(null);
+        op.setErrorCategory(null);
+        touch(op);
+        requireWrite(operationMapper.updateById(op));
+    }
+
+    @Override
+    public QuoteView operation(String id) {
+        Long uid = user();
+        uuid(id);
+        ServiceOperation op = operationMapper.selectById(id);
+        own(op, uid);
+        if ("READY".equals(op.getState()) && !op.getExpiresAt().isAfter(ServiceTime.now())) {
+            tx(
+                    () -> {
+                        ServiceOperation latest = operationMapper.lock(id);
+                        if ("READY".equals(latest.getState())
+                                && !latest.getExpiresAt().isAfter(ServiceTime.now())) {
+                            latest.setState("EXPIRED");
+                            latest.setPayloadEncrypted(null);
+                            touch(latest);
+                            requireWrite(operationMapper.updateById(latest));
+                        }
+                        return null;
+                    });
+            op = operationMapper.selectById(id);
+        }
+        // Process death between local commit and remote reply must remain a reconciliation case,
+        // never a retry.
+        if ("DISPATCHING".equals(op.getState())
+                && op.getUpdateTime().isBefore(ServiceTime.now().minusMinutes(5))) {
+            tx(
+                    () -> {
+                        ServiceOperation latest = operationMapper.lock(id);
+                        if ("DISPATCHING".equals(latest.getState())
+                                && latest.getUpdateTime()
+                                        .isBefore(ServiceTime.now().minusMinutes(5))) {
+                            latest.setState("UNKNOWN");
+                            latest.setErrorCategory("PROCESS_INTERRUPTED");
+                            touch(latest);
+                            requireWrite(operationMapper.updateById(latest));
+                        }
+                        return null;
+                    });
+            op = operationMapper.selectById(id);
+        }
+        return quoteView(op);
+    }
+
+    @Override
+    public IPage<OrderView> orders(int page, int size, boolean admin) {
+        Long uid = user();
+        if (admin) admin();
+        bounds(page, size);
+        IPage<ServiceOrder> found =
+                orderMapper.selectPage(
+                        new Page<>(page, size),
+                        new LambdaQueryWrapper<ServiceOrder>()
+                                .eq(!admin, ServiceOrder::getUserId, uid)
+                                .orderByDesc(ServiceOrder::getCreateTime));
+        return convert(found, found.getRecords().stream().map(this::orderView).toList());
+    }
+
+    @Override
+    public OrderView order(String id) {
+        user();
+        return orderView(owned(id));
+    }
+
+    @Override
+    public OrderView sync(String id) {
+        user();
+        ServiceOrder o = owned(id);
+        noPending(o);
+        if (FINAL.contains(o.getStatus())) return orderView(o);
+        if (o.getExternalOrderNo() == null) throw bad("订单尚未取得上游单号，请联系管理员核对");
+        RemoteResult remote = gateway.sync(forOrder(o), o);
+        if (remote == null
+                || !o.getExternalOrderNo().equals(remote.externalOrderNo())
+                || !Set.of("ACTIVE", "PAUSED", "COMPLETED", "REFUND_REVIEW", "ATTENTION")
+                        .contains(remote.status())) throw bad("上游订单回执无法核实");
+        return tx(
+                () -> {
+                    ServiceOrder current = orderMapper.lock(id);
+                    if (!Objects.equals(current.getVersion(), o.getVersion())
+                            || current.getPendingOperationId() != null) throw bad("订单正在更新，请刷新");
+                    if (remote.completed() == null
+                            || remote.completed() < 0
+                            || remote.completed() > current.getQuantity()) throw bad("上游完成次数异常");
+                    // Keep refund review sticky, as in the original Heisha lifecycle; only a ledger
+                    // settlement closes it.
+                    if (!"REFUND_REVIEW".equals(current.getStatus()))
+                        current.setStatus(remote.status());
+                    if (remote.externalSubOrderNo() != null)
+                        current.setExternalSubOrderNo(remote.externalSubOrderNo());
+                    current.setCompleted(remote.completed());
+                    current.setVersion(current.getVersion() + 1);
+                    current.setUpdateTime(ServiceTime.now());
+                    requireWrite(orderMapper.updateById(current));
+                    return orderView(current);
+                });
+    }
+
+    @Override
+    public RunLogPage logs(String id, int page) {
+        user();
+        ServiceOrder o = owned(id);
+        noPending(o);
+        if (o.getExternalOrderNo() == null) throw bad("订单尚无上游单号");
+        return gateway.logs(forOrder(o), o, page);
+    }
+
+    @Override
+    public List<EventView> events(String id) {
+        user();
+        owned(id);
+        return operationMapper
+                .selectList(
+                        new LambdaQueryWrapper<ServiceOperation>()
+                                .eq(ServiceOperation::getOrderId, id)
+                                .orderByDesc(ServiceOperation::getCreateTime)
+                                .last("LIMIT 100"))
+                .stream()
+                .map(
+                        op ->
+                                new EventView(
+                                        op.getId(),
+                                        op.getAction(),
+                                        op.getState(),
+                                        plain(op.getAmount()),
+                                        op.getErrorCategory(),
+                                        op.getCreateTime()))
+                .toList();
+    }
+
+    @Override
+    public QuoteView adminOperation(String id) {
+        user();
+        admin();
+        SecurityUtils.requireAuthority("payment:reconcile");
+        uuid(id);
+        ServiceOperation op = operationMapper.selectById(id);
+        if (op == null) throw missing();
+        return quoteView(op);
+    }
+
+    @Override
+    public OrderAuditView audit(String orderId) {
+        financeAdmin();
+        uuid(orderId);
+        ServiceOrder order = orderMapper.selectById(orderId);
+        if (order == null) throw missing();
+        var events =
+                operationMapper
+                        .selectList(
+                                new LambdaQueryWrapper<ServiceOperation>()
+                                        .eq(ServiceOperation::getOrderId, orderId)
+                                        .orderByDesc(ServiceOperation::getCreateTime)
+                                        .last("LIMIT 100"))
+                        .stream()
+                        .map(
+                                op ->
+                                        new AuditEventView(
+                                                new EventView(
+                                                        op.getId(),
+                                                        op.getAction(),
+                                                        op.getState(),
+                                                        plain(op.getAmount()),
+                                                        op.getErrorCategory(),
+                                                        op.getCreateTime()),
+                                                op.getResolvedBy(),
+                                                op.getResolutionNote()))
+                        .toList();
+        return new OrderAuditView(
+                orderView(order),
+                order.getUserId(),
+                order.getProviderId(),
+                order.getExternalOrderNo(),
+                order.getExternalSubOrderNo(),
+                events);
+    }
+
+    @Override
+    public QuoteView quoteRefundSettlement(String orderId, RefundSettlementForm form) {
+        Long actor = financeAdmin();
+        uuid(orderId);
+        if (form == null) throw bad("退款核对信息不完整");
+        evidence(form.upstreamChecked(), form.evidence());
+        ServiceOrder o = orderMapper.selectById(orderId);
+        if (o == null) throw missing();
+        requireRefundReview(o);
+        if (!Objects.equals(o.getVersion(), form.orderVersion())) throw bad("订单状态已变化，请刷新后重新核对");
+        if (form.refundedUnits() < 0 || form.refundedUnits() > o.getQuantity() - o.getCompleted())
+            throw bad("退款次数不能超过尚未完成次数");
+        limitQuotes(o.getUserId());
+        ServiceOperation op =
+                newOperation(
+                        o.getUserId(),
+                        product(o.getProductId()),
+                        o.getProviderVersion(),
+                        "SETTLE_REFUND",
+                        o.getId(),
+                        o.getVersion());
+        op.setDistance(o.getDistance());
+        op.setUnitCharge(o.getUnitCharge());
+        op.setAccountLabel(o.getAccountLabel());
+        op.setQuantity(form.refundedUnits());
+        op.setAmount(
+                money(o.getUnitCharge().multiply(BigDecimal.valueOf(form.refundedUnits())))
+                        .min(o.getPaidAmount().subtract(o.getRefundedAmount())));
+        op.setResolvedBy(actor);
+        op.setResolutionNote(form.evidence().trim());
+        requireWrite(operationMapper.insert(op));
+        return quoteView(op);
+    }
+
+    @Override
+    public QuoteView confirmRefundSettlement(String id) {
+        Long actor = financeAdmin();
+        uuid(id);
+        return tx(
+                () -> {
+                    ServiceOperation op = operationMapper.lock(id);
+                    if (op == null
+                            || !"SETTLE_REFUND".equals(op.getAction())
+                            || !actor.equals(op.getResolvedBy())) throw missing();
+                    if ("SUCCEEDED".equals(op.getState())) return quoteView(op);
+                    if (!"READY".equals(op.getState())
+                            || !op.getExpiresAt().isAfter(ServiceTime.now()))
+                        throw bad("退款预览已过期，请重新核对");
+                    ServiceOrder o = orderMapper.lock(op.getOrderId());
+                    if (o == null || !Objects.equals(op.getOrderVersion(), o.getVersion()))
+                        throw bad("订单状态已变化，请刷新后重新核对");
+                    requireRefundReview(o);
+                    applyRefund(op, o, op.getQuantity());
+                    completeOperation(op, o);
+                    return quoteView(op);
+                });
+    }
+
+    private Long financeAdmin() {
+        Long actor = user();
+        admin();
+        SecurityUtils.requireAuthority("payment:reconcile");
+        return actor;
+    }
+
+    private void requireRefundReview(ServiceOrder o) {
+        noPending(o);
+        if (!"REFUND_REVIEW".equals(o.getStatus()) || o.getExternalOrderNo() == null)
+            throw bad("仅可为已收到上游退款状态、且没有待处理操作的订单核对入账");
+    }
+
+    private static void evidence(boolean checked, String note) {
+        if (!checked
+                || note == null
+                || note.trim().length() < 10
+                || note.length() > 1000
+                || note.codePoints().anyMatch(Character::isISOControl))
+            throw bad("须先在上游核对，填写不含密码的核对依据");
+    }
+
+    @Override
+    public QuoteView resolve(String operationId, ResolveForm form) {
+        Long actor = user();
+        admin();
+        SecurityUtils.requireAuthority("payment:reconcile");
+        uuid(operationId);
+        if (!form.upstreamChecked()
+                || form.evidence() == null
+                || form.evidence().trim().length() < 10
+                || form.evidence().length() > 1000
+                || form.evidence().codePoints().anyMatch(Character::isISOControl))
+            throw bad("须先在上游核对，填写不含密码的核对依据");
+        return tx(
+                () -> {
+                    ServiceOperation op = operationMapper.lock(operationId);
+                    if (op == null) throw missing();
+                    if ("DISPATCHING".equals(op.getState())
+                            && op.getUpdateTime().isBefore(ServiceTime.now().minusMinutes(5)))
+                        op.setState("UNKNOWN");
+                    if (!"UNKNOWN".equals(op.getState())) throw bad("仅可核对结果不确定的操作；处理中至少等待五分钟");
+                    ServiceOrder o = orderMapper.lock(op.getOrderId());
+                    if (o == null || !operationId.equals(o.getPendingOperationId()))
+                        throw bad("操作已被处理");
+                    op.setResolvedBy(actor);
+                    op.setResolutionNote(form.evidence().trim());
+                    requireWrite(operationMapper.updateById(op));
+                    if ("ACCEPTED".equals(form.outcome())) {
+                        // Explicit privileged upstream attestation, audited; never infer acceptance
+                        // from a timeout.
+                        finish(
+                                operationId,
+                                new RemoteResult(
+                                        "CREATE".equals(op.getAction())
+                                                ? form.externalOrderNo()
+                                                : o.getExternalOrderNo(),
+                                        "ACTIVE",
+                                        null,
+                                        form.refundedUnits()));
+                    } else if ("NOT_ACCEPTED".equals(form.outcome())) {
+                        if (isDebit(op) && op.getAmount().signum() > 0)
+                            ledger.credit(
+                                    op.getUserId(),
+                                    op.getAmount(),
+                                    AccountLedgerServiceImpl.BIZ_REFUND,
+                                    "SERVICE_CANCEL:" + operationId,
+                                    "上游核对未受理，退回服务订单扣款",
+                                    false);
+                        if ("CREATE".equals(op.getAction())) {
+                            o.setStatus("CANCELLED");
+                            o.setRefundedAmount(o.getPaidAmount());
+                        }
+                        o.setPendingOperationId(null);
+                        o.setVersion(o.getVersion() + 1);
+                        o.setUpdateTime(ServiceTime.now());
+                        requireWrite(orderMapper.updateById(o));
+                        op.setState("NOT_ACCEPTED");
+                        op.setPayloadEncrypted(null);
+                        touch(op);
+                        requireWrite(operationMapper.updateById(op));
+                    } else throw bad("核对结论不合法");
+                    return quoteView(operationMapper.selectById(operationId));
+                });
+    }
+
+    /** Local-only expiry/recovery; never dispatches or repeats an upstream operation. */
+    @org.springframework.scheduling.annotation.Scheduled(
+            fixedDelay = 3600000,
+            initialDelay = 3600000)
+    public void expireQuotes() {
+        if (!enabled) return;
+        operationMapper.update(
+                null,
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
+                                ServiceOperation>()
+                        .eq(ServiceOperation::getState, "READY")
+                        .lt(ServiceOperation::getExpiresAt, ServiceTime.now())
+                        .set(ServiceOperation::getState, "EXPIRED")
+                        .set(ServiceOperation::getPayloadEncrypted, null)
+                        .set(ServiceOperation::getUpdateTime, ServiceTime.now()));
+        operationMapper.update(
+                null,
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
+                                ServiceOperation>()
+                        .eq(ServiceOperation::getState, "DISPATCHING")
+                        .lt(ServiceOperation::getUpdateTime, ServiceTime.now().minusMinutes(5))
+                        .set(ServiceOperation::getState, "UNKNOWN")
+                        .set(ServiceOperation::getErrorCategory, "PROCESS_INTERRUPTED")
+                        .set(ServiceOperation::getUpdateTime, ServiceTime.now()));
+        operationMapper.update(
+                null,
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
+                                ServiceOperation>()
+                        .eq(ServiceOperation::getState, "UNKNOWN")
+                        .lt(ServiceOperation::getCreateTime, ServiceTime.now().minusDays(7))
+                        .isNotNull(ServiceOperation::getPayloadEncrypted)
+                        .set(ServiceOperation::getPayloadEncrypted, null));
+    }
+
+    private ServiceOperation newOperation(
+            Long uid,
+            ServiceProduct p,
+            Long providerVersion,
+            String action,
+            String orderId,
+            Long version) {
+        ServiceOperation op = new ServiceOperation();
+        op.setId(UUID.randomUUID().toString());
+        op.setOrderId(orderId);
+        op.setUserId(uid);
+        op.setProductId(p.getId());
+        op.setProductVersion(p.getVersion());
+        op.setProviderVersion(providerVersion);
+        op.setOrderVersion(version);
+        op.setAction(action);
+        op.setState("READY");
+        op.setExpiresAt(ServiceTime.now().plusMinutes(5));
+        op.setCreateTime(ServiceTime.now());
+        touch(op);
+        return op;
+    }
+
+    private ApiProvider forOrder(ServiceOrder o) {
+        ApiProvider p = active(o.getProviderId(), o.getProviderType(), null);
+        if (!identity(p).equals(o.getProviderIdentity())) throw bad("供应商地址或账号已变化，旧订单须管理员核对");
+        return p;
+    }
+
+    private ApiProvider active(Long id, String type, Long version) {
+        ApiProvider p = providers.loadDecrypted(id);
+        if (p == null
+                || !Integer.valueOf(1).equals(p.getStatus())
+                || p.getVerifiedAt() == null
+                || (type != null && !type.equals(p.getProviderType()))
+                || (version != null && !version.equals(p.getConfigVersion())))
+            throw new ProviderRequestException(ProviderRequestException.Reason.PROVIDER_NOT_ACTIVE);
+        return p;
+    }
+
+    private static boolean daily(ServiceProduct p) {
+        return "sxdk_tw".equals(p.getProviderType());
+    }
+
+    private void attestContract(ServiceProduct product, ApiProvider provider, ContractPriceForm c) {
+        if (c == null) throw bad("该上游没有已验证的报价接口，请填写人工核实的合同单价和依据");
+        evidence(c.upstreamChecked(), c.evidence());
+        var today = ServiceTime.now().toLocalDate();
+        if (c.unitCost() == null
+                || c.unitCost().signum() < 0
+                || c.unitCost().compareTo(new BigDecimal("9999")) > 0
+                || c.unitCost().stripTrailingZeros().scale() > 6
+                || c.validUntil() == null
+                || c.validUntil().isBefore(today)
+                || c.validUntil().isAfter(today.plusDays(90))) throw bad("合同单价或有效期不合法（最长九十天）");
+        product.setContractUnitCost(c.unitCost());
+        product.setContractValidUntil(c.validUntil());
+        product.setContractEvidence(c.evidence().trim());
+        product.setContractReviewedBy(SecurityUtils.getCurrentUserId());
+        product.setContractReviewedAt(ServiceTime.now());
+        product.setContractProviderIdentity(identity(provider));
+    }
+
+    private boolean contractCurrent(ServiceProduct p, ApiProvider provider) {
+        return p.getContractUnitCost() != null
+                && p.getContractValidUntil() != null
+                && !p.getContractValidUntil().isBefore(ServiceTime.now().toLocalDate())
+                && p.getContractReviewedBy() != null
+                && identity(provider).equals(p.getContractProviderIdentity());
+    }
+
+    private void requireContract(ServiceProduct p, ApiProvider provider) {
+        if (!contractCurrent(p, provider)) throw bad("合同价格未核实、已过期或供应商身份变化，请管理员重新核对");
+    }
+
+    private static String planJson(DailyServicePlan plan) {
+        try {
+            return JSON.writeValueAsString(plan);
+        } catch (Exception ex) {
+            throw bad("计划快照无法保存");
+        }
+    }
+
+    private static void limitCalendarDeadline(ServiceOperation op) {
+        var midnight = op.getCreateTime().toLocalDate().plusDays(1).atStartOfDay();
+        if (!midnight.isAfter(ServiceTime.now())) throw bad("已跨过北京时间零点，请重新预览服务天数");
+        if (midnight.isBefore(op.getExpiresAt())) op.setExpiresAt(midnight);
+    }
+
+    private BigDecimal catalogPrice(ServiceProduct p, ApiProvider provider) {
+        if (daily(p)) {
+            requireContract(p, provider);
+            return p.getContractUnitCost();
+        }
+        var connector = catalogs.getConnector(p.getProviderType());
+        if (connector == null) throw bad("不支持的服务类型");
+        return connector
+                .fetchCatalog(provider, "flash".equals(p.getProviderType()) ? p.getProject() : null)
+                .stream()
+                .filter(item -> p.getRemoteProductId().equals(item.id()))
+                .map(PluginProduct::unitPrice)
+                .findFirst()
+                .orElseThrow(() -> bad("上游未提供该商品"));
+    }
+
+    private ProductView productView(ServiceProduct p, boolean admin) {
+        ApiProvider provider = providerMapper.selectById(p.getProviderId());
+        boolean available =
+                Boolean.TRUE.equals(p.getEnabled())
+                        && provider != null
+                        && Integer.valueOf(1).equals(provider.getStatus())
+                        && provider.getVerifiedAt() != null
+                        && p.getProviderType().equals(provider.getProviderType())
+                        && (!daily(p) || contractCurrent(p, provider))
+                        && (!PhpNativeServiceGateway.isHeishaFace(p)
+                                || accounts.faceCollectionConfigured());
+        return new ProductView(
+                p.getId(),
+                admin ? p.getProviderId() : null,
+                p.getProviderType(),
+                p.getProject(),
+                p.getRemoteProductId(),
+                p.getTitle(),
+                p.getDescription(),
+                plain(p.getUnitPrice()),
+                daily(p)
+                        ? "元/服务日"
+                        : ("wuxin".equals(p.getProviderType())
+                                        || ("flash".equals(p.getProviderType())
+                                                && "sdxy".equals(p.getProject())))
+                                ? "元/次"
+                                : "元/公里",
+                Boolean.TRUE.equals(p.getEnabled()),
+                available,
+                p.getVersion(),
+                PhpNativeServiceGateway.capabilities(p.getProviderType()),
+                admin && daily(p)
+                        ? new ContractPriceView(
+                                plain(p.getContractUnitCost()),
+                                p.getContractValidUntil(),
+                                p.getContractEvidence(),
+                                p.getContractReviewedBy(),
+                                p.getContractReviewedAt())
+                        : null);
+    }
+
+    private OrderView orderView(ServiceOrder o) {
+        return new OrderView(
+                o.getId(),
+                o.getTitle(),
+                o.getAccountLabel(),
+                o.getProviderType(),
+                o.getProject(),
+                o.getPendingOperationId() != null ? "CONFIRMING" : o.getStatus(),
+                o.getQuantity(),
+                "sxdk_tw".equals(o.getProviderType())
+                                || ("flash".equals(o.getProviderType())
+                                        && !"COMPLETED".equals(o.getStatus()))
+                        ? null
+                        : o.getCompleted(),
+                o.getDistance() == null ? null : plain(o.getDistance()),
+                plain(o.getPaidAmount()),
+                plain(o.getRefundedAmount()),
+                o.getPendingOperationId(),
+                o.getCreateTime(),
+                o.getVersion(),
+                actions(o),
+                "sxdk_tw".equals(o.getProviderType())
+                        ? InternshipNativeServiceGateway.plan(o).schedule()
+                        : null,
+                "sxdk_tw".equals(o.getProviderType()) ? "天" : "次");
+    }
+
+    private List<String> actions(ServiceOrder o) {
+        if (o.getPendingOperationId() != null
+                || FINAL.contains(o.getStatus())
+                || "REFUND_REVIEW".equals(o.getStatus())
+                || o.getExternalOrderNo() == null) return List.of();
+        List<String> actions =
+                new ArrayList<>(PhpNativeServiceGateway.capabilities(o.getProviderType()));
+        actions.removeAll(List.of("CREATE", "LOOKUP", "SYNC"));
+        if ("PAUSED".equals(o.getStatus())) actions.remove("PAUSE");
+        else actions.remove("RESUME");
+        if ("COMPLETED".equals(o.getStatus()))
+            actions.removeAll(
+                    List.of(
+                            "PAUSE",
+                            "RESUME",
+                            "DELAY",
+                            "DELAY_TASK",
+                            "REFUND",
+                            "CHANGE_TIME",
+                            "EDIT_PLAN",
+                            "REASSIGN"));
+        if ("sxdk_tw".equals(o.getProviderType()) && "COMPLETED".equals(o.getStatus())) {
+            actions.remove("RUN_NOW");
+            if (!actions.contains("REFUND")) actions.add("REFUND");
+        }
+        return List.copyOf(actions);
+    }
+
+    private QuoteView quoteView(ServiceOperation op) {
+        ServiceProduct p = product(op.getProductId());
+        String state =
+                "READY".equals(op.getState()) && !op.getExpiresAt().isAfter(ServiceTime.now())
+                        ? "EXPIRED"
+                        : op.getState();
+        return new QuoteView(
+                op.getId(),
+                "CREATE".equals(op.getAction()) && Set.of("READY", "EXPIRED").contains(state)
+                        ? null
+                        : op.getOrderId(),
+                op.getAction(),
+                state,
+                p.getTitle(),
+                op.getQuantity(),
+                plain(op.getAmount()),
+                Set.of("REFUND", "SETTLE_REFUND").contains(op.getAction())
+                        ? ("SUCCEEDED".equals(op.getState()) ? "已退回账户余额" : "预计退款上限（按实际核实次数结算）")
+                        : isDebit(op) && op.getAmount().signum() > 0 ? "本次余额扣款" : "无需额外扣款",
+                op.getExpiresAt(),
+                op.getErrorCategory(),
+                daily(p) && !Set.of("RUN_NOW", "REPORT").contains(op.getAction()) ? "天" : "次");
+    }
+
+    private ServiceProduct product(Long id) {
+        ServiceProduct p = productMapper.selectById(id);
+        if (p == null) throw missing();
+        return p;
+    }
+
+    private ServiceProduct forSale(Long id) {
+        ServiceProduct p = product(id);
+        if (!Boolean.TRUE.equals(p.getEnabled())) throw bad("该商品已下架");
+        return p;
+    }
+
+    private ServiceOrder owned(String id) {
+        uuid(id);
+        ServiceOrder o = orderMapper.selectById(id);
+        if (o == null || !SecurityUtils.getCurrentUserId().equals(o.getUserId())) throw missing();
+        return o;
+    }
+
+    private void own(ServiceOperation op, Long uid) {
+        if (op == null || !uid.equals(op.getUserId())) throw missing();
+    }
+
+    private Long user() {
+        Long id = SecurityUtils.getCurrentUserId();
+        if (!enabled) throw bad("服务商城尚未启用，请联系管理员完成原生订单迁移与配置");
+        return id;
+    }
+
+    private void admin() {
+        SecurityUtils.requireAuthority("api-provider:update");
+    }
+
+    private void noPending(ServiceOrder o) {
+        if (o.getPendingOperationId() != null) throw bad("上一笔操作仍待确认，请勿重复下单或退款");
+    }
+
+    private void limitQuotes(Long uid) {
+        long count =
+                operationMapper.selectCount(
+                        new LambdaQueryWrapper<ServiceOperation>()
+                                .eq(ServiceOperation::getUserId, uid)
+                                .eq(ServiceOperation::getState, "READY")
+                                .gt(ServiceOperation::getExpiresAt, ServiceTime.now()));
+        if (count >= 20) throw bad("未确认的预览过多，请稍后重试");
+    }
+
+    private String encrypt(Map<String, Object> fields) {
+        try {
+            return SecretCrypto.encrypt(JSON.writeValueAsString(fields), cryptoSecret);
+        } catch (Exception ex) {
+            throw bad("无法安全保存订单参数");
+        }
+    }
+
+    private Map<String, Object> decrypt(String cipher) {
+        try {
+            if (!SecretCrypto.isEncrypted(cipher)) throw bad("订单参数不可用");
+            return JSON.readValue(
+                    SecretCrypto.decrypt(cipher, cryptoSecret), new TypeReference<>() {});
+        } catch (Exception ex) {
+            throw bad("订单参数不可用，请人工核对");
+        }
+    }
+
+    private static String identity(ApiProvider p) {
+        try {
+            return HexFormat.of()
+                    .formatHex(
+                            MessageDigest.getInstance("SHA-256")
+                                    .digest(
+                                            (p.getProviderType()
+                                                            + "\n"
+                                                            + p.getApiUrl()
+                                                            + "\n"
+                                                            + p.getUsername())
+                                                    .getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception ex) {
+            throw new IllegalStateException("Cannot fingerprint provider");
+        }
+    }
+
+    private static void limitTaskDeadline(ServiceOperation op, List<String> times) {
+        if (times == null || times.isEmpty()) throw bad("缺少任务时间");
+        try {
+            var formatter =
+                    java.time.format.DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss")
+                            .withResolverStyle(java.time.format.ResolverStyle.STRICT);
+            for (String time : times) {
+                var deadline = java.time.LocalDateTime.parse(time, formatter);
+                if (!deadline.isAfter(ServiceTime.now())) throw bad("任务时间已过，请重新选择未来时间");
+                if (deadline.isBefore(op.getExpiresAt())) op.setExpiresAt(deadline);
+            }
+        } catch (java.time.DateTimeException | NullPointerException ex) {
+            throw bad("任务时间格式错误");
+        }
+    }
+
+    private static void validateOrderForm(OrderForm form, boolean daily) {
+        if (form == null || !form.authorizedAccount()) throw bad("请确认授权使用该账号");
+        if ((!daily
+                        && (form.quantity() < 1
+                                || form.quantity() > 365
+                                || form.distance() == null
+                                || form.distance().compareTo(new BigDecimal("0.1")) < 0
+                                || form.distance().compareTo(new BigDecimal("50")) > 0
+                                || form.distance().stripTrailingZeros().scale() > 2
+                                || form.schedule() != null))
+                || (daily
+                        && (form.quantity() != 0
+                                || form.distance() != null
+                                || form.schedule() == null
+                                || (form.taskTimes() != null && !form.taskTimes().isEmpty())))
+                || form.fields() == null
+                || form.fields().size() > (daily ? 64 : 24)
+                || (form.taskTimes() != null && form.taskTimes().size() > 365))
+            throw bad("订单参数不合法");
+        form.fields()
+                .forEach(
+                        (key, value) -> {
+                            if (key == null
+                                    || key.length() > 40
+                                    || value == null
+                                    || value.length() > 2048
+                                    || value.codePoints().anyMatch(Character::isISOControl))
+                                throw bad("订单字段格式错误");
+                        });
+    }
+
+    private static void bounds(int page, int size) {
+        if (page < 1 || page > 10000 || size < 1 || size > 100) throw bad("分页参数超出范围");
+    }
+
+    private static void uuid(String id) {
+        if (id == null
+                || !id.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"))
+            throw missing();
+    }
+
+    private static BigDecimal money(BigDecimal amount) {
+        BigDecimal m = amount.setScale(2, RoundingMode.HALF_UP);
+        if (m.signum() < 0 || m.compareTo(new BigDecimal("9999999.99")) > 0) throw bad("订单金额超出范围");
+        return m;
+    }
+
+    private static boolean isDebit(ServiceOperation op) {
+        return Set.of("CREATE", "ADD_TIMES", "EDIT_SCHEDULE", "RUN_NOW").contains(op.getAction());
+    }
+
+    private static String plain(BigDecimal v) {
+        return v == null ? "0.00" : v.toPlainString();
+    }
+
+    private static void requireWrite(int rows) {
+        if (rows != 1) throw bad("数据已变化，请刷新后重试");
+    }
+
+    private static BusinessException bad(String message) {
+        return new BusinessException(message);
+    }
+
+    private static BusinessException missing() {
+        return new BusinessException(ResultCode.NOT_FOUND, "记录不存在");
+    }
+
+    private static void stamp(ServiceProduct p) {
+        if (p.getCreateTime() == null) p.setCreateTime(ServiceTime.now());
+        p.setUpdateTime(ServiceTime.now());
+    }
+
+    private static void touch(ServiceOperation op) {
+        op.setUpdateTime(ServiceTime.now());
+    }
+
+    private <T> T tx(Supplier<T> task) {
+        return new TransactionTemplate(transactions).execute(status -> task.get());
+    }
+
+    private static <S, T> IPage<T> convert(IPage<S> page, List<T> rows) {
+        Page<T> result = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
+        result.setRecords(rows);
+        return result;
+    }
+}

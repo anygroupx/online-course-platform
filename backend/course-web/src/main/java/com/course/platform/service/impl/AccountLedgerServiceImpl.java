@@ -29,9 +29,10 @@ public class AccountLedgerServiceImpl {
     public static final String BIZ_REFUND = "REFUND";
     public static final String BIZ_API_FEE = "API_FEE";
     public static final String BIZ_ADJUST = "ADJUST";
+    public static final String BIZ_PROJECT_TRANSFER = "PROJECT_TRANSFER";
 
     private static final Set<String> ALLOWED_BIZ_TYPES = Set.of(
-            BIZ_PAYMENT, BIZ_ORDER, BIZ_RECHARGE, BIZ_REFUND, BIZ_API_FEE, BIZ_ADJUST
+            BIZ_PAYMENT, BIZ_ORDER, BIZ_RECHARGE, BIZ_REFUND, BIZ_API_FEE, BIZ_ADJUST, BIZ_PROJECT_TRANSFER
     );
     private static final BigDecimal MAX_AMOUNT = new BigDecimal("9999999999.99");
 

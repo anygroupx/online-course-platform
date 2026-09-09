@@ -17,7 +17,7 @@ import java.util.List;
 /**
  * 平台对接策略接口
  */
-public interface PlatformDockingStrategy {
+public interface PlatformDockingStrategy extends ProviderConnectionProbe {
 
     /** Must be explicitly implemented with a read-only operation, never an order or retry. */
     default void testConnection(ApiProvider apiProvider) {

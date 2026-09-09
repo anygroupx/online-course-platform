@@ -21,7 +21,7 @@ public class ProviderRequestException extends BusinessException {
         HTTP_ERROR("第三方接口返回异常 HTTP 状态"),
         INVALID_RESPONSE("第三方接口响应格式错误或缺少必要字段"),
         UPSTREAM_REJECTED("第三方接口拒绝请求，请检查账号凭据和接口授权"),
-        UNSUPPORTED_OPERATION("该接口类型暂不支持安全的只读连接测试");
+        UNSUPPORTED_OPERATION("该接口类型暂不支持此操作，或尚未完成协议验证");
 
         private final String adminMessage;
 

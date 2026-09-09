@@ -1,6 +1,6 @@
 # Docker 部署文档
 
-> 更新时间：2026-07-12
+> 更新时间：2026-09-09
 
 ## 概述
 
@@ -47,6 +47,9 @@ cp .env.example .env
 | `REDIS_PASSWORD` | Redis 密码 |
 | `APP_CRYPTO_SECRET` | 敏感字段本地 AES 密钥 |
 | `API_DOC_ENABLED` | 是否开启 API 文档 |
+| `NATIVE_SERVICES_ENABLED` | 原生服务商城/项目中心总开关；生产默认关闭，仅在审核并按顺序应用迁移 018-026 后启用 |
+| `NATIVE_SERVICE_NOTIFICATIONS_ENABLED` | ShowDoc 通知开关；还需迁移 023、收件人验证与发布授权 |
+| `HEISHA_FACE_ALLOWED_ORIGINS` | 黑鲨官方人脸采集页允许的精确 HTTPS 来源；留空禁用 |
 
 ### 2. 网络
 
@@ -98,7 +101,7 @@ curl -I http://localhost:8888
 ## 数据与迁移
 
 - 首次空数据卷：自动执行 `schema.sql`
-- 已有数据：手动执行 `database/migrations/*.sql`
+- 已有数据：按编号和目标环境当前版本手动执行 `database/migrations/*.sql`；迁移 018-026 不会由应用自动执行，应用前须备份、审核并获得明确授权
 - 卷：`mysql_data`、`redis_data`、`es_data`、`backend_logs`
 
 ```bash

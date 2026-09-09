@@ -6,7 +6,7 @@ import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.security.SecretCrypto;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.exception.ProviderRequestException;
-import com.course.platform.infra.docking.PlatformDockingStrategyFactory;
+import com.course.platform.infra.integration.ProviderConnectionProbeRegistry;
 import com.course.platform.infra.http.*;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,9 +34,9 @@ class ApiProviderServiceImplTest {
         mapper = mock(ApiProviderMapper.class);
         guard = mock(SsrfGuard.class);
         strategy = mock(PlatformDockingStrategy.class);
-        PlatformDockingStrategyFactory strategies = mock(PlatformDockingStrategyFactory.class);
-        when(strategies.getStrategy("Daytime")).thenReturn(strategy);
-        when(strategies.getStrategy("29")).thenReturn(strategy);
+        ProviderConnectionProbeRegistry strategies = mock(ProviderConnectionProbeRegistry.class);
+        when(strategies.getProbe("Daytime")).thenReturn(strategy);
+        when(strategies.getProbe("29")).thenReturn(strategy);
         ProviderUrlNormalizer normalizer = new ProviderUrlNormalizer();
         service = new ApiProviderServiceImpl(mapper, guard,
                 new ProviderOutboundPolicyFactory(new OutboundSecurityProperties(), normalizer), normalizer, strategies);
@@ -341,4 +341,34 @@ class ApiProviderServiceImplTest {
         assertEquals(ApiProvider.STATUS_ACTIVE, stored.getStatus());
         assertNotNull(stored.getVerifiedAt());
     }
+    @Test
+    void courseAndReadOnlyProvidersCannotBeRetypedInPlace() {
+        var probes = (ProviderConnectionProbeRegistry) ReflectionTestUtils.getField(service, "probeRegistry");
+        var plugin = mock(com.course.platform.application.service.integration.PluginReadOnlyConnector.class);
+        when(probes.getProbe("jiguang")).thenReturn(plugin);
+        ApiProvider existing = stored(ApiProvider.STATUS_PENDING);
+        ApiProvider update = edit(); update.setProviderType("jiguang");
+        assertThrows(BusinessException.class, () -> service.updateApiProvider(update));
+        existing.setProviderType("jiguang"); update.setProviderType("Daytime");
+        assertThrows(BusinessException.class, () -> service.updateApiProvider(update));
+        verify(mapper, never()).update(any(), any());
+        verifyNoInteractions(plugin);
+    }
+
+    @Test
+    void courseAndDirectInternshipProvidersCannotBeRetypedInPlace() {
+        var probes = (ProviderConnectionProbeRegistry) ReflectionTestUtils.getField(service, "probeRegistry");
+        var internship = mock(com.course.platform.application.service.platform.docking.ProviderConnectionProbe.class);
+        when(probes.getProbe("sxdk_tw")).thenReturn(internship);
+        ApiProvider existing = stored(ApiProvider.STATUS_PENDING);
+        ApiProvider update = edit();
+        update.setProviderType("sxdk_tw");
+        assertThrows(BusinessException.class, () -> service.updateApiProvider(update));
+        existing.setProviderType("sxdk_tw");
+        update.setProviderType("Daytime");
+        assertThrows(BusinessException.class, () -> service.updateApiProvider(update));
+        verify(mapper, never()).update(any(), any());
+        verifyNoInteractions(internship);
+    }
+
 }

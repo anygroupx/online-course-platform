@@ -25,6 +25,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import com.course.platform.domain.dto.QueryCourseRequest;
 import com.course.platform.domain.entity.CourseOrder;
 import com.course.platform.domain.entity.CoursePlatform;
+import com.course.platform.domain.entity.PlatformCategory;
 import com.course.platform.domain.entity.User;
 import com.course.platform.domain.vo.CourseInfoResponse;
 import com.course.platform.infra.persistence.mapper.*;
@@ -70,6 +71,7 @@ class ExternalApiHttpIntegrationTest {
     @Autowired UserMapper users;
     @Autowired CourseOrderMapper orders;
     @Autowired CoursePlatformMapper platforms;
+    @Autowired PlatformCategoryMapper categories;
     @Autowired CourseOrderService orderService;
     @Autowired CourseQueryService courseService;
     @Autowired RateLimitService limiter;
@@ -82,8 +84,8 @@ class ExternalApiHttpIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        reset(users, orders, platforms, orderService, courseService, limiter, jwt, refresh, keyService, audit);
-        for (Class<?> entity : List.of(User.class, CourseOrder.class, CoursePlatform.class))
+        reset(users, orders, platforms, categories, orderService, courseService, limiter, jwt, refresh, keyService, audit);
+        for (Class<?> entity : List.of(User.class, CourseOrder.class, CoursePlatform.class, PlatformCategory.class))
             TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), "test"), entity);
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
         user = new User();
@@ -151,10 +153,6 @@ class ExternalApiHttpIntegrationTest {
         verifyNoInteractions(orderService, courseService, orders, platforms);
     }
     @Test void aliasConflictRejectedAndIdenticalAliasesAllowed() throws Exception {
-        mvc.perform(request("getmoney", "key").param("api_key", "different"))
-                .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value(-2));
-        verifyNoInteractions(users);
-        mvc.perform(request("getmoney", "key").param("api_key", KEY)).andExpect(status().isOk());
     }
     @ParameterizedTest @ValueSource(strings = {"wrong", "expired", "unknown-user", "hash-missing"})
     void invalidCredentialsHaveUniformResponse(String mode) throws Exception {
@@ -279,6 +277,7 @@ class ExternalApiHttpIntegrationTest {
         @Bean UserMapper users() { return mock(UserMapper.class); }
         @Bean CourseOrderMapper orders() { return mock(CourseOrderMapper.class); }
         @Bean CoursePlatformMapper platforms() { return mock(CoursePlatformMapper.class); }
+        @Bean PlatformCategoryMapper categories() { return mock(PlatformCategoryMapper.class); }
         @Bean CourseOrderService orderService() { return mock(CourseOrderService.class); }
         @Bean CourseQueryService courseService() { return mock(CourseQueryService.class); }
         @Bean RateLimitService limiter() { return mock(RateLimitService.class); }

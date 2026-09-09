@@ -6,7 +6,7 @@ import com.course.platform.application.service.platform.docking.PlatformDockingS
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.security.SecretCrypto;
 import com.course.platform.domain.entity.ApiProvider;
-import com.course.platform.infra.docking.PlatformDockingStrategyFactory;
+import com.course.platform.infra.integration.ProviderConnectionProbeRegistry;
 import com.course.platform.infra.http.*;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -58,8 +58,8 @@ class ProviderVerificationConcurrencyTest {
         factory.setConfiguration(configuration);
         mapper = new SqlSessionTemplate(factory.getObject()).getMapper(ApiProviderMapper.class);
         strategy = mock(PlatformDockingStrategy.class);
-        PlatformDockingStrategyFactory strategies = mock(PlatformDockingStrategyFactory.class);
-        when(strategies.getStrategy("Daytime")).thenReturn(strategy);
+        ProviderConnectionProbeRegistry strategies = mock(ProviderConnectionProbeRegistry.class);
+        when(strategies.getProbe("Daytime")).thenReturn(strategy);
         var normalizer = new ProviderUrlNormalizer();
         service = new ApiProviderServiceImpl(mapper, mock(SsrfGuard.class),
                 new ProviderOutboundPolicyFactory(new OutboundSecurityProperties(), normalizer), normalizer, strategies);
@@ -190,4 +190,48 @@ class ProviderVerificationConcurrencyTest {
         assertEquals(ApiProvider.STATUS_ACTIVE, mapper.selectById(1L).getStatus());
         assertNull(mapper.selectById(1L).getVerifiedAt());
     }
+    @Test
+    void newReadOnlyProviderCanCompleteEncryptedLifecycleAndReadWithoutBecomingACourseAdapter() {
+        var probes = (ProviderConnectionProbeRegistry) ReflectionTestUtils.getField(service, "probeRegistry");
+        var http = mock(com.course.platform.infra.external.ApiHttpClient.class);
+        when(http.postForString(any(), any(), any())).thenReturn(
+                "{\"code\":1,\"data\":[{\"product_id\":1,\"name\":\"catalog fixture\",\"price\":\"0.20\"}]}");
+        var connector = new com.course.platform.infra.integration.PhpTemplateReadOnlyConnector(
+                com.course.platform.infra.integration.PhpTemplateReadOnlyConnector.Protocol.JIGUANG,
+                http, new ProviderUrlNormalizer());
+        when(probes.getProbe("jiguang")).thenReturn(connector);
+        ApiProvider input = new ApiProvider();
+        input.setName("read-only fixture"); input.setProviderType("jiguang");
+        input.setApiUrl("https://readonly.example/site");
+        input.setUsername("fixture-uid"); input.setApiKey("fixture-key");
+        Long id = service.createApiProvider(input);
+        assertEquals(ApiProvider.STATUS_PENDING, mapper.selectById(id).getStatus());
+        assertTrue(SecretCrypto.isEncrypted(mapper.selectById(id).getApiKey()));
+        assertThrows(BusinessException.class, () -> service.updateStatus(id, ApiProvider.STATUS_ACTIVE));
+        verifyNoInteractions(http);
+        service.testConnection(id, 7L);
+        assertEquals(ApiProvider.STATUS_PENDING, mapper.selectById(id).getStatus());
+        service.updateStatus(id, ApiProvider.STATUS_ACTIVE);
+        var connectors = new com.course.platform.infra.integration.PluginConnectorRegistry(java.util.List.of(connector));
+        var integration = new PluginIntegrationServiceImpl(
+                new com.course.platform.infra.integration.PluginResearchCatalog(connectors), connectors, mapper, service);
+        var security = org.springframework.security.core.context.SecurityContextHolder.getContext();
+        security.setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                7L, null, java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("api-provider:update"))));
+        try {
+            assertEquals(new java.math.BigDecimal("0.20"), integration.fetchCatalog("P04", id, null).get(0).unitPrice());
+            service.updateStatus(id, ApiProvider.STATUS_DISABLED);
+            assertThrows(com.course.platform.domain.exception.ProviderRequestException.class,
+                    () -> integration.fetchCatalog("P04", id, null));
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
+        verify(http, times(2)).postForString(any(),
+                eq("https://readonly.example/site/jiguang/jiguang.api.php?act=products"),
+                eq(java.util.Map.of("login_uid", "fixture-uid", "login_key", "fixture-key")));
+        verifyNoMoreInteractions(http);
+        assertTrue(SecretCrypto.isEncrypted(mapper.selectById(id).getApiKey()));
+        assertNull(new com.course.platform.infra.docking.PlatformDockingStrategyFactory(java.util.List.of()).getStrategy("jiguang"));
+    }
+
 }

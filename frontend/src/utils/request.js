@@ -73,6 +73,7 @@ request.interceptors.response.use(
     return Promise.reject(new Error(result?.message || "请求失败"));
   },
   async (error) => {
+    if (axios.isCancel(error)) return Promise.reject(error);
     const status = error.response?.status;
     const original = error.config || {};
     const canRetry = status === 401

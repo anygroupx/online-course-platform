@@ -45,6 +45,11 @@
           <template #title>订单管理</template>
         </el-menu-item>
 
+        <el-menu-item index="/services"><el-icon><Tickets /></el-icon><template #title>服务商城</template></el-menu-item>
+        <el-menu-item index="/service-projects"><el-icon><Wallet /></el-icon><template #title>项目中心</template></el-menu-item>
+        <el-menu-item index="/project-clients"><el-icon><User /></el-icon><template #title>下游客户与API</template></el-menu-item>
+        <el-menu-item index="/service-orders"><el-icon><Document /></el-icon><template #title>服务订单</template></el-menu-item>
+
         <el-menu-item index="/courses">
           <el-icon><Reading /></el-icon>
           <template #title>课程列表</template>
@@ -82,6 +87,10 @@
           </template>
           <el-menu-item index="/admin/platforms">课程平台</el-menu-item>
           <el-menu-item index="/admin/api-providers">接口配置</el-menu-item>
+          <el-menu-item index="/admin/service-products">服务商品</el-menu-item>
+          <el-menu-item index="/admin/service-projects">项目与子钱包</el-menu-item>
+          <el-menu-item index="/admin/service-orders">服务订单与对账</el-menu-item>
+          <el-menu-item index="/admin/plugin-integrations">接口接入检查</el-menu-item>
           <el-menu-item index="/admin/orders">订单管理</el-menu-item>
           <el-menu-item index="/admin/cards">充值卡密</el-menu-item>
           <el-menu-item index="/admin/announcements">公告管理</el-menu-item>
@@ -315,6 +324,7 @@ import {
   List,
   Setting,
   Tickets,
+  Wallet,
   UserFilled,
   ArrowDown,
   Expand,
@@ -483,6 +493,18 @@ const breadcrumbList = computed(() => {
         break;
       case "api-providers":
         name = "接口配置";
+        break;
+      case "services":
+        name = "服务商城";
+        break;
+      case "service-orders":
+        name = "服务订单";
+        break;
+      case "service-products":
+        name = "服务商品";
+        break;
+      case "plugin-integrations":
+        name = "接口接入检查";
         break;
       case "settings":
         name = "系统设置";
