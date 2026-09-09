@@ -26,6 +26,7 @@ public class ProjectClientTicket {
     private String reviewResult;
     private String reviewNote;
     private LocalDateTime reviewedAt;
+    private String imageId;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

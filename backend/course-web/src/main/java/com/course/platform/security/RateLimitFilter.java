@@ -141,6 +141,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
             values.add(new Limit("catalog-refresh:" + (preview ? "preview:" : "result:") + (user == null ? "ip" : "user"),
                     user == null ? ip : user, new RateLimitProperties.Rule(preview ? 5 : 30, 60), "catalog-refresh"));
         }
+        if ("GET".equals(method) && path.matches("(?:/admin)?/(?:project-tickets|project-ticket-operations)/[^/]+/image")) {
+            values.add(new Limit("project-ticket-image:" + (user == null ? "ip" : "user"),
+                    user == null ? ip : user, properties.getOrderUser(), "project-ticket-image"));
+        }
+        if ("GET".equals(method) && (path.equals("/admin/project-reports/overview")
+                || path.equals("/project-clients/usage") || path.equals("/project-clients/usage/projects")
+                || path.equals("/external/projects/v1/usage") || path.equals("/external/projects/v1/usage/projects"))) {
+            values.add(new Limit("project-report:" + (user == null ? "ip" : "user"),
+                    user == null ? ip : user, new RateLimitProperties.Rule(12, 60), "project-report"));
+        }
         if (path.contains("export")) {
             values.add(new Limit("export:" + (user == null ? "ip" : "user"),
                     user == null ? ip : user, properties.getExportUser(), "export"));

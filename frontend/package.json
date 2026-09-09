@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test tests/*.test.js",
-    "test:browser": "node tests/provider-workflow.browser.mjs && node tests/product-import.browser.mjs && node tests/plugin-integrations.browser.mjs && node tests/service-commerce.browser.mjs && node tests/service-wuxin.browser.mjs && node tests/service-internship.browser.mjs && node tests/service-flash.browser.mjs && node tests/service-flash-auth.browser.mjs && node tests/service-heisha-face.browser.mjs && node tests/project-center.browser.mjs && node tests/project-tickets.browser.mjs && node tests/service-notifications.browser.mjs && node tests/catalog-refresh.browser.mjs && node tests/project-clients.browser.mjs && node tests/project-client-tickets.browser.mjs"
+    "test:browser": "node tests/provider-workflow.browser.mjs && node tests/product-import.browser.mjs && node tests/plugin-integrations.browser.mjs && node tests/service-commerce.browser.mjs && node tests/service-wuxin.browser.mjs && node tests/service-internship.browser.mjs && node tests/service-flash.browser.mjs && node tests/service-flash-auth.browser.mjs && node tests/service-heisha-face.browser.mjs && node tests/project-center.browser.mjs && node tests/project-tickets.browser.mjs && node tests/service-notifications.browser.mjs && node tests/catalog-refresh.browser.mjs && node tests/project-clients.browser.mjs && node tests/project-client-tickets.browser.mjs && node tests/project-reporting.browser.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",

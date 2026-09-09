@@ -5,7 +5,7 @@
         <span class="eyebrow">SUPPORT / 项目支持</span>
         <h2>{{ admin ? "用户项目工单" : "项目工单" }}</h2>
         <p>
-          只展示本平台绑定的工单。补偿审核不等于付款，工单不会自动改变余额。
+          只展示已关联的工单。补偿审核不等于付款，工单不会自动改变余额。
         </p>
       </div>
       <div class="support-toolbar">
@@ -54,7 +54,7 @@
     </div>
     <el-empty
       v-if="!loading && !rows.length"
-      description="暂无本平台工单；不会导入上游其他客户的记录"
+      description="暂无工单记录"
     />
     <el-pagination
       v-if="total > 20"
@@ -74,7 +74,7 @@
       :before-close="closeDraft"
     >
       <el-alert
-        title="先保存草稿并预览，再确认发送；本平台不要求在工单中提供密码、验证码或密钥。"
+        title="先保存草稿并预览，再确认发送；无需在工单中提供密码、验证码或密钥。"
         type="info"
         :closable="false"
       />
@@ -122,15 +122,16 @@
             placeholder="申请额度，不是人民币到账金额"
         /></el-form-item>
         <p class="support-notice">
-          当前仅支持文字工单，暂不上传或打开上游附件。补偿申请不保证获批，获批也不代表已向项目或平台余额入账。
+          可附一张图片。图片会清除元数据并加密保存；确认发送时随工单提交，不会只保存在草稿中。补偿申请不保证获批或入账。
         </p>
+        <TicketImagePicker v-model="draftImage" :disabled="busy || draftAttempted" @busy="imageBusy($event, false)" />
         <el-checkbox v-model="draft.confirmedPolicy" class="wrapped-check"
           >确认发送本人项目的问题说明，未包含密码、验证码或密钥</el-checkbox
         >
       </el-form>
       <el-alert
         v-if="draftAttempted"
-        title="草稿保存结果尚未确认。请关闭并刷新工单列表检查记录，不要重复保存；尚未自动发往上游。"
+        title="草稿保存结果尚未确认。请关闭并刷新工单列表检查记录，不要重复保存；当前尚未发送。"
         type="warning"
         :closable="false"
       />
@@ -139,7 +140,7 @@
         ><el-button
           type="primary"
           :loading="busy"
-          :disabled="!draftValid || draftAttempted"
+          :disabled="!draftValid || draftAttempted || imageReading"
           @click="previewSubmit"
           >预览工单</el-button
         ></template
@@ -165,12 +166,14 @@
               (!!detail.pendingOperationId && detail.state !== 'UNKNOWN')
             "
             @click="refreshDetail"
-            >读取上游最新回复</el-button
+            >读取最新回复</el-button
           >
         </div>
         <h3>{{ detail.title }}</h3>
         <p class="ticket-project">{{ detail.projectTitle }}</p>
         <p class="ticket-text">{{ detail.description }}</p>
+        <TicketImageViewer v-if="detail.attachmentAvailable" :image-id="detail.id + ':original:' + detail.version"
+          :fetcher="() => getProjectTicketImage(detail.id, null, admin)" />
         <div v-if="detail.type === 'compensation'" class="compensation-box">
           <strong>申请 {{ detail.compensationAmount }} 项目额度</strong>
           <p>
@@ -189,16 +192,16 @@
         </div>
         <el-alert
           v-if="
-            detail.hasAttachment ||
-            detail.replies?.some((reply) => reply.hasAttachment)
+            (detail.hasAttachment && !detail.attachmentAvailable) ||
+            detail.replies?.some((reply) => reply.hasAttachment && !reply.attachmentAvailable)
           "
-          title="上游包含附件，当前不会加载外部图片或链接，请通过已验证的支持渠道核实。"
+          title="部分附件不是可验证的 PNG/JPEG 图片，已阻止加载不安全内容；请联系支持人员核实。"
           type="info"
           :closable="false"
         />
         <h4>回复记录</h4>
         <div v-if="!detail.replies?.length" class="empty-replies">
-          暂无回复。点击“读取上游最新回复”才会请求上游。
+          暂无回复。点击“读取最新回复”可更新记录。
         </div>
         <article
           v-for="reply in detail.replies"
@@ -208,11 +211,13 @@
         >
           <div>
             <strong>{{
-              reply.sender === "customer" ? "本人项目账户" : "上游支持"
+              reply.sender === "customer" ? "本人项目账户" : "服务支持"
             }}</strong
             ><time>{{ reply.createdAt }}</time>
           </div>
-          <p class="ticket-text">{{ reply.content || "仅附件，当前不显示" }}</p>
+          <p class="ticket-text">{{ reply.content || (reply.attachmentAvailable ? "图片回复" : "仅附件，当前不可安全显示") }}</p>
+          <TicketImageViewer v-if="reply.attachmentAvailable" :image-id="detail.id + ':' + reply.id + ':' + detail.version"
+            :fetcher="() => getProjectTicketImage(detail.id, reply.id, admin)" />
         </article>
         <div v-if="detail.pendingOperationId" class="pending-ticket">
           <p>原操作尚未结束，请检查原操作，不要重复发送。</p>
@@ -227,7 +232,7 @@
         <el-form
           v-else-if="!admin && canReplyToTicket(detail)"
           label-position="top"
-          :disabled="busy"
+          :disabled="busy || replyDraftAttempted"
           ><el-form-item label="补充回复"
             ><el-input
               v-model="replyText"
@@ -235,12 +240,14 @@
               :rows="4"
               maxlength="4000"
               placeholder="仅填写需要补充的情况，不填写凭据" /></el-form-item
-          ><el-checkbox v-model="replyConsent" class="wrapped-check"
+          ><TicketImagePicker v-model="replyImage" :disabled="busy || replyDraftAttempted" @busy="imageBusy($event, true)" />
+          <el-alert v-if="replyDraftAttempted" title="回复草稿已尝试保存，请先关闭并查询该工单的原操作；不要重复预览或发送。" type="warning" :closable="false" />
+          <el-checkbox v-model="replyConsent" class="wrapped-check"
             >确认发送本人项目工单的回复，未包含凭据</el-checkbox
           ><el-button
             type="primary"
             :loading="busy"
-            :disabled="!replyConsent || !replyText.trim()"
+            :disabled="!replyConsent || (!replyText.trim() && !replyImage) || imageReading || replyDraftAttempted"
             @click="previewReply"
             >预览回复</el-button
           ></el-form
@@ -276,11 +283,11 @@
             >预览补偿审核</el-button
           ></el-form
         >
-        <p class="ticket-id">本平台工单编号 {{ detail.id }}</p>
+        <p class="ticket-id">工单编号 {{ detail.id }}</p>
       </template>
     </el-drawer>
     <el-dialog
-      v-model="operationOpen"
+      v-model="operationOpen" destroy-on-close
       :title="ticketActions[operation?.action] || '检查工单操作'"
       width="min(540px,calc(100vw - 24px))"
       :close-on-click-modal="false"
@@ -298,6 +305,9 @@
           }}。不自动付款。
         </p>
         <p class="ticket-text operation-content">{{ operation.content }}</p>
+        <p v-if="operation.hasAttachment" class="support-notice">此原操作包含一张图片。下方仅查看草稿；确认后才随原请求提交。</p>
+        <TicketImageViewer v-if="operation.hasAttachment" :image-id="operation.id"
+          :fetcher="() => getProjectTicketOperationImage(operation.id, admin)" />
         <ul class="operation-warnings">
           <li v-for="warning in operation.warnings" :key="warning">
             {{ warning }}
@@ -325,7 +335,7 @@
               type="textarea"
               :rows="3"
               maxlength="1000"
-              placeholder="逐项核实原请求的上游受理结果，不凭相似内容猜测" /></el-form-item
+              placeholder="逐项核实原请求的受理结果，不凭相似内容猜测" /></el-form-item
           ><el-checkbox
             v-model="resolution.upstreamChecked"
             class="wrapped-check"
@@ -380,7 +390,9 @@
   </section>
 </template>
 <script setup>
-import { computed, onBeforeUnmount, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
+import TicketImagePicker from "@/components/projectclient/TicketImagePicker.vue";
+import TicketImageViewer from "@/components/projectclient/TicketImageViewer.vue";
 import {
   listProjectTickets,
   getProjectTicket,
@@ -391,6 +403,8 @@ import {
   getTicketOperation,
   confirmTicketOperation,
   resolveTicketOperation,
+  getProjectTicketImage,
+  getProjectTicketOperationImage,
 } from "@/api/projectTickets";
 import {
   ticketTypes,
@@ -421,6 +435,7 @@ const rows = ref([]),
   draftAttempted = ref(false),
   replyText = ref(""),
   replyConsent = ref(false),
+  draftImage = ref(""), replyImage = ref(""), imageReading = ref(false), replyDraftAttempted = ref(false),
   review = ref({ result: "rejected", note: "", upstreamChecked: false }),
   resolution = ref({
     outcome: "NOT_ACCEPTED",
@@ -463,8 +478,17 @@ async function load() {
     if (alive && v === generation) loading.value = false;
   }
 }
+function imageBusy(value, reply) {
+  imageReading.value = value;
+  if (value) { if (reply) replyConsent.value = false; else draft.value.confirmedPolicy = false; }
+}
+watch(draftImage, () => { draft.value.confirmedPolicy = false; });
+watch(replyImage, () => { replyConsent.value = false; });
+watch(draftOpen, value => { if (!value) draftImage.value = ""; });
+watch(detailOpen, value => { if (!value) replyImage.value = ""; });
 function openDraft(accountId) {
   if (busy.value || props.admin) return;
+  draftImage.value = "";
   draft.value = {
     accountId: accountId || props.accounts[0]?.accountId,
     type: "bug",
@@ -501,7 +525,7 @@ function showOperation(data) {
   operationOpen.value = true;
 }
 async function previewSubmit() {
-  if (busy.value || draftAttempted.value || !draftValid.value) return;
+  if (busy.value || imageReading.value || draftAttempted.value || !draftValid.value) return;
   busy.value = true;
   draftAttempted.value = true;
   try {
@@ -514,6 +538,7 @@ async function previewSubmit() {
           ? draft.value.compensationAmount
           : "0",
       confirmedPolicy: true,
+      imageData: draftImage.value || null,
     });
     if (alive) {
       showOperation(data);
@@ -532,6 +557,7 @@ async function inspect(id) {
     const data = await getProjectTicket(id, props.admin);
     if (alive) {
       detail.value = data;
+      replyImage.value = ""; replyDraftAttempted.value = false;
       replyText.value = "";
       replyConsent.value = false;
       review.value = { result: "rejected", note: "", upstreamChecked: false };
@@ -544,6 +570,7 @@ async function inspect(id) {
 }
 async function refreshDetail() {
   if (busy.value || !detail.value) return;
+  replyConsent.value = false; replyImage.value = ""; review.value.upstreamChecked = false;
   busy.value = true;
   try {
     const data = await refreshProjectTicket(detail.value.id, props.admin);
@@ -560,16 +587,18 @@ async function previewReply() {
   if (
     busy.value ||
     !replyConsent.value ||
-    !replyText.value.trim() ||
+    (!replyText.value.trim() && !replyImage.value) || imageReading.value || replyDraftAttempted.value ||
     !canReplyToTicket(detail.value)
   )
     return;
   busy.value = true;
+  replyDraftAttempted.value = true;
   try {
     const data = await prepareProjectReply(detail.value.id, {
       content: replyText.value,
       version: detail.value.version,
       confirmedPolicy: true,
+      imageData: replyImage.value || null,
     });
     if (alive) {
       showOperation(data);
@@ -687,7 +716,7 @@ onBeforeUnmount(() => {
   generation++;
   clearInterval(timer);
   draft.value = {};
-  replyText.value = "";
+  replyText.value = ""; draftImage.value = ""; replyImage.value = "";
 });
 </script>
 <style scoped>

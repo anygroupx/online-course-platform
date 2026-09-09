@@ -2,7 +2,7 @@
   <main class="plugin-integrations-page" data-screen-label="插件集成">
     <header class="integration-heading">
       <div>
-        <div class="eyebrow">扩展能力 / 静态调研与原生接入</div>
+        <div class="eyebrow">扩展能力 / 功能评估</div>
         <h1>插件集成</h1>
         <p>把可验证的能力带入应用，而不是把旧脚本装进系统。</p>
       </div>
@@ -17,12 +17,12 @@
     </section>
 
     <el-alert class="integration-notice" type="info" :closable="false" show-icon
-      title="此页仅用于接口检查。用户下单请在“服务商品”上架，通过“服务商城 / 服务订单”使用原生业务功能。"
-      description="连接测试成功只代表模板入口可读，不代表真实上游全功能已验收。观察到的按钮不等于已实现能力。" />
+      title="此页仅用于接口检查。用户下单请在“服务商品”上架，通过“服务商城 / 服务订单”使用相关功能。"
+      description="连接测试成功只代表当前入口可用，不代表全部功能已验收。页面中出现的按钮不等于已经开放。" />
 
     <section class="research-panel" aria-labelledby="research-heading">
       <div class="research-heading">
-        <div><h2 id="research-heading">来源与接入评估</h2><span class="muted">2026-09-06 静态审阅 · 192 个文件 · 鲸鱼两包 24/25 文件一致</span></div>
+        <div><h2 id="research-heading">功能评估</h2><span class="muted">静态评估 · 192 个文件 · 已识别重复内容</span></div>
         <el-button :loading="loading" @click="loadIntegrations"><el-icon><Refresh /></el-icon>刷新清单</el-button>
       </div>
       <div class="integration-filters">
@@ -30,7 +30,7 @@
         <el-select v-model="status" placeholder="全部状态" clearable aria-label="筛选接入状态">
           <el-option v-for="(item, key) in integrationStatuses" :key="key" :label="item.label" :value="key" />
         </el-select>
-        <span class="result-count">{{ filteredIntegrations.length }} 个来源</span>
+        <span class="result-count">{{ filteredIntegrations.length }} 个评估项</span>
       </div>
       <el-alert v-if="loadError" type="error" :closable="false" title="研究清单读取失败，请刷新重试" />
       <el-skeleton v-else-if="loading" :rows="8" animated class="list-skeleton" />
@@ -61,7 +61,7 @@
       </div>
     </section>
 
-    <footer class="integration-footer">原包仅作为静态参考。服务下单与售后使用独立的原生商城；本页只检查连接与目录。未完成的多项目钱包、工单和不透明协议不会因检查通过而自动开放。</footer>
+    <footer class="integration-footer">现有资料仅用于功能评估。服务下单与售后请使用服务商城；本页只检查连接与目录。未开放的功能不会因检查通过而自动启用。</footer>
 
     <el-drawer v-model="drawerVisible" :title="selectedPlugin ? `${selectedPlugin.name} · 集成详情` : '集成详情'"
       size="min(740px, 100vw)" class="plugin-integration-drawer" destroy-on-close>
@@ -71,7 +71,7 @@
           <el-tab-pane label="调研证据" name="research">
             <section class="evidence-section"><h3>观察到的功能</h3><ul><li v-for="feature in selectedPlugin.observedFeatures" :key="feature">{{ feature }}</li></ul></section>
             <section class="evidence-section"><h3>限制与待补资料</h3><ul><li v-for="blocker in selectedPlugin.blockers" :key="blocker">{{ blocker }}</li></ul></section>
-            <section class="evidence-section"><h3>来源定位（解压后行号）</h3><ul class="evidence-files"><li v-for="evidence in selectedPlugin.evidence" :key="evidence">{{ evidence }}</li></ul></section>
+            <section class="evidence-section"><h3>评估依据</h3><ul class="evidence-files"><li v-for="evidence in selectedPlugin.evidence" :key="evidence">{{ evidence }}</li></ul></section>
             <el-alert type="warning" :closable="false" title="静态证据，不是实网可用性证明"
               description="不透明代码没有被执行或破解；依赖库许可证不代表插件再分发授权。本期没有访问包内硬编码域名。" />
             <el-button v-if="canReadIntegration(selectedPlugin)" type="primary" class="evidence-read-button" @click="activeTab = 'catalog'">查看已实现的只读能力</el-button>
@@ -82,7 +82,7 @@
 
         <section v-if="activeTab !== 'research' && canReadIntegration(selectedPlugin)" class="read-workspace" aria-label="只读查询工作区">
           <el-alert type="info" :closable="false" title="使用已保存、验证并启用的同类型配置"
-            description="本页不填写密钥，不登录学生账号。每次点击只发起一次只读请求，切换选择不会自动查询上游。" />
+            description="本页不填写密钥，不登录学生账号。每次点击只发起一次查询，切换选择不会自动加载。" />
           <div class="provider-selector">
             <div class="selector-heading"><label for="plugin-provider-filter">接口配置</label><el-button link type="primary" @click="configureProvider(selectedPlugin.providerType)">新建 / 管理配置</el-button></div>
             <el-input id="plugin-provider-filter" v-model="providerKeyword" maxlength="80" placeholder="按配置名称筛选，回车查询" clearable @keyup.enter="loadProviders(1)" @clear="loadProviders(1)">
@@ -106,11 +106,11 @@
               </el-select>
               <el-button type="primary" :disabled="!providerReady" :loading="catalogLoading" @click="loadCatalog">{{ selectedPlugin.providerType === 'flash' ? '读取项目报价' : '读取商品目录' }}</el-button>
             </div>
-            <p class="query-disclaimer">只展示上游报价，不代表本平台零售价或可下单商品；不同项目的计价单位可能不同。</p>
+            <p class="query-disclaimer">只展示查询价格，不代表销售价格或可下单商品；不同项目的计价单位可能不同。</p>
             <el-alert v-if="catalogError" type="error" :closable="false" :title="catalogError.message" :description="catalogError.errorId ? `错误 ID：${catalogError.errorId}` : ''" />
             <el-skeleton v-else-if="catalogLoading" :rows="3" animated />
             <el-empty v-else-if="products === null" description="选择接口后，手动读取商品或项目报价" :image-size="76" />
-            <el-empty v-else-if="!products.length" description="上游返回了空商品目录" :image-size="76" />
+            <el-empty v-else-if="!products.length" description="未返回商品目录" :image-size="76" />
             <div v-else class="quote-list" aria-live="polite">
               <div v-for="product in products" :key="product.id" class="quote-row">
                 <div><strong>{{ product.name }}</strong><small>商品 ID · {{ product.id }}</small></div>

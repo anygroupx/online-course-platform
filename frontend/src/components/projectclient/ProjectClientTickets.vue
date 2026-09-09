@@ -1,12 +1,12 @@
 <template>
-  <el-drawer v-model="open" title="下游客户售后" size="min(880px,100vw)" class="client-tickets"
+  <el-drawer v-model="open" title="客户售后" size="min(880px,100vw)" class="client-tickets" destroy-on-close
     :close-on-click-modal="false" :close-on-press-escape="!busy" :before-close="close">
     <header class="ticket-header">
-      <span class="eyebrow">LOCAL AFTER-SALES / 本平台处理</span>
-      <h2>{{ context?.label || '我的下游工单' }}</h2>
+      <span class="eyebrow">LOCAL AFTER-SALES / 客户售后</span>
+      <h2>{{ context?.label || '我的客户工单' }}</h2>
       <p class="muted">{{ context?.projectTitle || '仅展示你名下的客户，客户密钥只能访问自己的工单。' }}</p>
     </header>
-    <el-alert title="这是下游客户的本地售后，不会向上游发单。补偿申请通过仅记录结论，不会自动充值、退款或改变任何余额。"
+    <el-alert title="这是客户售后功能。补偿申请通过仅记录结论，不会自动充值、退款或改变任何余额。"
       type="info" show-icon :closable="false" />
     <el-alert v-if="error" :title="error" type="warning" :closable="false" show-icon class="spaced" />
     <section v-if="pending" class="recovery" role="status">
@@ -21,7 +21,7 @@
     </section>
     <div class="toolbar">
       <el-button v-if="mode !== 'list'" :disabled="locked" @click="back">返回工单列表</el-button>
-      <el-button v-if="mode === 'list' && context" type="primary" :disabled="locked || context.status !== 'ACTIVE'" @click="beginCreate">新建本地工单</el-button>
+      <el-button v-if="mode === 'list' && context" type="primary" :disabled="locked || context.status !== 'ACTIVE'" @click="beginCreate">新建客户工单</el-button>
       <el-button :disabled="locked" :loading="loading" @click="mode === 'detail' ? loadDetail() : loadList()">刷新{{ mode === 'detail' ? '工单' : '列表' }}</el-button>
     </div>
 
@@ -40,7 +40,7 @@
         <div class="row-end"><el-tag :type="clientTicketOpen(item) ? 'warning' : 'info'">{{ clientTicketStates[item.status] }}</el-tag>
           <el-button :disabled="locked" @click="inspect(item.id)">查看工单</el-button></div>
       </article>
-      <el-empty v-if="!loading && !items.length && !error" description="暂无本地售后工单" />
+      <el-empty v-if="!loading && !items.length && !error" description="暂无客户售后工单" />
       <el-pagination v-if="total > 20" v-model:current-page="page" :total="total" :page-size="20" layout="prev,pager,next" :disabled="locked" @current-change="loadList" />
       <section class="lookup">
         <h3>按原请求编号找回结果</h3><p class="muted">只查询，不重新提交。请勿在这里输入 API 密钥或账号密码。</p>
@@ -51,7 +51,7 @@
 
     <section v-else-if="mode === 'create'" class="compose">
       <h3>为此客户提交问题</h3>
-      <p class="muted">只接受纯文本；请勿填写密码、密钥或人脸资料。附件暂未开放。</p>
+      <p class="muted">文字与图片均须去除密码、密钥或人脸资料。附件仅随工单保存。</p>
       <el-form label-position="top" :disabled="locked">
         <el-form-item label="工单类型"><el-select v-model="draft.kind" aria-label="工单类型">
           <el-option v-for="(label, key) in clientTicketKinds" :key="key" :value="key" :label="label" /></el-select></el-form-item>
@@ -59,8 +59,9 @@
         <el-form-item label="问题描述"><el-input v-model="draft.description" type="textarea" :rows="5" maxlength="5000" show-word-limit /></el-form-item>
         <el-form-item v-if="draft.kind === 'COMPENSATION'" label="申请参考金额（元，不是支付指令）">
           <el-input v-model="draft.amount" inputmode="decimal" maxlength="11" placeholder="0.00" /></el-form-item>
-        <el-checkbox v-model="consent" class="consent">我已确认客户和内容，知晓仅在本平台处理且不会自动入账</el-checkbox>
-        <div class="actions"><el-button type="primary" :disabled="!canCreate" @click="submit">提交本地工单</el-button></div>
+        <TicketImagePicker v-model="draftImage" :disabled="busy || !!pending" @busy="onImageReading($event, false)" />
+        <el-checkbox v-model="consent" class="consent">我已确认客户和内容，知晓此操作仅用于售后处理且不会自动入账</el-checkbox>
+        <div class="actions"><el-button type="primary" :disabled="!canCreate" @click="submit">提交客户工单</el-button></div>
       </el-form>
     </section>
 
@@ -70,6 +71,7 @@
           <span class="muted">{{ clientTicketKinds[ticket.kind] }} · 版本 {{ ticket.version }}</span></div>
         <h2>{{ ticket.title }}</h2><p class="identity">客户 {{ ticket.clientId }}</p>
         <p class="plaintext">{{ ticket.description }}</p>
+        <TicketImageViewer :image-id="ticket.imageId" />
         <section v-if="ticket.kind === 'COMPENSATION'" class="review-card">
           <div class="detail-heading"><strong>{{ clientTicketReviews[ticket.reviewResult] }}</strong><b>申请参考 ¥{{ ticket.requestedAmount }}</b></div>
           <p v-if="ticket.reviewNote" class="plaintext">{{ ticket.reviewNote }}</p>
@@ -78,7 +80,8 @@
         <section class="conversation"><h3>沟通记录 <span class="muted">{{ replyTotal }} 条</span></h3>
           <article v-for="message in messages" :key="message.id" class="message" :class="message.author === 'OWNER' ? 'owner' : ''">
             <header><b>{{ message.author === 'OWNER' ? '经营者回复' : '客户回复' }}</b><time>{{ message.createdAt }}</time></header>
-            <p class="plaintext">{{ message.content }}</p>
+            <p v-if="message.content" class="plaintext">{{ message.content }}</p>
+            <TicketImageViewer :image-id="message.imageId" />
           </article>
           <p v-if="!messages.length" class="muted">尚无回复</p>
           <el-pagination v-if="replyTotal > 20" v-model:current-page="replyPage" :total="replyTotal" :page-size="20" layout="prev,pager,next" :disabled="locked" @current-change="loadDetail" />
@@ -86,8 +89,9 @@
         <template v-if="clientTicketOpen(ticket)">
           <el-form label-position="top" :disabled="locked || loading" class="reply-form">
             <el-form-item label="补充回复"><el-input v-model="replyText" type="textarea" :rows="3" maxlength="5000" show-word-limit /></el-form-item>
+            <TicketImagePicker v-model="replyImage" :disabled="busy || !!pending || loading" @busy="onImageReading($event, true)" />
             <el-checkbox v-model="replyConsent" class="consent">确认以经营者身份向此客户回复</el-checkbox>
-            <div class="actions"><el-button :disabled="!replyText.trim() || !replyConsent" @click="sendReply">发送本地回复</el-button></div>
+            <div class="actions"><el-button :disabled="(!replyText.trim() && !replyImage) || !replyConsent || imageReading" @click="sendReply">发送回复</el-button></div>
           </el-form>
           <el-form label-position="top" :disabled="locked || loading" class="decision-form">
             <h3>{{ ticket.kind === 'COMPENSATION' ? '审核此补偿申请' : '记录处理结果' }}</h3>
@@ -110,6 +114,8 @@
 
 <script setup>
 import { computed, reactive, ref, watch, onBeforeUnmount } from 'vue'
+import TicketImagePicker from './TicketImagePicker.vue'
+import TicketImageViewer from './TicketImageViewer.vue'
 import { listClientTickets, clientTicket, clientTicketReplies, clientTicketRequest, createClientTicket, replyClientTicket, decideClientTicket } from '@/api/projectClientTickets'
 import { clientTicketKinds, clientTicketStates, clientTicketReviews, clientTicketOpen, ticketAmountValid, ticketRequestIdValid } from '@/utils/projectClientTickets'
 const props = defineProps({ modelValue: Boolean, client: { type: Object, default: null } })
@@ -121,13 +127,18 @@ const status = ref(''), kind = ref(''), busy = ref(false), loading = ref(false),
 const pending = ref(null), retryReady = ref(false), lookupId = ref('')
 const draft = reactive({ kind: 'BUG', title: '', description: '', amount: '0.00' })
 const consent = ref(false), replyText = ref(''), replyConsent = ref(false)
+const draftImage = ref(''), replyImage = ref(''), imageReading = ref(false)
 const decision = ref(''), decisionNote = ref(''), decisionConsent = ref(false)
 let alive = true, generation = 0, sequence = 0
 const current = g => alive && props.modelValue && generation === g
-const locked = computed(() => busy.value || !!pending.value)
+const locked = computed(() => busy.value || !!pending.value || imageReading.value)
 const canCreate = computed(() => consent.value && draft.title.trim() && draft.description.trim() && (draft.kind !== 'COMPENSATION' || ticketAmountValid(draft.amount)))
+function onImageReading(value, reply) {
+  imageReading.value = value
+  if (value) { if (reply) replyConsent.value = false; else consent.value = false }
+}
 function close(done) { if (!busy.value) done() }
-function clearReply() { replyText.value = ''; replyConsent.value = false; decision.value = ''; decisionNote.value = ''; decisionConsent.value = false }
+function clearReply() { replyImage.value = ''; replyText.value = ''; replyConsent.value = false; decision.value = ''; decisionNote.value = ''; decisionConsent.value = false }
 async function loadList() {
   const g = generation, seq = ++sequence
   loading.value = true; error.value = ''
@@ -142,7 +153,7 @@ async function loadDetail() {
   const g = generation, seq = ++sequence, id = selectedId.value
   loading.value = true; error.value = ''
   // Reading a new snapshot invalidates earlier acknowledgement, even when the draft is retained.
-  replyConsent.value = false; decisionConsent.value = false
+  replyConsent.value = false; decisionConsent.value = false; replyImage.value = ''
   // Do not allow a stale visible version to become a new write after a failed refresh.
   ticket.value = null
   try {
@@ -154,15 +165,15 @@ async function loadDetail() {
 function inspect(id) { selectedId.value = id; mode.value = 'detail'; replyPage.value = 1; clearReply(); loadDetail() }
 function back() { mode.value = 'list'; clearReply(); loadList() }
 function filterChanged() { page.value = 1; loadList() }
-function beginCreate() { mode.value = 'create'; error.value = ''; consent.value = false; Object.assign(draft, { kind: 'BUG', title: '', description: '', amount: '0.00' }) }
+function beginCreate() { draftImage.value = ''; mode.value = 'create'; error.value = ''; consent.value = false; Object.assign(draft, { kind: 'BUG', title: '', description: '', amount: '0.00' }) }
 function submit() {
   if (locked.value || !canCreate.value || !context.value) return
   execute({ type: 'CREATE', payload: { requestId: crypto.randomUUID(), clientId: context.value.id, kind: draft.kind,
-    title: draft.title.trim(), description: draft.description.trim(), requestedAmount: draft.kind === 'COMPENSATION' ? draft.amount : '0', consent: true } })
+    title: draft.title.trim(), description: draft.description.trim(), requestedAmount: draft.kind === 'COMPENSATION' ? draft.amount : '0', consent: true, imageData: draftImage.value || null } })
 }
 function sendReply() {
-  if (locked.value || loading.value || !clientTicketOpen(ticket.value) || !replyText.value.trim() || !replyConsent.value) return
-  execute({ type: 'REPLY', id: ticket.value.id, payload: { requestId: crypto.randomUUID(), version: ticket.value.version, content: replyText.value.trim(), consent: true } })
+  if (locked.value || loading.value || !clientTicketOpen(ticket.value) || (!replyText.value.trim() && !replyImage.value) || !replyConsent.value) return
+  execute({ type: 'REPLY', id: ticket.value.id, payload: { requestId: crypto.randomUUID(), version: ticket.value.version, content: replyText.value.trim(), consent: true, imageData: replyImage.value || null } })
 }
 function sendDecision() {
   if (locked.value || loading.value || !clientTicketOpen(ticket.value) || !decision.value || !decisionNote.value.trim() || !decisionConsent.value) return
@@ -182,7 +193,7 @@ async function execute(attempt) {
   if (current(g) && receipt) await applied(receipt)
 }
 async function applied(receipt) {
-  pending.value = null; retryReady.value = false; error.value = ''; clearReply(); consent.value = false
+  pending.value = null; draftImage.value = ''; retryReady.value = false; error.value = ''; clearReply(); consent.value = false
   selectedId.value = receipt.ticketId; mode.value = 'detail'; replyPage.value = 1
   await loadDetail()
 }
@@ -202,7 +213,7 @@ function retry() { if (pending.value && retryReady.value && !busy.value) execute
 function abandon() {
   if (!retryReady.value || busy.value) return
   const was = pending.value
-  pending.value = null; retryReady.value = false; error.value = ''; clearReply(); consent.value = false
+  pending.value = null; draftImage.value = ''; retryReady.value = false; error.value = ''; clearReply(); consent.value = false
   if (was?.id) { selectedId.value = was.id; mode.value = 'detail'; loadDetail() }
 }
 async function lookup() {
@@ -214,9 +225,11 @@ async function lookup() {
   finally { if (current(g)) busy.value = false }
   if (current(g) && receipt) await applied(receipt)
 }
+watch(draftImage, () => { consent.value = false })
+watch(replyImage, () => { replyConsent.value = false })
 watch(() => props.modelValue, value => {
   generation++; sequence++; loading.value = false; busy.value = false
-  if (!value) return
+  if (!value) { if (!pending.value) { draftImage.value = ''; replyImage.value = '' } return }
   if (pending.value) { error.value = '恢复上次待核对请求；未切换客户、未自动重发。'; return }
   context.value = props.client ? { ...props.client } : null
   mode.value = 'list'; items.value = []; ticket.value = null; page.value = 1; status.value = ''; kind.value = ''; lookupId.value = ''

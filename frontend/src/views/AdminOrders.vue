@@ -161,10 +161,10 @@
                 clearable
               />
             </el-form-item>
-            <el-form-item label="对接状态">
+            <el-form-item label="执行状态">
               <el-select
                 v-model="queryForm.dockStatus"
-                placeholder="对接状态"
+                placeholder="执行状态"
                 clearable
                 style="width: 100%"
               >
@@ -314,10 +314,10 @@
                     @input="handleRealTimeSearch"
                   />
                 </el-form-item>
-                <el-form-item label="对接状态">
+                <el-form-item label="执行状态">
                   <el-select
                     v-model="queryForm.dockStatus"
-                    placeholder="对接状态"
+                    placeholder="执行状态"
                     clearable
                     @change="handleRealTimeSearch"
                   >
@@ -500,7 +500,7 @@
                       <el-icon><Setting /></el-icon> 修改状态
                     </el-dropdown-item>
                     <el-dropdown-item command="dock">
-                      <el-icon><Setting /></el-icon> 修改对接
+                      <el-icon><Setting /></el-icon> 修改执行状态
                     </el-dropdown-item>
                     <el-dropdown-item command="remark">
                       <el-icon><Document /></el-icon> 添加备注
@@ -556,7 +556,7 @@
                   type="info"
                   @click="handleForceUpdateDockStatus(scope.row)"
                 >
-                  修改对接
+                  修改执行状态
                 </el-button>
                 <el-button
                   size="small"
@@ -672,7 +672,7 @@
     <!-- 强制修改对接状态对话框 -->
     <el-dialog
       v-model="dockStatusDialogVisible"
-      title="修改对接状态"
+      title="修改执行状态"
       width="500px"
       append-to-body
     >
@@ -902,7 +902,7 @@
           >
             <el-option label="修改订单状态" value="updateStatus" />
             <el-option label="状态切换（支持倒计时）" value="toggleStatus" />
-            <el-option label="修改对接状态" value="updateDockStatus" />
+            <el-option label="修改执行状态" value="updateDockStatus" />
             <el-option label="添加备注" value="addRemark" />
             <el-option label="批量补单" value="retryOrders" />
             <el-option label="批量取消" value="cancelOrders" />
@@ -975,7 +975,7 @@
 
         <!-- 修改对接状态 -->
         <el-form-item
-          label="新对接状态"
+          label="新执行状态"
           v-if="batchForm.operation === 'updateDockStatus'"
         >
           <el-select
@@ -1130,7 +1130,7 @@
             {{ getStatusText(currentOrder.orderStatus) }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="对接状态">
+        <el-descriptions-item label="执行状态">
           <el-tag :type="getDockStatusType(currentOrder.dockStatus)">
             {{ getDockStatusText(currentOrder.dockStatus) }}
           </el-tag>
@@ -1156,9 +1156,9 @@
         </el-descriptions-item>
       </el-descriptions>
 
-      <el-divider content-position="left">上游订单日志</el-divider>
+      <el-divider content-position="left">订单执行日志</el-divider>
       <div class="provider-log-header">
-        <span class="provider-log-tip">日志来自订单对应的第三方接口</span>
+        <span class="provider-log-tip">日志来自订单关联的服务配置</span>
         <el-button
           size="small"
           :icon="Refresh"
@@ -1172,7 +1172,7 @@
       <div v-loading="providerLogsLoading" class="provider-log-panel">
         <el-alert
           v-if="currentOrder && isSelfOperatedOrder(currentOrder)"
-          title="自营订单无上游日志"
+          title="自营订单无执行日志"
           type="info"
           :closable="false"
           show-icon
@@ -1186,7 +1186,7 @@
         />
         <el-empty
           v-else-if="!providerLogsLoading && providerLogs.length === 0"
-          description="暂无上游订单日志"
+          description="暂无订单执行日志"
           :image-size="72"
         />
         <el-timeline v-else class="provider-log-timeline">
@@ -1402,7 +1402,7 @@ const columnDefinitions = ref({
   amount: { label: "金额", width: 100, sortable: true },
   progress: { label: "进度", width: 100 },
   orderStatus: { label: "订单状态", width: 150 },
-  dockStatus: { label: "对接状态", width: 150 },
+  dockStatus: { label: "执行状态", width: 150 },
   retryCount: { label: "补单次数", width: 100 },
   createTime: { label: "创建时间", width: 160, sortable: true },
 });
@@ -2101,7 +2101,7 @@ const loadProviderOrderLogs = async () => {
   } catch (error) {
     if (requestVersion === providerLogsRequestVersion && currentOrder.value?.id === orderId) {
       providerLogsError.value =
-        error?.response?.data?.message || error?.message || "上游订单日志加载失败";
+        error?.response?.data?.message || error?.message || "订单执行日志加载失败";
       console.error("加载上游订单日志失败：", error);
     }
   } finally {
@@ -2219,7 +2219,7 @@ const handleDockStatusSubmit = async () => {
     );
     const data = await res.json();
     if (data.code === 1) {
-      ElMessage.success("对接状态修改成功");
+      ElMessage.success("执行状态修改成功");
       dockStatusDialogVisible.value = false;
       loadOrders();
     } else {
@@ -2227,7 +2227,7 @@ const handleDockStatusSubmit = async () => {
     }
   } catch (error) {
     console.error("修改对接状态失败：", error);
-    ElMessage.error("修改对接状态失败");
+    ElMessage.error("修改执行状态失败");
   }
 };
 
@@ -2464,7 +2464,7 @@ const handleDockStatusChange = async (row) => {
     );
     const data = await res.json();
     if (data.code === 1) {
-      ElMessage.success("对接状态修改成功");
+      ElMessage.success("执行状态修改成功");
     } else {
       ElMessage.error(data.message || "修改失败");
       // 恢复原状态
@@ -2472,7 +2472,7 @@ const handleDockStatusChange = async (row) => {
     }
   } catch (error) {
     console.error("修改对接状态失败：", error);
-    ElMessage.error("修改对接状态失败");
+    ElMessage.error("修改执行状态失败");
     // 恢复原状态
     loadOrders();
   }

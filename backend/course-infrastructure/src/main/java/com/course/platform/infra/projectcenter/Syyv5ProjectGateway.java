@@ -28,6 +28,7 @@ public class Syyv5ProjectGateway
         implements ProjectCenterGateway, ProjectTicketGateway, ProviderConnectionProbe {
     private final ApiHttpClient http;
     private final ProviderUrlNormalizer normalizer;
+    private final ProjectTicketImagePolicy images;
     private static final ObjectMapper JSON =
             new ObjectMapper(
                             JsonFactory.builder()
@@ -41,6 +42,14 @@ public class Syyv5ProjectGateway
                                     .build())
                     .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
                     .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
+
+    private static final ObjectMapper TICKET_JSON = new ObjectMapper(
+            JsonFactory.builder().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+                    .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(16)
+                            .maxStringLength(ProjectTicketImagePolicy.MAX_INLINE_CHARS).maxNumberLength(32).build()).build())
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
+    private static final Set<String> TICKET_ACTIONS = Set.of("submitCustomerTicket", "getCustomerTicketDetail", "replyCustomerTicket", "reviewCompensationTicket");
 
     @Override
     public String getProviderType() {
@@ -153,6 +162,8 @@ public class Syyv5ProjectGateway
         fields.put("type", form.type());
         fields.put("title", form.title());
         fields.put("description", form.description());
+        String image = images.outgoing(form.imageData());
+        if (image != null) fields.put("image_data", image);
         fields.put(
                 "compensation_amount",
                 form.compensationAmount() == null
@@ -173,7 +184,7 @@ public class Syyv5ProjectGateway
                                         form.compensationAmount() == null
                                                 ? BigDecimal.ZERO
                                                 : form.compensationAmount())
-                        != 0) throw invalid();
+                        != 0 || (image != null && !image.equals(receipt.imageData()))) throw invalid();
         return receipt;
     }
 
@@ -195,31 +206,23 @@ public class Syyv5ProjectGateway
     }
 
     @Override
-    public Receipt replyTicket(
-            ApiProvider p, String projectId, String customerKey, String ticketId, String content) {
+    public Receipt replyTicket(ApiProvider p, String projectId, String customerKey, String ticketId, String content) {
+        return replyTicketWithImage(p, projectId, customerKey, ticketId, content, null);
+    }
+
+    @Override
+    public Receipt replyTicketWithImage(ApiProvider p, String projectId, String customerKey,
+            String ticketId, String content, String imageData) {
         requireId(projectId);
         requireId(ticketId);
-        var receipt =
-                parseTicket(
-                        call(
-                                p,
-                                "replyCustomerTicket",
-                                Map.of(
-                                        "project_id",
-                                        projectId,
-                                        "ticket_id",
-                                        ticketId,
-                                        "content",
-                                        content),
-                                true,
-                                customerKey),
-                        projectId,
-                        ticketId,
-                        p,
-                        customerKey);
-        if (receipt.replies().stream()
-                .noneMatch(r -> "customer".equals(r.sender()) && content.equals(r.content())))
-            throw invalid();
+        String image = images.outgoing(imageData);
+        if (content == null || content.length() > 4000 || (content.isBlank() && image == null)) throw invalid();
+        var fields = new LinkedHashMap<String, Object>();
+        fields.put("project_id", projectId); fields.put("ticket_id", ticketId); fields.put("content", content);
+        if (image != null) fields.put("image_data", image);
+        var receipt = parseTicket(call(p, "replyCustomerTicket", fields, true, customerKey), projectId, ticketId, p, customerKey);
+        if (receipt.replies().stream().noneMatch(r -> "customer".equals(r.sender())
+                && content.equals(r.content()) && Objects.equals(image, r.imageData()))) throw invalid();
         return receipt;
     }
 
@@ -280,6 +283,8 @@ public class Syyv5ProjectGateway
             replies = data.get("replies");
         }
         if (!replies.isArray() || replies.size() > 100) throw invalid();
+        var imageBudget = images.receipt();
+        String image = imageData(row, imageBudget);
         List<Reply> result = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         for (var r : replies) {
@@ -293,7 +298,7 @@ public class Syyv5ProjectGateway
                             sender,
                             ticketText(r.path("content"), 4000, provider, customerKey),
                             ticketText(r.path("created_at"), 40, provider, customerKey),
-                            attachment(r)));
+                            attachment(r), imageData(r, imageBudget)));
         }
         return new Receipt(
                 ticketId,
@@ -308,7 +313,12 @@ public class Syyv5ProjectGateway
                 ticketText(row.path("created_at"), 40, provider, customerKey),
                 ticketText(row.path("updated_at"), 40, provider, customerKey),
                 attachment(row),
-                List.copyOf(result));
+                List.copyOf(result), image);
+    }
+
+    private String imageData(JsonNode row, ProjectTicketImagePolicy.Budget budget) {
+        if (!attachment(row)) return null;
+        return budget.image(row.get("image_data").textValue());
     }
 
     private static boolean attachment(JsonNode row) {
@@ -377,9 +387,12 @@ public class Syyv5ProjectGateway
                 post
                         ? http.postForString(p, uri.toASCIIString(), args)
                         : http.getForString(p, uri.toASCIIString(), args);
-        if (response == null || response.length() > 262144) throw invalid();
+        boolean ticket = TICKET_ACTIONS.contains(action);
+        // Existing transport cap remains authoritative (default 8MiB). All non-ticket paths
+        // retain their stricter 256KiB parser limit; no global outbound policy is weakened.
+        if (response == null || response.length() > (ticket ? 8 * 1024 * 1024 : 262144)) throw invalid();
         try {
-            JsonNode root = JSON.readTree(response);
+            JsonNode root = (ticket ? TICKET_JSON : JSON).readTree(response);
             if (root == null || !root.isObject() || !root.path("status").isTextual())
                 throw invalid();
             if (!"success".equals(root.get("status").textValue()))

@@ -29,11 +29,14 @@ class ProjectClientTicketTransactionTest extends ProjectClientTestSupport {
     void setupTickets() {
         tickets = new ProjectClientTicketServiceImpl(
                 sql.getMapper(ProjectClientTicketMapper.class),
+                sql.getMapper(ProjectClientTicketImageMapper.class),
+                new com.course.platform.infra.projectclient.ProjectTicketImageCodec(),
                 sql.getMapper(ProjectClientTicketReplyMapper.class),
                 sql.getMapper(ProjectClientTicketCommandMapper.class), clients, users, keys,
                 validation.getValidator(), limiter, new RateLimitProperties(),
                 new DataSourceTransactionManager(jdbc.getDataSource()));
         ReflectionTestUtils.setField(tickets, "enabled", true);
+        ReflectionTestUtils.setField(tickets, "cryptoSecret", "fixture-ticket-image-encryption");
         clientId = open("0").id();
     }
 

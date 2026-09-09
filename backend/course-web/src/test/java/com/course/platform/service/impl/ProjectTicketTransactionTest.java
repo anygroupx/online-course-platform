@@ -40,6 +40,7 @@ class ProjectTicketTransactionTest extends ProjectCenterTestSupport {
                         ticketOps,
                         service,
                         ticketGateway,
+                        new com.course.platform.infra.projectcenter.ProjectTicketImagePolicy(new com.course.platform.infra.projectclient.ProjectTicketImageCodec()),
                         limiter,
                         new com.course.platform.config.RateLimitProperties(),
                         new DataSourceTransactionManager(ds));
@@ -591,4 +592,161 @@ class ProjectTicketTransactionTest extends ProjectCenterTestSupport {
         assertEquals(10L, ticketMapper.selectById(op.ticketId()).getProviderId());
         money("100");
     }
+    private String image(int color) throws Exception {
+        return com.course.platform.infra.projectclient.ProjectTicketImageCodecTest.data("png", color);
+    }
+    private Receipt withImage(Receipt r, String image) {
+        return new Receipt(r.id(),r.projectId(),r.type(),r.title(),r.description(),r.compensationAmount(),r.status(),
+                r.reviewResult(),r.reviewNote(),r.createdAt(),r.updatedAt(),image!=null,r.replies(),image);
+    }
+    private void imageForm(String raw) {
+        form=new SubmitForm(form.type(),form.title(),form.description(),form.compensationAmount(),true,raw);
+        when(ticketGateway.submitTicket(any(),anyString(),anyString(),any())).thenAnswer(a->{
+            noTransaction();remote=withImage(remote,((SubmitForm)a.getArgument(3)).imageData());return remote;
+        });
+    }
+
+    @Test void imageDraftIsEncryptedAndPreviewReadDoesNotSubmitOrExposeDataInDto() throws Exception {
+        imageForm(image(0x123456));var op=draft();
+        assertTrue(op.hasAttachment());assertTrue(ticketService.ticket(op.ticketId(),false).attachmentAvailable());
+        byte[] expected=new com.course.platform.infra.projectclient.ProjectTicketImageCodec().normalize(form.imageData()).png();
+        assertArrayEquals(expected,ticketService.operationImage(op.id(),false));
+        assertArrayEquals(expected,ticketService.image(op.ticketId(),null,false));
+        assertFalse(ticketMapper.selectById(op.ticketId()).getRequestEncrypted().contains(form.imageData()));
+        assertFalse(new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules().writeValueAsString(op).contains("base64"));
+        verifyNoInteractions(ticketGateway);money("100");
+    }
+
+    @Test void acceptedImageSubmitStoresPrivateCacheAndOnlyOriginalConfirmationIsSent() throws Exception {
+        imageForm(image(0x234567));var op=draft();
+        assertEquals("SUCCEEDED",ticketService.confirm(op.id(),false).state());ticketService.confirm(op.id(),false);
+        var view=ticketService.ticket(op.ticketId(),false);assertTrue(view.hasAttachment());assertTrue(view.attachmentAvailable());
+        String json=new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules().writeValueAsString(view);
+        assertFalse(json.contains("base64"));assertFalse(json.contains("imageData"));assertFalse(json.contains("private-customer-key"));
+        verify(ticketGateway,times(1)).submitTicket(any(),anyString(),anyString(),any());
+        clearInvocations(ticketGateway);assertTrue(ticketService.image(op.ticketId(),null,false).length>0);verifyNoInteractions(ticketGateway);
+        money("100");assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger",Integer.class));
+    }
+
+    @Test void imageCacheAndDraftImagesRequireExactOwnerOrActualAdminPermission() throws Exception {
+        imageForm(image(0));var op=draft();ticketService.confirm(op.id(),false);
+        auth(8,"ROLE_USER");assertThrows(BusinessException.class,()->ticketService.image(op.ticketId(),null,false));
+        assertThrows(BusinessException.class,()->ticketService.operationImage(op.id(),false));
+        auth(8,"ROLE_ADMIN");assertThrows(BusinessException.class,()->ticketService.image(op.ticketId(),null,true));
+        auth(8,"api-provider:update");assertTrue(ticketService.image(op.ticketId(),null,true).length>0);
+        assertTrue(ticketService.operationImage(op.id(),true).length>0);
+        assertThrows(BusinessException.class,()->ticketService.image(op.ticketId(),"999",true));
+    }
+
+    @Test void missingImageEchoProducesUnknownAndCannotBindNewTicketByArbitraryId() throws Exception {
+        form=new SubmitForm(form.type(),form.title(),form.description(),form.compensationAmount(),true,image(0));
+        var op=draft();assertEquals("UNKNOWN",ticketService.confirm(op.id(),false).state());
+        ticketService.confirm(op.id(),false);assertNull(ticketMapper.selectById(op.ticketId()).getRemoteTicketId());
+        assertTrue(ticketService.operationImage(op.id(),false).length>0);
+        support();assertThrows(BusinessException.class,()->ticketService.resolve(op.id(),new ResolveForm("ACCEPTED","已人工提供编号但缺少独立归属证据",true)));
+        verify(ticketGateway,times(1)).submitTicket(any(),anyString(),anyString(),any());money("100");
+    }
+
+    @Test void imageOnlyReplyUsesSingleDispatchAndPrivateReplyCache() throws Exception {
+        var t=submit();String raw=image(0x334455);
+        when(ticketGateway.replyTicketWithImage(any(),anyString(),anyString(),anyString(),anyString(),anyString())).thenAnswer(a->{
+            noTransaction();remote=receipt("31","processing","","",List.of(new Reply("45","customer","","2026-09-09",true,a.getArgument(5))));return remote;
+        });
+        var op=ticketService.reply(t.id(),new ReplyForm("",t.version(),true,raw));assertTrue(op.hasAttachment());
+        assertEquals("SUCCEEDED",ticketService.confirm(op.id(),false).state());ticketService.confirm(op.id(),false);
+        assertTrue(ticketService.ticket(t.id(),false).replies().get(0).attachmentAvailable());
+        assertTrue(ticketService.image(t.id(),"45",false).length>0);
+        verify(ticketGateway,times(1)).replyTicketWithImage(eq(provider),eq("5"),eq("private-customer-key"),eq("31"),eq(""),anyString());
+        verify(ticketGateway,never()).replyTicket(any(),anyString(),anyString(),anyString(),anyString());money("100");
+    }
+
+    @Test void lostImageReplyCanBeReadButOnlyExplicitEvidenceResolvesItAgainstFrozenIds() throws Exception {
+        var t=submit();String raw=image(0xABCDEF);
+        when(ticketGateway.replyTicketWithImage(any(),anyString(),anyString(),anyString(),anyString(),anyString())).thenAnswer(a->{
+            noTransaction();remote=receipt("31","processing","","",List.of(new Reply("45","customer","新图片回复","2026-09-09",true,a.getArgument(5))));throw new RuntimeException("lost response");
+        });
+        var op=ticketService.reply(t.id(),new ReplyForm("新图片回复",t.version(),true,raw));
+        assertEquals("UNKNOWN",ticketService.confirm(op.id(),false).state());
+        ticketService.refresh(t.id(),false);assertEquals("UNKNOWN",ticketService.operation(op.id(),false).state());
+        assertTrue(ticketService.image(t.id(),"45",false).length>0);
+        support();assertEquals("SUCCEEDED",ticketService.resolve(op.id(),new ResolveForm("ACCEPTED","已逐项核实此次请求生成了对应的新图文回复",true)).state());
+        verify(ticketGateway,times(1)).replyTicketWithImage(any(),anyString(),anyString(),anyString(),anyString(),anyString());
+    }
+
+    @Test void existingIdenticalImageReplyCannotProveNewRequestAcceptance() throws Exception {
+        var t=submit();String raw=image(0x123456);
+        String canonical=new com.course.platform.infra.projectcenter.ProjectTicketImagePolicy(new com.course.platform.infra.projectclient.ProjectTicketImageCodec()).upload(raw);
+        remote=receipt("31","processing","","",List.of(new Reply("45","customer","重复图片","2026-09-09",true,canonical)));
+        t=ticketService.refresh(t.id(),false);
+        when(ticketGateway.replyTicketWithImage(any(),anyString(),anyString(),anyString(),anyString(),anyString())).thenAnswer(a->remote);
+        var op=ticketService.reply(t.id(),new ReplyForm("重复图片",t.version(),true,raw));
+        assertEquals("UNKNOWN",ticketService.confirm(op.id(),false).state());
+        support();assertThrows(BusinessException.class,()->ticketService.resolve(op.id(),new ResolveForm("ACCEPTED","旧回复内容相同但没有新回复编号可证明本次请求",true)));
+        assertEquals("UNKNOWN",ticketService.operation(op.id(),true).state());
+    }
+
+    @Test void differentImageOnNewReplyStillCannotSatisfyOriginalRequest() throws Exception {
+        var t=submit();String actual=image(0x987654);
+        when(ticketGateway.replyTicketWithImage(any(),anyString(),anyString(),anyString(),anyString(),anyString())).thenAnswer(a->{
+            remote=receipt("31","processing","","",List.of(new Reply("46","customer","","2026-09-09",true,actual)));return remote;
+        });
+        var op=ticketService.reply(t.id(),new ReplyForm("",t.version(),true,image(0x123456)));
+        assertEquals("UNKNOWN",ticketService.confirm(op.id(),false).state());
+    }
+
+    @Test void unexpectedOriginalImageChangeCannotOverwriteExistingBoundCache() throws Exception {
+        imageForm(image(0x123456));var t=submit();String saved=ticketMapper.selectById(t.id()).getSnapshotEncrypted();
+        remote=withImage(remote,image(0x654321));
+        assertThrows(BusinessException.class,()->ticketService.refresh(t.id(),false));
+        assertEquals(saved,ticketMapper.selectById(t.id()).getSnapshotEncrypted());
+    }
+
+    @Test void unsafeRemoteAttachmentRemainsFlagOnlyAndIsNeverRequestedByImageGet() {
+        var t=submit();remote=receipt("31","processing","","",List.of(new Reply("45","owner","文字说明","2026-09-09",true,"https://outside.example/?key=secret")));
+        var view=ticketService.refresh(t.id(),false);assertTrue(view.replies().get(0).hasAttachment());assertFalse(view.replies().get(0).attachmentAvailable());
+        clearInvocations(ticketGateway);
+        assertThrows(BusinessException.class,()->ticketService.image(t.id(),"45",false));verifyNoInteractions(ticketGateway);
+    }
+
+    @Test void corruptOrOversizedUserImageFailsBeforeDraftPersistOrDispatch() {
+        for(String value:List.of("https://outside.example/x.png","data:image/svg+xml;base64,PHN2Zy8+","data:image/png;base64,"+"a".repeat(2796257))) {
+            var bad=new SubmitForm(form.type(),form.title(),form.description(),form.compensationAmount(),true,value);
+            assertThrows(BusinessException.class,()->ticketService.submit(accountId,bad));
+        }
+        assertEquals(0,ticketService.tickets(1,20,null,false).getTotal());verifyNoInteractions(ticketGateway);
+    }
+
+    @Test void finalTicketRejectsNewImageReplyAndMissingTextPlusImageIsRejected() throws Exception {
+        var t=submit();
+        assertThrows(BusinessException.class,()->ticketService.reply(t.id(),new ReplyForm("",t.version(),true)));
+        remote=receipt("31","resolved","approved","已处理",List.of());var finalTicket=ticketService.refresh(t.id(),false);
+        String raw=image(0);
+        assertThrows(BusinessException.class,()->ticketService.reply(t.id(),new ReplyForm("",finalTicket.version(),true,raw)));
+        verify(ticketGateway,never()).replyTicketWithImage(any(),anyString(),anyString(),anyString(),anyString(),anyString());
+    }
+
+    @Test void oldTextOnlyEncryptedReplyPayloadStillConfirmsWithoutNewFields() throws Exception {
+        var t=submit();var op=ticketService.reply(t.id(),new ReplyForm("老版本回复",t.version(),true));
+        String old="{\"content\":\"老版本回复\",\"version\":"+t.version()+",\"confirmedPolicy\":true}";
+        jdbc.update("UPDATE service_project_ticket_operation SET payload_encrypted=? WHERE id=?",
+                com.course.platform.common.security.SecretCrypto.encrypt(old,"test-project-master-key"),op.id());
+        assertEquals("SUCCEEDED",ticketService.confirm(op.id(),false).state());
+    }
+
+    @Test void imageSnapshotSettlementFailureLeavesUnknownAndNeverResendsUpload() throws Exception {
+        imageForm(image(0x123456));var op=draft();
+        jdbc.execute("ALTER TABLE service_project_ticket ADD CONSTRAINT no_new_snapshot CHECK (snapshot_encrypted IS NULL)");
+        assertEquals("UNKNOWN",ticketService.confirm(op.id(),false).state());
+        assertNull(ticketMapper.selectById(op.ticketId()).getSnapshotEncrypted());
+        assertEquals("UNKNOWN",ticketService.confirm(op.id(),false).state());
+        assertTrue(ticketService.operationImage(op.id(),false).length>0);
+        verify(ticketGateway,times(1)).submitTicket(any(),anyString(),anyString(),any());money("100");
+        jdbc.execute("ALTER TABLE service_project_ticket DROP CONSTRAINT no_new_snapshot");
+    }
+
+    @Test void closedUnreviewedCompensationCannotBeReopenedByNewReview() {
+        var t=submit();remote=receipt("31","closed","","",List.of());var closed=ticketService.refresh(t.id(),false);support();
+        assertThrows(BusinessException.class,()->ticketService.review(t.id(),new ReviewForm("approved","工单已经结束，不能覆盖原来处理结论",closed.version(),true)));
+    }
+
 }

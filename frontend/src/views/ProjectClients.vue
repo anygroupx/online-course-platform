@@ -2,14 +2,15 @@
   <main class="project-clients">
     <header class="page-heading">
       <div>
-        <span class="eyebrow">SYYV5 / 本平台下游客户</span>
+        <span class="eyebrow">SYYV5 / 客户管理</span>
         <h1>一个项目，服务多位客户。</h1>
         <p>
-          为你管理的客户建立独立本地额度。开户、充值和转回都有原始操作记录。
+          为你管理的客户建立独立额度账户。开户、充值和转回都有完整操作记录。
         </p>
       </div>
       <div class="actions">
-        <el-button @click="openTickets(null)">下游售后工单</el-button>
+        <el-button :disabled="busy" @click="usageVisible = true">用量与统计</el-button>
+        <el-button @click="openTickets(null)">客户售后工单</el-button>
         <el-button @click="openKeys('OWNER')">项目 OpenAPI 密钥</el-button
         ><el-button type="primary" :disabled="busy" @click="beginOpen"
           >新建客户</el-button
@@ -17,7 +18,7 @@
       </div>
     </header>
     <el-alert
-      title="这是本平台的客户子账，不是上游项目余额；充值不会向真实供应商转账，也不代表已购买或执行项目服务。"
+      title="这是独立的客户额度账户；充值只增加客户可用额度，不代表已购买或执行项目服务。"
       type="info"
       :closable="false"
       show-icon
@@ -31,11 +32,11 @@
     />
     <div v-if="stats" class="stats">
       <article>
-        <span>本地客户</span><b>{{ stats.customers }}</b
+        <span>客户</span><b>{{ stats.customers }}</b
         ><small>{{ stats.active }} 位可用</small>
       </article>
       <article>
-        <span>累计本地充值</span><b>¥{{ stats.totalDebited }}</b
+        <span>累计充值</span><b>¥{{ stats.totalDebited }}</b
         ><small>仅已结算操作</small>
       </article>
       <article>
@@ -65,7 +66,7 @@
           <p class="muted">{{ client.projectTitle }}</p>
           <div class="balance">
             <b>{{ client.balance }}</b
-            ><span>本地额度</span>
+            ><span>客户额度</span>
           </div>
           <dl>
             <div>
@@ -77,7 +78,7 @@
               <dd>¥{{ client.refundBudget }}</dd>
             </div>
           </dl>
-          <p class="client-id">本地客户 {{ client.id }}</p>
+          <p class="client-id">客户 {{ client.id }}</p>
           <div class="actions">
             <el-button :disabled="busy" @click="openTickets(client)">客户售后</el-button>
             <el-button
@@ -122,7 +123,7 @@
     </section>
     <section class="history">
       <div class="section-heading">
-        <h2>本地资金操作</h2>
+        <h2>资金操作</h2>
         <div class="actions">
           <el-button :disabled="busy" @click="loadHistory"
             >刷新操作记录</el-button
@@ -148,7 +149,7 @@
         >
       </article>
       <p v-if="!records.length && !historyError" class="muted">
-        还没有本地资金操作
+        还没有资金操作
       </p>
       <el-pagination
         v-if="recordTotal > 20"
@@ -161,7 +162,7 @@
     </section>
     <el-dialog
       v-model="dialog"
-      :title="clientActions[action] || '本地资金操作'"
+      :title="clientActions[action] || '资金操作'"
       width="min(620px,calc(100vw - 24px))"
       :close-on-click-modal="false"
       :close-on-press-escape="!busy"
@@ -177,10 +178,10 @@
       />
       <template v-if="!operation">
         <el-form label-position="top" :disabled="busy || previewUnknown"
-          ><el-form-item v-if="action === 'OPEN'" label="本地项目"
+          ><el-form-item v-if="action === 'OPEN'" label="服务项目"
             ><el-select
               v-model="projectId"
-              aria-label="本地项目"
+              aria-label="服务项目"
               placeholder="请选择已开放项目"
               ><el-option
                 v-for="p in catalog"
@@ -195,7 +196,7 @@
               @click="loadCatalog(true)"
               >读取更多项目</el-button
             ></el-form-item
-          ><el-form-item v-else label="本地客户"
+          ><el-form-item v-else label="客户"
             ><strong
               >{{ selected?.label }} · {{ selected?.projectTitle }}</strong
             ></el-form-item
@@ -206,7 +207,7 @@
               placeholder="填写不含密码等敏感信息的客户别名" /></el-form-item
           ><el-form-item
             :label="
-              action === 'OPEN' ? '初始本地额度（可为0）' : '本地额度数量'
+              action === 'OPEN' ? '初始额度（可为 0）' : '客户额度数量'
             "
             ><el-input
               v-model="units"
@@ -220,7 +221,7 @@
               >使用全部可转回额度</el-button
             ></el-form-item
           ><el-checkbox v-model="consent" class="consent"
-            >我已确认客户和用途，知晓此操作只处理本平台本地额度</el-checkbox
+            >我已确认客户和用途，知晓此操作只处理客户额度</el-checkbox
           ></el-form
         >
         <p class="muted">
@@ -237,7 +238,7 @@
         </div>
         <dl class="quote-details">
           <div>
-            <dt>本地项目</dt>
+            <dt>服务项目</dt>
             <dd>{{ operation.projectTitle }}</dd>
           </div>
           <div>
@@ -245,7 +246,7 @@
             <dd>{{ clientActions[operation.action] }}</dd>
           </div>
           <div>
-            <dt>本地额度</dt>
+            <dt>客户额度</dt>
             <dd>{{ operation.units }}</dd>
           </div>
           <div>
@@ -263,7 +264,7 @@
             <dd class="amount">¥{{ operation.amount }}</dd>
           </div>
           <div v-if="operation.clientBalanceAfter !== null">
-            <dt>结算后的客户本地额度</dt>
+            <dt>结算后的客户额度</dt>
             <dd>{{ operation.clientBalanceAfter }}</dd>
           </div>
         </dl>
@@ -280,7 +281,7 @@
           v-if="operation.state === 'READY' && !confirmAttempted"
           v-model="confirmConsent"
           class="consent"
-          >我已核对客户、数量及平台金额，确认这一次本地结算</el-checkbox
+          >我已核对客户、数量及平台金额，确认这一次结算</el-checkbox
         ></template
       >
       <template #footer
@@ -306,6 +307,9 @@
           >确认本次结算</el-button
         ></template
       >
+    </el-dialog>
+    <el-dialog v-model="usageVisible" title="项目用量与统计" width="min(1000px,calc(100vw - 24px))" destroy-on-close>
+      <ProjectUsage v-if="usageVisible" />
     </el-dialog>
     <ProjectKeys v-model="keysVisible" :subject="keySubject" />
     <ProjectClientTickets v-model="ticketsVisible" :client="ticketClient" />
@@ -345,6 +349,7 @@ import { computed, ref, onMounted, onBeforeUnmount } from "vue";
 import { ElMessageBox } from "element-plus";
 import ProjectClientTickets from "@/components/projectclient/ProjectClientTickets.vue";
 import ProjectKeys from "@/components/projectclient/ProjectKeys.vue";
+import ProjectUsage from "@/components/projectcenter/ProjectUsage.vue";
 import {
   clientCatalog,
   listProjectClients,
@@ -363,6 +368,7 @@ import {
   clientUnitsValid,
   clientActionAllowed,
 } from "@/utils/projectClients";
+const usageVisible = ref(false);
 const clients = ref([]),
   page = ref(1),
   total = ref(0),
@@ -619,15 +625,15 @@ async function changeStatus(row, next) {
   try {
     await ElMessageBox.confirm(
       next === "CLOSED"
-        ? "仅在本地额度和可退预算都为零时关闭；客户密钥失效，不能恢复。"
+        ? "仅在客户额度和可退预算都为零时关闭；客户密钥失效，不能恢复。"
         : next === "ACTIVE"
           ? "恢复客户后，可重新充值并使用其未过期的只读密钥；不会自动转移资金。"
-          : "暂停将阻止此客户充值及密钥访问，不改变余额；已有本地额度仍可转回。",
+          : "暂停将阻止此客户充值及密钥访问，不改变余额；已有客户额度仍可转回。",
       next === "CLOSED"
-        ? "关闭本地客户"
+        ? "关闭客户"
         : next === "ACTIVE"
-          ? "恢复本地客户"
-          : "暂停本地客户",
+          ? "恢复客户"
+          : "暂停客户",
       {
         confirmButtonText: "确认变更",
         cancelButtonText: "取消",

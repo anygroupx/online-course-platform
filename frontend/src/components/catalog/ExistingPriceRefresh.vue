@@ -47,13 +47,13 @@
           maxlength="10"
         /><small>十进制计算，最终四舍五入保留两位小数。</small></el-form-item
       >
-      <el-form-item label="限定远程分类（可选）"
+      <el-form-item label="限定目录分类（可选）"
         ><el-input
           v-model="category"
           maxlength="50"
-          placeholder="留空表示所有远程分类"
+          placeholder="留空表示所有目录分类"
       /></el-form-item>
-      <el-form-item label="排除远程分类（可选）"
+      <el-form-item label="排除目录分类（可选）"
         ><el-input
           v-model="skip"
           maxlength="5100"
@@ -70,7 +70,7 @@
       >
       <el-form-item
         v-if="scope === 'SELECTED'"
-        label="远程商品编号"
+        label="目录商品编号"
         class="full"
         ><el-input
           v-model="productIds"
@@ -88,7 +88,7 @@
           >读取并预览变更（不更新）</el-button
         >
         <p class="intro">
-          仅查询上游目录，不发起上游写操作。未导入商品不会创建；一次最多500个本地课程。
+          仅查询商品目录，不提交任何修改。未导入商品不会创建；一次最多更新 500 个已有课程。
         </p>
       </div>
     </el-form>
@@ -118,7 +118,7 @@
       />
       <p class="intro">
         未导入 {{ batch.plan.notImported }} 项 / 分类排除
-        {{ batch.plan.excluded }} 项 / 上游已不存在
+        {{ batch.plan.excluded }} 项 / 目录中已不存在
         {{ batch.plan.selectedMissing }} 项，均不会创建或删除课程。
       </p>
       <el-empty
@@ -133,7 +133,7 @@
         <header>
           <div>
             <strong>{{ row.title }}</strong
-            ><small>本地 #{{ row.localId }} · 远程 {{ row.remoteId }}</small>
+            ><small>课程 #{{ row.localId }} · 目录编号 {{ row.remoteId }}</small>
           </div>
           <el-tag :type="row.changed ? 'warning' : 'info'">{{
             row.changed ? "将更新" : "保持不变"
@@ -157,14 +157,14 @@
           </div>
         </details>
         <p v-if="!row.descriptionProvided" class="intro">
-          上游未提供说明，保留本地内容。
+          未提供新说明，保留现有内容。
         </p>
       </article>
       <p class="intro">
         批次
         {{
           batch.id
-        }}。若本地价格、说明或绑定发生变化，整批停止，不覆盖他人修改。已上架状态、名称与分类变化不会被回写。
+        }}。若现有价格、说明或关联发生变化，整批停止，不覆盖他人修改。已上架状态、名称与分类变化不会被回写。
       </p>
       <el-checkbox
         v-if="batch.state === 'READY' && !attempted"
@@ -335,7 +335,7 @@ async function recover() {
         attempted.value = false;
         consent.value = false;
         error.value =
-          "原批次仍可确认；重新核对后仅沿用同一批次编号，不重查上游或新建批次。";
+          "原批次仍可确认；重新核对后仅沿用同一批次编号，不重新查询目录或新建批次。";
       } else error.value = "";
     }
   } catch {

@@ -13,6 +13,7 @@ import com.course.platform.domain.projectcenter.*;
 import com.course.platform.domain.projectcenter.ProjectTicketTypes.*;
 import com.course.platform.domain.servicecommerce.ServiceTime;
 import com.course.platform.infra.persistence.mapper.*;
+import com.course.platform.infra.projectcenter.ProjectTicketImagePolicy;
 import com.course.platform.security.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -39,6 +40,7 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
     private final ServiceProjectTicketOperationMapper operations;
     private final ProjectAccountAccess access;
     private final ProjectTicketGateway gateway;
+    private final ProjectTicketImagePolicy images;
     private final RateLimitService limiter;
     private final RateLimitProperties limits;
     private final PlatformTransactionManager transactions;
@@ -71,6 +73,34 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
     @Override
     public TicketView ticket(String id, boolean admin) {
         return view(owned(id, admin), admin, true);
+    }
+
+    @Override
+    public byte[] image(String id, String replyId, boolean admin) {
+        var t = owned(id, admin);
+        rate(user(), "image", 60);
+        var r = t.getSnapshotEncrypted() == null ? null : decode(t.getSnapshotEncrypted(), Receipt.class);
+        String image;
+        if (replyId == null) image = r == null ? decode(t.getRequestEncrypted(), SubmitForm.class).imageData() : r.imageData();
+        else {
+            if (!replyId.matches("[1-9][0-9]{0,18}") || r == null) throw missing();
+            image = r.replies().stream().filter(reply -> replyId.equals(reply.id()))
+                    .findFirst().orElseThrow(ProjectTicketServiceImpl::missing).imageData();
+        }
+        // Private local snapshot only. This GET never refreshes or fetches an upstream URL.
+        return images.stored(image);
+    }
+
+    @Override
+    public byte[] operationImage(String id, boolean admin) {
+        var op = ownedOperation(id, admin);
+        rate(user(), "image", 60);
+        String image = switch (op.getAction()) {
+            case "SUBMIT" -> decode(op.getPayloadEncrypted(), SubmitForm.class).imageData();
+            case "REPLY" -> decode(op.getPayloadEncrypted(), ReplyPayload.class).imageData();
+            default -> null;
+        };
+        return images.stored(image);
     }
 
     @Override
@@ -122,8 +152,8 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
                 || ("compensation".equals(f.type()) ? amount.signum() <= 0 : amount.signum() != 0))
             throw bad("补偿申请须填写正额度，非补偿工单不得附带补偿额度");
         rate(uid, "draft", 20);
-        var normalized =
-                new SubmitForm(f.type(), f.title().trim(), f.description().trim(), amount, true);
+        String image = images.upload(f.imageData());
+        var normalized = new SubmitForm(f.type(), f.title().trim(), f.description().trim(), amount, true, image);
         return tx(
                 () -> {
                     var t = new ServiceProjectTicket();
@@ -152,17 +182,23 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
         var seed = owned(ticketId, false);
         var ctx = access.forTickets(seed.getAccountId(), false);
         if (f == null || !f.confirmedPolicy()) throw bad("请确认发送本人项目工单的回复");
-        text(f.content(), 1, 4000, ctx);
+        String content = f.content() == null ? "" : f.content().trim();
+        text(content, 0, 4000, ctx);
         rate(uid, "draft", 20);
+        String image = images.upload(f.imageData());
+        if (content.isEmpty() && image == null) throw bad("请填写回复文字或选择一张图片");
         return tx(
                 () -> {
                     var t = tickets.lock(ticketId);
                     ready(t, f.version());
+                    var snapshot = decode(t.getSnapshotEncrypted(), Receipt.class);
+                    if (Set.of("resolved", "closed").contains(snapshot.status())) throw bad("工单已结束，不能继续回复");
                     return opView(
                             prepare(
                                     t,
                                     "REPLY",
-                                    new ReplyForm(f.content().trim(), f.version(), true),
+                                    new ReplyPayload(content, f.version(), true, image,
+                                            snapshot.replies().stream().map(Reply::id).toList()),
                                     ctx,
                                     uid),
                             false);
@@ -186,7 +222,8 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
                     var t = tickets.lock(ticketId);
                     ready(t, f.version());
                     var receipt = decode(t.getSnapshotEncrypted(), Receipt.class);
-                    if (!"compensation".equals(receipt.type()) || !receipt.reviewResult().isEmpty())
+                    if (!"compensation".equals(receipt.type()) || !receipt.reviewResult().isEmpty()
+                            || Set.of("resolved", "closed").contains(receipt.status()))
                         throw bad("只有尚未审核的补偿工单可以提交审核");
                     return opView(
                             prepare(
@@ -218,6 +255,12 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
         touch(t);
         write(tickets.updateById(t));
         return op;
+    }
+
+    /** Frozen locally, never request-bound; refresh must not erase the pre-dispatch reply IDs. */
+    private record ReplyPayload(String content, Long version, boolean confirmedPolicy, String imageData,
+            List<String> previousReplyIds) {
+        @Override public String toString() { return "ReplyPayload[REDACTED]"; }
     }
 
     private record Dispatch(
@@ -270,15 +313,12 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
                                         t.getRemoteProjectId(),
                                         c.customerKey(),
                                         decode(op.getPayloadEncrypted(), SubmitForm.class));
-                case "REPLY" ->
-                        receipt =
-                                gateway.replyTicket(
-                                        c.provider(),
-                                        t.getRemoteProjectId(),
-                                        c.customerKey(),
-                                        t.getRemoteTicketId(),
-                                        decode(op.getPayloadEncrypted(), ReplyForm.class)
-                                                .content());
+                case "REPLY" -> {
+                    var reply = decode(op.getPayloadEncrypted(), ReplyPayload.class);
+                    receipt = reply.imageData() == null
+                            ? gateway.replyTicket(c.provider(), t.getRemoteProjectId(), c.customerKey(), t.getRemoteTicketId(), reply.content())
+                            : gateway.replyTicketWithImage(c.provider(), t.getRemoteProjectId(), c.customerKey(), t.getRemoteTicketId(), reply.content(), reply.imageData());
+                }
                 case "REVIEW" -> {
                     var f = decode(op.getPayloadEncrypted(), ReviewForm.class);
                     receipt =
@@ -293,6 +333,7 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
             }
             receipt = sanitize(receipt, c);
             checkReceipt(t, receipt);
+            if ("REPLY".equals(op.getAction())) checkReply(decode(op.getPayloadEncrypted(), ReplyPayload.class), receipt);
             settle(id, receipt, null, null);
         } catch (Exception e) {
             unknown(id);
@@ -348,15 +389,7 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
                                     t.getRemoteTicketId()),
                             ctx);
             checkReceipt(t, receipt);
-            if ("REPLY".equals(op.getAction())) {
-                var reply = decode(op.getPayloadEncrypted(), ReplyForm.class);
-                if (receipt.replies().stream()
-                        .noneMatch(
-                                r ->
-                                        "customer".equals(r.sender())
-                                                && reply.content().equals(r.content())))
-                    throw bad("当前回执未包含已核实的原回复，请继续核对");
-            }
+            if ("REPLY".equals(op.getAction())) checkReply(decode(op.getPayloadEncrypted(), ReplyPayload.class), receipt);
             if ("REVIEW".equals(op.getAction())) {
                 var review = decode(op.getPayloadEncrypted(), ReviewForm.class);
                 if (!review.result().equals(receipt.reviewResult())
@@ -366,6 +399,18 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
         }
         settle(id, receipt, uid, f);
         return operation(id, true);
+    }
+
+    private void checkReply(ReplyPayload original, Receipt receipt) {
+        // Older text-only operations predate frozen reply IDs and still require explicit manual
+        // evidence; new image/text operations must match a genuinely new reply, not an old echo.
+        if (original.imageData() != null && original.previousReplyIds() == null)
+            throw bad("图片回复缺少原始归属快照，请继续核实");
+        if (receipt.replies().stream().noneMatch(r -> "customer".equals(r.sender())
+                && Objects.equals(original.content(), r.content())
+                && Objects.equals(original.imageData(), r.imageData())
+                && (original.previousReplyIds() == null || !original.previousReplyIds().contains(r.id()))))
+            throw bad("回执未包含匹配本次图文内容的新回复，请继续核对原请求");
     }
 
     private void settle(String id, Receipt receipt, Long resolver, ResolveForm resolution) {
@@ -450,7 +495,8 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
         if (!f.type().equals(r.type())
                 || !f.title().equals(r.title())
                 || !f.description().equals(r.description())
-                || f.compensationAmount().compareTo(r.compensationAmount()) != 0)
+                || f.compensationAmount().compareTo(r.compensationAmount()) != 0
+                || (f.imageData() != null && !f.imageData().equals(r.imageData())))
             throw bad("上游工单内容与原绑定不匹配，已停止更新");
     }
 
@@ -502,20 +548,26 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
                 r == null ? null : r.status(),
                 r == null ? null : r.reviewResult(),
                 detail && r != null ? r.reviewNote() : null,
-                r != null && r.hasAttachment(),
-                detail && r != null ? r.replies() : List.of(),
+                r == null ? f.imageData() != null : r.hasAttachment(),
+                detail && r != null ? r.replies().stream().map(reply -> new ReplyView(reply.id(), reply.sender(),
+                        reply.content(), reply.createdAt(), reply.hasAttachment(), reply.imageData() != null)).toList() : List.of(),
                 t.getVersion(),
                 t.getPendingOperationId(),
                 t.getCreateTime(),
-                t.getCheckedAt());
+                t.getCheckedAt(), r == null ? f.imageData() != null : r.imageData() != null);
     }
 
     private OperationView opView(ServiceProjectTicketOperation op, boolean admin) {
         String content = "", result = null;
-        if ("REPLY".equals(op.getAction()))
-            content = decode(op.getPayloadEncrypted(), ReplyForm.class).content();
-        if ("SUBMIT".equals(op.getAction()))
-            content = decode(op.getPayloadEncrypted(), SubmitForm.class).description();
+        boolean hasImage = false;
+        if ("REPLY".equals(op.getAction())) {
+            var form = decode(op.getPayloadEncrypted(), ReplyPayload.class);
+            content = form.content(); hasImage = form.imageData() != null;
+        }
+        if ("SUBMIT".equals(op.getAction())) {
+            var form = decode(op.getPayloadEncrypted(), SubmitForm.class);
+            content = form.description(); hasImage = form.imageData() != null;
+        }
         if ("REVIEW".equals(op.getAction()) && admin) {
             var f = decode(op.getPayloadEncrypted(), ReviewForm.class);
             content = f.note();
@@ -524,6 +576,7 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
         List<String> warnings = new ArrayList<>();
         warnings.add("预览仅保存本地草稿，确认后仅发送一次；不要在工单中填写密码、验证码或密钥。");
         warnings.add("补偿申请和审核不会自动增加任何账户余额；审核通过不等于已到账。");
+        if (hasImage) warnings.add("图片已清除源元数据并加密保存；确认后随本次原请求发送上游，丢失响应不会重发。");
         if (Set.of("DISPATCHING", "UNKNOWN").contains(op.getState()))
             warnings.add("结果未知，请检查原操作；不会自动重发。未知的新工单不能凭任意上游编号认领。");
         return new OperationView(
@@ -535,11 +588,13 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
                 result,
                 op.getExpiresAt(),
                 op.getCreateTime(),
-                List.copyOf(warnings));
+                List.copyOf(warnings), hasImage);
     }
 
-    private static Receipt sanitize(Receipt r, Context ctx) {
-        if (r == null) throw bad("上游工单回执不完整");
+    private Receipt sanitize(Receipt r, Context ctx) {
+        if (r == null || r.replies() == null || r.replies().size() > 100) throw bad("上游工单回执不完整");
+        var budget = images.receipt();
+        String image = budget.image(r.imageData());
         java.util.function.UnaryOperator<String> redact =
                 value ->
                         value == null
@@ -567,8 +622,8 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
                                                 reply.sender(),
                                                 redact.apply(reply.content()),
                                                 reply.createdAt(),
-                                                reply.hasAttachment()))
-                        .toList());
+                                                reply.hasAttachment(), budget.image(reply.imageData())))
+                        .toList(), image);
     }
 
     private String encrypt(Object value) {

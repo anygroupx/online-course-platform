@@ -32,6 +32,28 @@ public class ProjectTicketController {
         return ok(service.ticket(id, false));
     }
 
+    @GetMapping("/project-tickets/{id}/image")
+    public ResponseEntity<byte[]> image(@PathVariable String id, @RequestParam(required = false) String replyId) {
+        return ProjectClientTicketController.imageResponse(service.image(id, replyId, false));
+    }
+
+    @GetMapping("/project-ticket-operations/{id}/image")
+    public ResponseEntity<byte[]> operationImage(@PathVariable String id) {
+        return ProjectClientTicketController.imageResponse(service.operationImage(id, false));
+    }
+
+    @PreAuthorize("hasAuthority('api-provider:update')")
+    @GetMapping("/admin/project-tickets/{id}/image")
+    public ResponseEntity<byte[]> adminImage(@PathVariable String id, @RequestParam(required = false) String replyId) {
+        return ProjectClientTicketController.imageResponse(service.image(id, replyId, true));
+    }
+
+    @PreAuthorize("hasAuthority('api-provider:update')")
+    @GetMapping("/admin/project-ticket-operations/{id}/image")
+    public ResponseEntity<byte[]> adminOperationImage(@PathVariable String id) {
+        return ProjectClientTicketController.imageResponse(service.operationImage(id, true));
+    }
+
     @PostMapping("/project-tickets/{id}/refresh")
     public ResponseEntity<Result<TicketView>> refresh(@PathVariable String id) {
         return ok(service.refresh(id, false));

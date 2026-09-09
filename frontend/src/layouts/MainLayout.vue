@@ -47,7 +47,7 @@
 
         <el-menu-item index="/services"><el-icon><Tickets /></el-icon><template #title>服务商城</template></el-menu-item>
         <el-menu-item index="/service-projects"><el-icon><Wallet /></el-icon><template #title>项目中心</template></el-menu-item>
-        <el-menu-item index="/project-clients"><el-icon><User /></el-icon><template #title>下游客户与API</template></el-menu-item>
+        <el-menu-item index="/project-clients"><el-icon><User /></el-icon><template #title>客户与 API</template></el-menu-item>
         <el-menu-item index="/service-orders"><el-icon><Document /></el-icon><template #title>服务订单</template></el-menu-item>
 
         <el-menu-item index="/courses">
@@ -72,7 +72,7 @@
 
         <el-menu-item index="/api-guide">
           <el-icon><Money /></el-icon>
-          <template #title>对接文档</template>
+          <template #title>API 文档</template>
         </el-menu-item>
 
         <el-menu-item index="/logs">

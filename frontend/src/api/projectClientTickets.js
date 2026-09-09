@@ -10,3 +10,5 @@ export const clientTicketRequest = (key) => get(`/project-client-tickets/by-requ
 export const createClientTicket = (data) => post('/project-client-tickets', data)
 export const replyClientTicket = (key, data) => post(`/project-client-tickets/${id(key)}/replies`, data)
 export const decideClientTicket = (key, data) => post(`/project-client-tickets/${id(key)}/decision`, data)
+// Authenticated fetch returns a Blob, never a key-bearing <img src> URL.
+export const clientTicketImage = (key) => request.get(`/project-client-tickets/images/${id(key)}`, { responseType: 'blob' })

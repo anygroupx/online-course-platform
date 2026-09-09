@@ -7,7 +7,7 @@ export const projectActions = Object.freeze({
 export const projectStates = Object.freeze({
   NEW: "未开通",
   ACTIVE: "已开通",
-  DISABLED: "上游已停用",
+  DISABLED: "服务已停用",
   BUSY: "操作待确认",
   READY: "待确认",
   DISPATCHING: "正在核实",

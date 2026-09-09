@@ -13,7 +13,7 @@
           autocomplete="off"
           inputmode="tel"
           maxlength="11"
-          placeholder="与上游账号一致的手机号"
+          placeholder="账号绑定的手机号"
         />
       </el-form-item>
       <el-form-item
@@ -67,7 +67,7 @@
         }}</el-tag>
       </div>
       <p>
-        本平台不上传、保存或展示人脸照片。采集由上游站点处理；请核对下方域名，只提交本人信息，不转发采集页面。
+        系统不上传、保存或展示人脸照片。采集将在打开的认证页面完成；请核对下方域名，只提交本人信息，不转发采集页面。
       </p>
       <div v-if="session.face.collectionOrigin" class="collection-origin">
         <span>已批准的采集站点</span
@@ -85,7 +85,7 @@
           >已接收 <strong>{{ session.face.status.fileCount }}</strong> 张</span
         >
         <span
-          >上游要求 {{ session.face.status.minFileCount }}–{{
+          >需要 {{ session.face.status.minFileCount }}–{{
             session.face.status.maxFileCount
           }}
           张</span
@@ -117,7 +117,7 @@
         >
       </div>
       <p v-if="!ready" class="collection-hint">
-        在新页面完成后，返回这里检查状态。打开页面不会扣款或下单。撤销仅停止本平台授权，不会删除上游已收到的资料。
+        在新页面完成后，返回这里检查状态。打开页面不会扣款或下单。撤销仅停止当前授权，已提交的资料不会自动删除。
       </p>
     </section>
     <p class="face-deadline">
@@ -267,7 +267,7 @@ async function launch() {
     return;
   const popup = window.open("about:blank", "_blank");
   if (!popup) {
-    ElMessage.warning("请允许本平台打开新页面后重试。");
+    ElMessage.warning("请允许打开新页面后重试。");
     return;
   }
   // Detach the opener before any external navigation. No supplier URL or token is sent to this component.

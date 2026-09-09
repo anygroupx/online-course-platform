@@ -24,6 +24,7 @@ import java.util.function.Function;
 @RequiredArgsConstructor
 public class ExternalProjectClientController {
     private final ProjectClientService clients;
+    private final com.course.platform.application.service.projectcenter.ProjectReportingService reports;
     private final ProjectClientTicketService tickets;
     private final ProjectApiKeyService keys;
 
@@ -63,6 +64,18 @@ public class ExternalProjectClientController {
     @GetMapping("/stats")
     public ResponseEntity<?> stats(HttpServletRequest request) {
         return invoke(request, "STATS", clients::stats);
+    }
+
+    @GetMapping("/usage")
+    public ResponseEntity<?> usage(HttpServletRequest request) {
+        return invoke(request, "USAGE", reports::owner);
+    }
+
+    @GetMapping("/usage/projects")
+    public ResponseEntity<?> usageProjects(HttpServletRequest request,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
+        return invoke(request, "USAGE_PROJECTS", c -> reports.projects(c, page, pageSize));
     }
 
     @PostMapping("/quotes")
@@ -146,6 +159,17 @@ public class ExternalProjectClientController {
         return invoke(request, "TICKET_DECISION", c -> tickets.decide(c, id, form));
     }
 
+    @GetMapping("/tickets/images/{id}")
+    public ResponseEntity<byte[]> ticketImage(HttpServletRequest request, @PathVariable String id) {
+        Caller caller = authenticate(request);
+        boolean success = false;
+        try {
+            byte[] image = tickets.image(caller, id);
+            success = true;
+            return ProjectClientTicketController.imageResponse(image);
+        } finally { keys.record(caller, "TICKET_IMAGE", success); }
+    }
+
     private Object visible(Caller c, ClientView view) {
         return c.clientId() == null
                 ? view
@@ -157,8 +181,7 @@ public class ExternalProjectClientController {
                         view.balance());
     }
 
-    private <T> ResponseEntity<Result<T>> invoke(
-            HttpServletRequest request, String action, Function<Caller, T> call) {
+    private Caller authenticate(HttpServletRequest request) {
         if (request.getParameter("key") != null
                 || request.getParameter("api_key") != null
                 || request.getParameter("token") != null
@@ -166,7 +189,12 @@ public class ExternalProjectClientController {
             throw new BusinessException(ResultCode.PARAM_ERROR);
         var header = Collections.list(request.getHeaders("X-Project-Key"));
         if (header.size() != 1) throw new BusinessException(ResultCode.UNAUTHORIZED);
-        Caller caller = keys.authenticate(header.get(0));
+        return keys.authenticate(header.get(0));
+    }
+
+    private <T> ResponseEntity<Result<T>> invoke(
+            HttpServletRequest request, String action, Function<Caller, T> call) {
+        Caller caller = authenticate(request);
         boolean success = false;
         try {
             T result = call.apply(caller);

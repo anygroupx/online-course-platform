@@ -81,7 +81,7 @@ abstract class ProjectClientTestSupport {
         assertTrue(m.find());
         jdbc.execute(m.group().replaceAll("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4.*?;", ";"));
         for (String file :
-                List.of("021_native_project_wallets.sql", "025_native_project_clients.sql", "026_native_project_client_tickets.sql")) {
+                List.of("021_native_project_wallets.sql", "025_native_project_clients.sql", "026_native_project_client_tickets.sql", "027_native_project_client_ticket_images.sql")) {
             String ddl =
                     Files.readString(root.resolve("database/migrations/" + file))
                             .replaceAll("(?m)^--.*$", "")
@@ -118,6 +118,7 @@ abstract class ProjectClientTestSupport {
                         ProjectClientMapper.class,
                         ProjectClientOperationMapper.class,
                         ProjectApiCredentialMapper.class,
+                        ProjectClientTicketImageMapper.class,
                         ProjectClientTicketMapper.class,
                         ProjectClientTicketReplyMapper.class,
                         ProjectClientTicketCommandMapper.class,

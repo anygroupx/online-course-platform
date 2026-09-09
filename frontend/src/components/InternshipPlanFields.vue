@@ -5,7 +5,7 @@
       <el-tag type="info">按服务日计费</el-tag>
     </div>
     <p class="plan-explanation">
-      填入本人已获授权的实习信息。上游规则和提交授权不由本平台替代；不要填写他人的账号或伪造资料。
+      填入本人已获授权的实习信息。请按页面规则提交授权，不要填写他人的账号或伪造资料。
     </p>
     <div class="internship-grid">
       <el-form-item v-if="!editing" label="实习账号"
@@ -77,8 +77,8 @@
           lookupNotice
         }}</span></el-form-item
       >
-      <section v-if="adviceItems.length" class="lookup-advice full" aria-label="上游计划建议">
-        <h4>上游计划建议 · 尚未修改当前表单</h4>
+      <section v-if="adviceItems.length" class="lookup-advice full" aria-label="计划建议">
+        <h4>计划建议 · 尚未修改当前表单</h4>
         <dl><div v-for="item in adviceItems" :key="item.key"><dt>{{ item.label }}</dt><dd>{{ item.value }}</dd></div></dl>
         <p>是否采用由你确认。报告选项、服务日期可能影响报价；超出可购买范围的截止日期不会填入。</p>
         <el-button :disabled="!authorized" @click="applyAdvice">采用这些建议</el-button>
@@ -139,7 +139,7 @@
       /></el-form-item>
     </div>
     <el-collapse class="location-details"
-      ><el-collapse-item title="地区与其他资料（上游要求时填写）" name="details"
+      ><el-collapse-item title="地区与其他资料（页面提示时填写）" name="details"
         ><div class="internship-grid">
           <el-form-item
             v-for="(label, key) in extraFields"
@@ -167,7 +167,7 @@
           :model-value="schedule.runMode"
           :disabled="editing"
           @update:model-value="updateSchedule('runMode', $event)"
-          ><el-option label="上游授权会话方式" :value="1" /><el-option
+          ><el-option label="账号授权方式" :value="1" /><el-option
             label="账号密码方式"
             :value="2" /><el-option
             label="已绑定微信方式（服务日价 ×5）"
@@ -219,7 +219,7 @@
       ><el-checkbox
         :model-value="schedule.skipHolidays"
         @update:model-value="updateSchedule('skipHolidays', $event)"
-        >按上游节假日规则执行</el-checkbox
+        >按节假日规则执行</el-checkbox
       >
     </div>
     <el-collapse
@@ -242,7 +242,7 @@
                 :key="index"
                 :label="`周${label}`"
                 :value="index + 1" /></el-select></el-form-item
-          ><el-form-item label="月报提交日（0 遵循上游默认）"
+          ><el-form-item label="月报提交日（0 使用默认设置）"
             ><el-input-number
               :model-value="schedule.monthlyReportDay"
               :min="0"
@@ -279,7 +279,7 @@
     <el-checkbox
       :model-value="schedule.randomLocation"
       @update:model-value="updateSchedule('randomLocation', $event)"
-      >使用上游允许范围内的定位偏移（须符合账号授权）</el-checkbox
+      >使用允许范围内的定位偏移（须符合账号授权）</el-checkbox
     >
     <el-alert
       class="billing-note"
@@ -290,7 +290,7 @@
           ? '续期 / 改周期只收新增且未购买日期的费用；删减日期不自动退款。'
           : '服务日按北京时间今天至截止日、所选星期计算，包含今天和截止日。'
       "
-      description="这是本平台服务日零售计费规则，并非上游实时价。节假日执行规则不会改变计费天数。取消成功后退回尚未使用且仍在当前计划中的已购服务日费用；新增周期、立即执行均先预览金额。"
+      description="这是服务日零售计费规则，不是实时结算价格。节假日执行规则不会改变计费天数。取消成功后退回尚未使用且仍在当前计划中的已购服务日费用；新增周期、立即执行均先预览金额。"
     />
   </div>
 </template>
@@ -333,7 +333,7 @@ const extraFields = {
   city: "城市",
   area: "区县",
   adcode: "地区编码",
-  phone_name: "已授权设备标识（上游要求时）",
+  phone_name: "已授权设备标识（需要时填写）",
   reason: "申请原因",
   desctext: "说明",
 };

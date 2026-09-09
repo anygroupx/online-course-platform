@@ -92,7 +92,7 @@
               "
               style="color: var(--color-success); margin-top: 5px"
             >
-              当前平台支持自动生成密码：{{
+              该课程支持自动生成密码：{{
                 currentPlatform.passwordRule.replace("{account}", "账号")
               }}
             </div>

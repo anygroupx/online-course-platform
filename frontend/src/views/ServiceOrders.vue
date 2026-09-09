@@ -9,7 +9,7 @@
         <p>
           {{
             admin
-              ? "只在核实上游结果后处理不确定操作；每笔处理都有账本与操作记录。"
+              ? "只在核实处理结果后操作不确定订单；每笔处理都有账本与操作记录。"
               : "进度、计划和售后都在这里。结果不确定时请勿重复下单。"
           }}
         </p>
@@ -93,11 +93,11 @@
           v-if="item.completed == null && item.providerType !== 'sxdk_tw'"
           class="unknown-progress"
         >
-          上游只提供订单状态，未返回完成次数；具体执行情况请查看执行记录。
+          当前订单只返回状态，未返回完成次数；具体执行情况请查看执行记录。
         </p>
         <p v-if="item.providerType === 'sxdk_tw'" class="unknown-progress">
           {{ internshipCalendarText(item.schedule) }} ·
-          执行结果见上游记录，日历不代表考勤已完成。
+          执行结果请查看订单记录，日历不代表考勤已完成。
         </p>
         <el-alert
           v-if="item.pendingOperationId"
@@ -107,7 +107,7 @@
         />
         <el-alert
           v-else-if="item.status === 'REFUND_REVIEW'"
-          title="上游报告退款状态，本平台尚未入账，请联系管理员核对。"
+          title="退款状态已更新，余额尚未入账，请联系管理员核对。"
           type="warning"
           :closable="false"
         />
@@ -152,7 +152,7 @@
                 v-if="item.pendingOperationId"
                 type="warning"
                 @click="openResolve(item)"
-                >核对上游结果</el-button
+                >核对处理结果</el-button
               >
               <el-button
                 v-else-if="item.status === 'REFUND_REVIEW'"
@@ -201,14 +201,14 @@
     >
     <el-drawer
       v-model="runLogsOpen"
-      title="上游执行记录"
+      title="执行记录"
       size="min(520px, 100vw)"
       ><el-alert
         v-if="runLogOrder?.providerType === 'sxdk_tw'"
         type="info"
         :closable="false"
         class="log-privacy-note"
-        title="仅展示最近十条记录的时间与类别，不代表执行成功。为保护账号信息，不展示上游原始日志。" /><el-timeline
+        title="仅展示最近十条记录的时间与类别，不代表执行成功。为保护账号信息，不展示原始日志。" /><el-timeline
         ><el-timeline-item
           v-for="log in runLogs.items"
           :key="log.id"
@@ -356,15 +356,15 @@
     >
       <template v-if="audit"
         ><el-descriptions :column="1" border
-          ><el-descriptions-item label="本平台用户">{{
+          ><el-descriptions-item label="所属用户">{{
             audit.userId
           }}</el-descriptions-item
           ><el-descriptions-item label="接口配置编号">{{
             audit.providerId
           }}</el-descriptions-item
-          ><el-descriptions-item label="上游订单号"
+          ><el-descriptions-item label="服务订单号"
             ><span class="order-number">{{
-              audit.externalOrderNo || "尚未确认，须到上游查询"
+              audit.externalOrderNo || "尚未确认，请查询订单记录"
             }}</span></el-descriptions-item
           ></el-descriptions
         >
@@ -390,7 +390,7 @@
     </el-drawer>
     <el-dialog
       v-model="settlementOpen"
-      title="核对上游主动退款"
+      title="核对主动退款"
       width="min(560px, 94vw)"
       :close-on-click-modal="false"
       :show-close="!settlementLoading"
@@ -398,15 +398,15 @@
       <template v-if="settlementOrder"
         ><el-alert
           type="warning"
-          title="只为已经核实的上游退款入账。不再次取消上游订单，也不把错误或超时当成退款。"
+          title="只为已经核实的退款入账。不再次取消订单，也不把错误或超时当成退款。"
           :closable="false"
         />
         <p class="order-number">
-          上游订单号 {{ settlementAudit?.externalOrderNo || "未取得" }} · 接口
+          服务订单号 {{ settlementAudit?.externalOrderNo || "未取得" }} · 接口
           #{{ settlementAudit?.providerId }}
         </p>
         <p v-if="settlementOrder.completed == null" class="unknown-progress">
-          此上游未提供完成次数，不能将总次数视为剩余次数。请核实实际可退次数后填写，默认不退款。
+          当前订单未提供完成次数，不能将总次数视为剩余次数。请核实实际可退次数后填写，默认不退款。
         </p>
         <el-form
           label-position="top"
@@ -426,7 +426,7 @@
               :rows="3"
               maxlength="1000" /></el-form-item
           ><el-checkbox v-model="settlement.upstreamChecked"
-            >我已核查上游退款单与资金流水</el-checkbox
+            >我已核查退款单与资金流水</el-checkbox
           ></el-form
         ></template
       >
@@ -455,7 +455,7 @@
     >
       <el-alert
         type="warning"
-        title="必须先登录上游核对订单和资金流水。不能只凭超时或错误提示退回余额。"
+        title="必须先核对订单和资金流水。不能只凭超时或错误提示退回余额。"
         :closable="false"
       />
       <el-form v-if="resolveQuote" label-position="top" class="resolve-form"
@@ -463,7 +463,7 @@
           {{ actionNames[resolveQuote.action] }} · ¥{{ resolveQuote.amount }} ·
           {{ stateName(resolveQuote.state) }}
         </p>
-        <el-form-item label="已核实的上游结果"
+        <el-form-item label="已核实的处理结果"
           ><el-radio-group v-model="resolution.outcome"
             ><el-radio value="ACCEPTED">已受理</el-radio
             ><el-radio value="NOT_ACCEPTED"
@@ -475,7 +475,7 @@
             resolution.outcome === 'ACCEPTED' &&
             resolveQuote.action === 'CREATE'
           "
-          label="已核实的上游订单号"
+          label="已核实的服务订单号"
           ><el-input
             v-model="resolution.externalOrderNo"
             maxlength="64" /></el-form-item
@@ -497,7 +497,7 @@
             :rows="3"
             maxlength="1000" /></el-form-item
         ><el-checkbox v-model="resolution.upstreamChecked"
-          >我已核查上游订单和账务记录，确认上述结论</el-checkbox
+          >我已核查订单和账务记录，确认上述结论</el-checkbox
         ></el-form
       >
       <template #footer

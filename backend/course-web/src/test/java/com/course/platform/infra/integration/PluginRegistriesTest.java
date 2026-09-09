@@ -26,7 +26,9 @@ class PluginRegistriesTest {
                     com.course.platform.infra.servicecommerce.PhpNativeServiceGateway.class,
                     com.course.platform.infra.servicecommerce.NativeServiceGatewayRouter.class,
                     com.course.platform.infra.servicecommerce.InternshipNativeServiceGateway.class,
-                    com.course.platform.infra.projectcenter.Syyv5ProjectGateway.class);
+                    com.course.platform.infra.projectcenter.Syyv5ProjectGateway.class,
+                    com.course.platform.infra.projectcenter.ProjectTicketImagePolicy.class,
+                    com.course.platform.infra.projectclient.ProjectTicketImageCodec.class);
             context.refresh();
             assertEquals(4, context.getBeansOfType(PluginReadOnlyConnector.class).size());
             assertEquals(6, context.getBeansOfType(ProviderConnectionProbe.class).size());

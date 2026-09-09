@@ -284,10 +284,10 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="对接接口">
+        <el-form-item label="服务接口">
           <el-select
             v-model="form.dockApiId"
-            placeholder="请选择对接接口"
+            placeholder="请选择服务接口"
             clearable
             style="width: 100%"
           >
@@ -355,7 +355,7 @@
     <!-- 商品查询与选择导入对话框 -->
     <el-dialog
       v-model="importDialogVisible"
-      title="查询并导入第三方商品"
+      title="查询并导入商品"
       width="min(1000px, 96vw)"
       append-to-body
       destroy-on-close
@@ -380,7 +380,7 @@
             </el-form-item>
           </el-col>
           <el-col :xs="24" :md="8">
-            <el-form-item label="远程分类ID">
+            <el-form-item label="分类编号">
               <el-input
                 v-model="importForm.categoryId"
                 placeholder="可选，不传查询全部"
@@ -418,7 +418,7 @@
           <el-col :xs="24" :md="8">
             <el-form-item label="同步分类">
               <el-switch v-model="importForm.syncCategories" />
-              <span class="form-tip">自动创建远程分类</span>
+              <span class="form-tip">自动创建分类</span>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :md="8">
@@ -460,7 +460,7 @@
             <span v-if="scope.row.categoryId" class="category-id">({{ scope.row.categoryId }})</span>
           </template>
         </el-table-column>
-        <el-table-column label="上游价格" width="105" align="right">
+        <el-table-column label="参考价格" width="105" align="right">
           <template #default="scope">¥{{ formatProductPrice(scope.row.price) }}</template>
         </el-table-column>
         <el-table-column label="导入价格" width="105" align="right">

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { createServer } from "vite";
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
 import { chromium } from "playwright";
 
 const sources = [
@@ -173,7 +173,7 @@ try {
   await page.getByRole("button", { name: "刷新配置", exact: true }).click();
   await chooseProvider();
   await page.getByRole("button", { name: "读取商品目录", exact: true }).click();
-  await page.getByText("上游返回了空商品目录", { exact: true }).waitFor();
+  await page.getByText("未返回商品目录", { exact: true }).waitFor();
   await page.keyboard.press("Escape"); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
   await page.getByLabel("搜索插件", { exact: true }).fill("极光");
   await page.screenshot({ animations: "disabled", path: `${screenshots}/desktop-overview.png`, fullPage: true });

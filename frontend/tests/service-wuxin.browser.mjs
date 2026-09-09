@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
-import { createServer } from "vite";
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
 
 // Real Vue views; every business request is intercepted. No supplier or production API is contacted.
 const html = `<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:24px"><div id="app"></div>
@@ -261,7 +261,7 @@ try {
   await page.goto(`${base}/__wuxin_services`);
   await page.getByRole("button", { name: "选择服务", exact: true }).click();
   await page
-    .getByText("我有权使用此账号及信息，并授权本平台向所选上游提交", {
+    .getByText("我有权使用此账号及信息，并授权提交", {
       exact: true,
     })
     .click();
@@ -330,9 +330,9 @@ try {
   order.actions = [];
   await page.goto(`${base}/__wuxin_services?page=/admin/service-orders`);
   await page.getByRole("button", { name: "核对退款入账", exact: true }).click();
-  const settlement = page.getByRole("dialog", { name: "核对上游主动退款" });
+  const settlement = page.getByRole("dialog", { name: "核对主动退款" });
   await settlement.waitFor();
-  await settlement.getByText(/上游订单号 UP-10/).waitFor();
+  await settlement.getByText(/服务订单号 UP-10/).waitFor();
   assert.equal(
     await page
       .getByRole("button", { name: "预览退款金额", exact: true })
@@ -342,12 +342,12 @@ try {
   await settlement
     .locator("textarea")
     .fill("已核查上游退款单和资金流水，确认退回六次");
-  await page.getByText("我已核查上游退款单与资金流水", { exact: true }).click();
+  await page.getByText("我已核查退款单与资金流水", { exact: true }).click();
   await page.getByRole("button", { name: "预览退款金额", exact: true }).click();
   await page.getByText("¥1.50", { exact: true }).waitFor();
   assert.equal(settlements, 0);
   await page
-    .getByRole("dialog", { name: "核对上游主动退款" })
+    .getByRole("dialog", { name: "核对主动退款" })
     .waitFor({ state: "hidden" });
   await page.screenshot({
     path: `${output}/refund-settlement-preview.png`,
@@ -398,13 +398,13 @@ try {
   await page.goto(`${base}/__wuxin_services?page=/admin/service-orders`);
   await page
     .getByText(
-      "上游只提供订单状态，未返回完成次数；具体执行情况请查看执行记录。",
+      "当前订单只返回状态，未返回完成次数；具体执行情况请查看执行记录。",
       { exact: true },
     )
     .waitFor();
   assert.equal(await page.locator(".el-progress").count(), 0);
   await page.getByRole("button", { name: "核对退款入账", exact: true }).click();
-  const unknownRefund = page.getByRole("dialog", { name: "核对上游主动退款" });
+  const unknownRefund = page.getByRole("dialog", { name: "核对主动退款" });
   await unknownRefund.getByText(/不能将总次数视为剩余次数/).waitFor();
   assert.equal(
     await unknownRefund.locator(".el-input-number input").inputValue(),

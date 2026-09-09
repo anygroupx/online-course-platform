@@ -25,7 +25,7 @@ export const ticketState = (ticket) =>
   ticketStatuses[ticket?.status] ||
   "等待回执";
 export const canReplyToTicket = (ticket) =>
-  ticket?.state === "ACTIVE" && !ticket.pendingOperationId;
+  ticket?.state === "ACTIVE" && !ticket.pendingOperationId && !["resolved", "closed"].includes(ticket.status);
 export const canReviewTicket = (ticket) =>
   canReplyToTicket(ticket) &&
   ticket.type === "compensation" &&

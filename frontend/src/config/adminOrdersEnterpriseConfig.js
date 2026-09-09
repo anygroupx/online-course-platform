@@ -99,16 +99,16 @@ export const filterConfig = {
     },
     {
       key: "dockStatus",
-      label: "对接状态",
+      label: "执行状态",
       type: "select",
-      placeholder: "请选择对接状态",
+      placeholder: "请选择执行状态",
       clearable: true,
       width: "150px",
       options: [
-        { label: "未对接", value: 0 },
-        { label: "对接中", value: 1 },
-        { label: "已对接", value: 2 },
-        { label: "对接失败", value: 3 },
+        { label: "未处理", value: 0 },
+        { label: "处理中", value: 1 },
+        { label: "已完成", value: 2 },
+        { label: "处理失败", value: 3 },
       ],
     },
     {
@@ -206,7 +206,7 @@ export const columnsConfig = [
   },
   {
     key: "dockStatus",
-    label: "对接状态",
+    label: "执行状态",
     width: 150,
     visible: true,
     component: StatusDisplay,

@@ -450,7 +450,7 @@ const handleUpdateStatus = (row) => {
 
 const handleUpdateDock = (row) => {
   console.log("更新对接：", row);
-  ElMessageBox.prompt("请输入新对接状态 (0-3)", "更新对接状态", {
+  ElMessageBox.prompt("请输入新执行状态 (0-3)", "更新执行状态", {
     inputPattern: /^[0-3]$/,
     inputErrorMessage: "请输入 0-3 之间的数字",
   })
@@ -460,7 +460,7 @@ const handleUpdateDock = (row) => {
       if (index !== -1) {
         allMockOrders[index].dockStatus = parseInt(value);
         loadOrders();
-        ElMessage.success("对接状态更新成功");
+        ElMessage.success("执行状态更新成功");
       }
     })
     .catch(() => {});

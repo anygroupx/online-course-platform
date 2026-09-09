@@ -256,7 +256,7 @@
             {{ getStatusText(currentOrder.orderStatus) }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="对接状态">
+        <el-descriptions-item label="执行状态">
           <el-tag :type="getDockStatusType(currentOrder.dockStatus)">
             {{ getDockStatusText(currentOrder.dockStatus) }}
           </el-tag>

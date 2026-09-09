@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import { chromium } from "playwright";
-import { createServer } from "vite";
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
 const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:24px"><div id="app"></div><script type="module">
 import {createApp,h} from 'vue';import {createRouter,createMemoryHistory,RouterView} from 'vue-router';import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';import '/src/styles/variables.scss';import '/src/styles/global.css';import '/src/styles/element-overrides.scss';
@@ -48,7 +48,7 @@ const lookup = {
   ],
   notice: "账号与计划已绑定；人脸凭据仅在服务器保管，照片由官方采集站点处理。",
 };
-const consentLabel = "我有权使用此账号及信息，并授权本平台向所选上游提交";
+const consentLabel = "我有权使用此账号及信息，并授权提交";
 const faceConsentLabel =
   "我同意在官方采集站点提交本人人脸信息；取消勾选会撤销本次授权";
 let browser,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import { chromium } from "playwright";
-import { createServer } from "vite";
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
 const batchId = "fa78622c-9ef0-4d6c-b335-102720a6af04";
 const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="app"></div><script type="module">
 import {createApp} from 'vue';import ElementPlus from 'element-plus';import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';import '/src/styles/variables.scss';import '/src/styles/global.css';import '/src/styles/element-overrides.scss';import Page from '/src/views/AdminPlatforms.vue';import {applyAuthSession} from '/src/utils/authSession.js';applyAuthSession({token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7});createApp(Page).use(ElementPlus).mount('#app');</script></body></html>`;
@@ -189,9 +189,9 @@ try {
   await drawer
     .getByRole("textbox", { name: "价格倍率", exact: true })
     .fill("1.2");
-  await drawer.getByRole("textbox", { name: "限定远程分类（可选）" }).fill("1");
+  await drawer.getByRole("textbox", { name: "限定目录分类（可选）" }).fill("1");
   await drawer
-    .getByRole("textbox", { name: "排除远程分类（可选）" })
+    .getByRole("textbox", { name: "排除目录分类（可选）" })
     .fill("2,3");
   await drawer
     .getByRole("button", { name: "读取并预览变更（不更新）" })

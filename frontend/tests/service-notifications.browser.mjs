@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import { chromium } from "playwright";
-import { createServer } from "vite";
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
 const id = "20c5c14d-2eba-4dd7-a023-52a49a3dcc6b",
   token = "privateShowdocKey0123456789abcdef",
   code = "445566";
@@ -258,7 +258,7 @@ try {
       .getByRole("textbox", { name: "ShowDoc 推送密钥", exact: true })
       .fill(token);
     await drawer
-      .getByText("此接收渠道由我控制，同意向 ShowDoc 发送上述有限订单信息", {
+      .getByText("此接收方式由我控制，同意向 ShowDoc 发送上述有限订单信息", {
         exact: true,
       })
       .click();

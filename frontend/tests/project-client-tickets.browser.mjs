@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync } from 'node:fs'
 import { chromium } from 'playwright'
-import { createServer } from 'vite'
+import { createTestServer as createServer } from './fixtures/test-server.mjs';import { pngFixture } from './fixtures/ticket-image.mjs'
+const png = pngFixture(), imageId = 'b038e810-6a0d-461c-8dc6-a2aa1aa061bf'
 const clientA = 'b038e810-6a0d-461c-8dc6-a2aa1aa061bd', clientB = 'b038e810-6a0d-461c-8dc6-a2aa1aa061bc'
 const ticketId = 'b038e810-6a0d-461c-8dc6-a2aa1aa061be', secret = 'npc_' + 'c'.repeat(64), password = 'fixture-only-password'
 const customers = [clientA, clientB].map((id, i) => ({ id, label: i ? '同项目另一客户' : '示例下游客户', projectId: 1, projectTitle: '本地项目 A', status: 'ACTIVE', version: 1, balance: '10.000000', unitPrice: '0.250000', refundableUnits: '10', refundBudget: '2.50' }))
@@ -20,6 +21,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } })
   page.setDefaultTimeout(45000); page.setDefaultNavigationTimeout(90000)
   page.on('pageerror', e => errors.push(e.message))
+  await page.addInitScript(() => { const create=URL.createObjectURL.bind(URL),revoke=URL.revokeObjectURL.bind(URL);window.activeTicketBlobs=new Set();URL.createObjectURL=b=>{const u=create(b);window.activeTicketBlobs.add(u);return u};URL.revokeObjectURL=u=>{window.activeTicketBlobs.delete(u);revoke(u)} })
   await page.route('**/*', async route => {
     const req = route.request(), url = new URL(req.url()), method = req.method()
     if (url.origin !== base) { unexpected.push(url.origin); return route.abort() }
@@ -35,6 +37,10 @@ try {
       const show = ticket && (!url.searchParams.get('clientId') || url.searchParams.get('clientId') === ticket.clientId) && (!url.searchParams.get('status') || url.searchParams.get('status') === ticket.status)
       return ok({ records: show ? [ticket] : [], total: show ? 1 : 0 })
     }
+    if (path.startsWith('/project-client-tickets/images/')) {
+      assert.equal(method, 'GET'); assert.match(req.headers().authorization, /^Bearer /); assert.equal(url.search, '');
+      return route.fulfill({ contentType: 'image/png', body: png })
+    }
     if (path.startsWith('/project-client-tickets/by-request/')) return ok(receipts.get(path.split('/').at(-1)) || null)
     if (path === `/project-client-tickets/${ticketId}` && method === 'GET') return ok(ticket)
     if (path === `/project-client-tickets/${ticketId}/replies` && method === 'GET') return ok({ records: replies, total: replies.length })
@@ -44,6 +50,7 @@ try {
     }
     if (path === '/project-client-tickets' && method === 'POST') {
       ticket = { ...data, id: ticketId, projectId: 1, projectTitle: '本地项目 A', status: 'OPEN', reviewResult: 'PENDING', reviewNote: null, reviewedAt: null, version: 0, createdAt: '2026-09-09 10:00:00', updatedAt: '2026-09-09 10:00:00' }
+      ticket.imageId = data.imageData ? imageId : null; delete ticket.imageData
       const value = receipt('CREATE')
       if (loseCreate) { loseCreate = false; return route.abort('failed') }
       return ok(value)
@@ -52,7 +59,7 @@ try {
       if (failReply) { failReply = false; return rejected() }
       if (data.version !== ticket.version) return rejected()
       ticket.version++; ticket.status = 'IN_PROGRESS'
-      replies.push({ id: 'reply-' + ticket.version, version: ticket.version, author: 'OWNER', content: data.content, createdAt: '2026-09-09 10:01:00' })
+      replies.push({ id: 'reply-' + ticket.version, version: ticket.version, author: 'OWNER', content: data.content, imageId: data.imageData ? imageId : null, createdAt: '2026-09-09 10:01:00' })
       const value = receipt('REPLY')
       if (loseReply) { loseReply = false; return route.abort('failed') }
       return ok(value)
@@ -77,21 +84,30 @@ try {
   assert.equal(writes.length, 0)
   const card = page.locator('.client-card').filter({ hasText: '示例下游客户' })
   await card.getByRole('button', { name: '客户售后', exact: true }).click()
-  const drawer = page.getByRole('dialog', { name: '下游客户售后', exact: true })
-  await drawer.getByText('暂无本地售后工单').waitFor()
+  const drawer = page.getByRole('dialog', { name: '客户售后', exact: true })
+  await drawer.getByText('暂无客户售后工单').waitFor()
   assert.ok(reads.some(r => r.path === '/project-client-tickets' && r.query.includes(clientA)))
-  await drawer.getByRole('button', { name: '新建本地工单' }).click()
+  await drawer.getByRole('button', { name: '新建客户工单' }).click()
   await drawer.locator('.compose .el-select__wrapper').click()
   await page.getByRole('option', { name: '补偿申请', exact: true }).click()
   await drawer.getByLabel('工单标题', { exact: true }).fill('本地额度问题待核实')
   const literal = '<img src=x onerror="window.ticketUnsafe=true"> 仅作为文字证据'
   await drawer.getByLabel('问题描述', { exact: true }).fill(literal)
   await drawer.getByLabel('申请参考金额（元，不是支付指令）').fill('1.25')
-  assert.equal(await drawer.getByRole('button', { name: '提交本地工单' }).isDisabled(), true)
   await drawer.locator('label.el-checkbox').filter({ hasText: /我已确认客户和内容/ }).click()
-  await drawer.getByRole('button', { name: '提交本地工单' }).click()
+  const picker = drawer.locator('.compose input[type=file]')
+  await picker.setInputFiles({ name: 'not-a-raster.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg/>') })
+  await drawer.getByRole('alert').filter({ hasText: '仅支持 PNG 或 JPEG 图片' }).waitFor()
+  await picker.setInputFiles({ name: 'fixture.png', mimeType: 'image/png', buffer: png })
+  await drawer.getByAltText('待提交附件预览').waitFor()
+  assert.equal(writes.length, 0)
+  assert.ok(await drawer.getByAltText('待提交附件预览').evaluate(img => img.complete && img.naturalWidth > 0))
+  assert.equal(await drawer.getByRole('button', { name: '提交客户工单' }).isDisabled(), true)
+  await drawer.locator('label.el-checkbox').filter({ hasText: /我已确认客户和内容/ }).click()
+  await drawer.getByRole('button', { name: '提交客户工单' }).click()
   await drawer.getByText('先核实这一次请求').waitFor()
   assert.equal(writes.length, 1)
+  assert.match(writes[0].data.imageData, /^data:image\/png;base64,/ )
   const originalRequest = writes[0].data.requestId
   // Closing retains the original identity and request; opening another customer must not rebind it.
   await drawer.getByRole('button', { name: '关闭，保留待核对请求' }).click()
@@ -103,9 +119,20 @@ try {
   assert.equal(writes.length, 1)
   assert.equal(await page.evaluate(() => window.ticketUnsafe), undefined)
   await drawer.getByText(literal, { exact: true }).waitFor()
+  assert.equal(reads.filter(r => r.path.includes('/images/')).length, 0)
+  await drawer.getByRole('button', { name: '查看私有图片附件', exact: true }).click()
+  const attachment = drawer.getByAltText('已清除元数据的工单附件')
+  await attachment.waitFor()
+  assert.ok((await attachment.getAttribute('src')).startsWith('blob:'))
+  await page.waitForFunction(() => document.querySelector('img[alt="已清除元数据的工单附件"]')?.naturalWidth === 120)
+  assert.equal(reads.filter(r => r.path.includes('/images/')).length, 1)
+  await drawer.getByRole('button', { name: '收起并清除图片', exact: true }).click()
+  assert.equal(await page.evaluate(() => activeTicketBlobs.size), 0)
   await drawer.getByLabel('补充回复').fill('经营者核对：本次不是上游服务履约成功。')
+  await drawer.locator('.reply-form input[type=file]').setInputFiles({ name: 'reply.png', mimeType: 'image/png', buffer: png })
+  await drawer.getByAltText('待提交附件预览').waitFor()
   await drawer.locator('label.el-checkbox').filter({ hasText: '确认以经营者身份向此客户回复' }).click()
-  await drawer.getByRole('button', { name: '发送本地回复' }).click()
+  await drawer.getByRole('button', { name: '发送回复' }).click()
   await drawer.getByText('先核实这一次请求').waitFor()
   await drawer.getByRole('button', { name: '查询原请求结果' }).click()
   await drawer.locator('.message').getByText('经营者核对：本次不是上游服务履约成功。').waitFor()
@@ -121,7 +148,7 @@ try {
   replies.push({ id: 'external-reply', version: ticket.version, author: 'CUSTOMER', content: '客户补充的最新信息', createdAt: '2026-09-09 10:02:00' })
   await drawer.getByLabel('补充回复').fill('这条使用了旧版本，不应直接写入')
   await drawer.locator('label.el-checkbox').filter({ hasText: '确认以经营者身份向此客户回复' }).click()
-  await drawer.getByRole('button', { name: '发送本地回复' }).click()
+  await drawer.getByRole('button', { name: '发送回复' }).click()
   await drawer.getByText('先核实这一次请求').waitFor()
   await drawer.getByRole('button', { name: '查询原请求结果' }).click()
   await drawer.getByText('未查到本次提交回执').waitFor()
@@ -133,12 +160,20 @@ try {
   failReply = true
   await drawer.getByLabel('补充回复').fill('已阅读客户最新信息，准备继续处理')
   await drawer.locator('label.el-checkbox').filter({ hasText: '确认以经营者身份向此客户回复' }).click()
-  await drawer.getByRole('button', { name: '发送本地回复' }).click()
+  await drawer.getByRole('button', { name: '发送回复' }).click()
   await drawer.getByText('先核实这一次请求').waitFor()
   await drawer.getByRole('button', { name: '查询原请求结果' }).click()
   await drawer.getByRole('button', { name: '使用原编号重试一次' }).click()
   await drawer.locator('.message').getByText('已阅读客户最新信息，准备继续处理').waitFor()
   assert.equal(writes.length, 5); assert.deepEqual(writes[3], writes[4])
+  await drawer.locator('.reply-form input[type=file]').setInputFiles({ name: 'image-only.png', mimeType: 'image/png', buffer: png })
+  await drawer.getByAltText('待提交附件预览').waitFor()
+  await drawer.locator('label.el-checkbox').filter({ hasText: '确认以经营者身份向此客户回复' }).click()
+  await drawer.getByRole('button', { name: '发送回复' }).click()
+  await page.waitForFunction(() => document.querySelectorAll('.message').length === 4)
+  assert.equal(writes.at(-1).data.content, '')
+  assert.match(writes.at(-1).data.imageData, /^data:image\/png;base64,/)
+  assert.equal(reads.filter(r => r.path.includes('/images/')).length, 1)
   await drawer.locator('.decision-form .el-select__wrapper').click()
   await page.getByRole('option', { name: '通过申请（仅记录，不入账）', exact: true }).click()
   await drawer.getByLabel('结论说明（客户可见）').fill('已核实申请事实，后续如需支付必须另走合法资金流程。')
@@ -147,8 +182,8 @@ try {
   await drawer.getByText('先核实这一次请求').waitFor()
   await drawer.getByRole('button', { name: '查询原请求结果' }).click()
   await drawer.getByText('申请已通过', { exact: true }).waitFor()
-  assert.equal(writes.length, 6)
-  assert.equal(await drawer.getByRole('button', { name: '发送本地回复' }).count(), 0)
+  assert.equal(writes.length, 7)
+  assert.equal(await drawer.getByRole('button', { name: '发送回复' }).count(), 0)
   assert.equal(await drawer.getByRole('button', { name: '确认处理结论' }).count(), 0)
   assert.equal(customers[0].balance, '10.000000')
   assert.ok(writes.every(w => w.path.startsWith('/project-client-tickets')))
@@ -161,7 +196,10 @@ try {
   await drawer.getByRole('heading', { name: '示例下游客户', exact: true }).scrollIntoViewIfNeeded()
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
   await page.screenshot({ path: '../.cache/native-service-ui/project-client-tickets-mobile-dark.png', fullPage: false })
+  await drawer.getByRole('button', { name: '查看私有图片附件', exact: true }).first().click()
+  await drawer.getByAltText('已清除元数据的工单附件').waitFor()
   await drawer.getByRole('button', { name: '关闭售后窗口' }).click()
+  await page.waitForFunction(() => activeTicketBlobs.size === 0)
   await card.getByRole('button', { name: '客户 API 密钥', exact: true }).click()
   const keyDrawer = page.getByRole('dialog', { name: '客户 API 密钥', exact: true })
   await keyDrawer.getByRole('radio', { name: '只读查询', exact: true }).waitFor()
@@ -176,5 +214,5 @@ try {
   assert.ok(!storage.includes(secret)); assert.ok(!storage.includes(password))
   await keyDrawer.getByRole('button', { name: '关闭并清除敏感输入' }).click()
   assert.deepEqual(errors, []); assert.deepEqual(unexpected, [])
-  console.log('PASS downstream after-sales: real Vue customer entry, pure text, exact same-customer recovery, lost create/reply/review GET-only, stale version, explicit same-ID retry, final no-payment result, opt-in SUPPORT credential, desktop/mobile dark; APIs simulated only.')
+  console.log('PASS downstream after-sales: real Vue customer entry, pure text, exact same-customer recovery, lost create/reply/review GET-only, stale version, explicit same-ID retry, final no-payment result, opt-in SUPPORT credential, image MIME guard, atomic image upload and pure-image reply, authenticated on-demand Blob view/revoke, desktop/mobile dark; APIs simulated only.')
 } catch (e) { await browser?.contexts()[0]?.pages()[0]?.screenshot({ path: '../.cache/native-service-ui/client-ticket-browser-failure.png', fullPage: true }).catch(() => {}); throw e } finally { await browser?.close(); await server.close() }

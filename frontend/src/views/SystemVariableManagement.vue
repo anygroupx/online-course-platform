@@ -315,7 +315,7 @@ const rules = {
 
 const typeLabels = {
   order_status: '订单状态',
-  dock_status: '对接状态',
+  dock_status: '执行状态',
   user_status: '用户状态',
   platform_status: '平台状态',
   card_status: '充值卡状态',

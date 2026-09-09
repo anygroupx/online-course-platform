@@ -3,8 +3,8 @@
     <header>
       <div>
         <span class="eyebrow">SERVICE CATALOG / 商品上架</span>
-        <h1>把上游服务，变成本平台的商品。</h1>
-        <p>选择已验证的接口，设置本平台售价并上架，用户即可在服务商城购买。</p>
+        <h1>配置可购买的服务商品。</h1>
+        <p>选择已验证的服务配置，设置售价并上架，用户即可在服务商城购买。</p>
       </div>
       <el-button type="primary" @click="open()">上架服务商品</el-button>
     </header>
@@ -14,11 +14,11 @@
         prop="title"
         label="商品名称"
         min-width="180"
-      /><el-table-column label="上游服务" min-width="140"
+      /><el-table-column label="服务项目" min-width="140"
         ><template #default="{ row }"
           >{{ serviceNames[row.providerType] }} · {{ row.project }}</template
         ></el-table-column
-      ><el-table-column label="本平台售价" min-width="150"
+      ><el-table-column label="销售价格" min-width="150"
         ><template #default="{ row }"
           >¥{{ row.unitPrice }} {{ row.priceUnit }}</template
         ></el-table-column
@@ -53,7 +53,7 @@
     >
       <el-form label-position="top" :disabled="saving">
         <el-alert
-          title="商品和供应商绑定后不可更换。停用接口会暂停新订单；旧订单仍保留在本平台。"
+          title="商品和服务配置关联后不可更换。停用配置会暂停新订单；旧订单仍会保留。"
           type="info"
           :closable="false"
         />
@@ -114,18 +114,18 @@
               :label="label"
               :value="key" /></el-select
         ></el-form-item>
-        <el-form-item v-if="selectedType !== 'sxdk_tw'" label="上游商品"
+        <el-form-item v-if="selectedType !== 'sxdk_tw'" label="服务商品"
           ><div class="provider-row">
             <el-select
               v-model="form.remoteProductId"
               :disabled="!!editing"
-              placeholder="先读取上游目录"
+              placeholder="先读取服务目录"
               @change="selectRemote"
               ><el-option
                 v-for="p in remoteProducts"
                 :key="p.id"
                 :value="p.id"
-                :label="`${p.name} · 上游 ¥${p.unitPrice}`" /></el-select
+                :label="`${p.name} · 成本 ¥${p.unitPrice}`" /></el-select
             ><el-button
               :loading="reading"
               :disabled="!form.providerId || !!editing"
@@ -144,7 +144,7 @@
           show-icon
           :closable="false"
         />
-        <el-form-item label="本平台商品名称"
+        <el-form-item label="商品名称"
           ><el-input v-model="form.title" maxlength="100" /></el-form-item
         ><el-form-item label="商品说明"
           ><el-input
@@ -153,19 +153,19 @@
             :rows="3"
             maxlength="1000" /></el-form-item
         ><el-form-item
-          :label="`本平台单价（${selectedType === 'sxdk_tw' ? '元/服务日' : selectedType === 'wuxin' || (selectedType === 'flash' && form.project === 'sdxy') ? '元/次' : '元/公里'}，最多六位小数）`"
+          :label="`销售单价（${selectedType === 'sxdk_tw' ? '元/服务日' : selectedType === 'wuxin' || (selectedType === 'flash' && form.project === 'sdxy') ? '元/次' : '元/公里'}，最多六位小数）`"
           ><el-input
             v-model="form.unitPrice"
             inputmode="decimal"
-            placeholder="例如 0.25；不能低于上游单价" /></el-form-item
+            placeholder="例如 0.25；不能低于成本价" /></el-form-item
         ><template v-if="selectedType === 'sxdk_tw'">
           <el-alert
-            title="该上游没有可验证的实时报价接口，不使用原 PHP 的硬编码价格。"
-            description="请核实服务日成本、运行方式倍率及取消退款规则，填写合同依据。核对过期或供应商地址 / 账号变更后会暂停新下单。"
+            title="当前服务没有可验证的实时报价，不使用预设价格。"
+            description="请核实服务日成本、运行方式倍率及取消退款规则，填写合同依据。核对过期或服务配置变更后会暂停新下单。"
             type="warning"
             :closable="false"
           />
-          <el-form-item label="已核实的上游每服务日成本"
+          <el-form-item label="已核实的每服务日成本"
             ><el-input
               v-model="contract.unitCost"
               inputmode="decimal"
@@ -187,7 +187,7 @@
           <el-checkbox
             v-model="contract.upstreamChecked"
             class="contract-consent"
-            >我已核实上游单价、倍率和取消规则，认可本平台按服务日计费与退款条款</el-checkbox
+            >我已核实成本、倍率和取消规则，认可按服务日计费与退款条款</el-checkbox
           > </template
         ><el-form-item label="销售状态"
           ><el-switch
@@ -273,7 +273,7 @@ async function load() {
     total.value = r.total;
   } catch {
     error.value =
-      "原生服务商城未启用或读取失败。须先执行原生订单迁移并启用服务配置。";
+      "服务商城未启用或读取失败，请联系系统管理员完成必要配置。";
   } finally {
     loading.value = false;
   }
@@ -377,7 +377,7 @@ async function readCatalog() {
       nativeProductSupported(type, project, p.id),
     );
     if (!remoteProducts.value.length)
-      ElMessage.warning("没有已支持原生下单的商品");
+      ElMessage.warning("没有可下单的商品");
   } catch {
   } finally {
     reading.value = false;

@@ -166,14 +166,14 @@
           <div class="agent-recharge">
             <el-alert title="代理充值说明" type="warning" :closable="false">
               <template #default>
-                <p>代理充值功能需要联系您的上级代理进行操作。</p>
-                <p>请提供您的用户账号给上级代理，由代理为您充值。</p>
+                <p>代理充值功能需要联系充值代理进行操作。</p>
+                <p>请向充值代理提供您的用户账号，由代理为您充值。</p>
               </template>
             </el-alert>
 
             <div class="contact-info">
               <h3>联系方式</h3>
-              <p>如需代理充值，请联系您的上级代理或客服人员。</p>
+              <p>如需代理充值，请联系充值代理或客服人员。</p>
             </div>
           </div>
         </el-tab-pane>

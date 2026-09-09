@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
-import { createServer } from "vite";
+import { createTestServer as createServer } from './fixtures/test-server.mjs';
 
 const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:24px"><div id="app"></div><script type="module">
 import { createApp,h } from 'vue'; import {createRouter,createMemoryHistory,RouterView} from 'vue-router'; import ElementPlus from 'element-plus';
@@ -140,7 +140,9 @@ try {
     0,
   );
   await page.getByRole("button", { name: "执行记录", exact: true }).click();
-  const logs = page.getByRole("dialog", { name: "上游执行记录", exact: true });
+  const logs = page.getByRole("dialog", { name: "执行记录", exact: true });
+  // Opening the drawer does not mean its asynchronous task request has rendered yet.
+  await logs.getByRole("button", { name: "延期此任务", exact: true }).waitFor();
   assert.equal(
     await logs.getByRole("button", { name: "延期此任务", exact: true }).count(),
     1,
@@ -153,7 +155,7 @@ try {
   await confirm.waitFor();
   await confirm
     .getByText(
-      "仅延期所选任务，不会延期整笔订单。新的执行时间以上游回执及刷新后的记录为准。",
+      "仅延期所选任务，不会延期整笔订单。新的执行时间以确认结果及刷新后的记录为准。",
       { exact: true },
     )
     .waitFor();

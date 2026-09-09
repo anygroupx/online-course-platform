@@ -48,7 +48,7 @@
       /></el-form-item>
     </div>
     <p class="auth-note">
-      授权仅用于此商品，有效期最多十分钟。短信、验证码校验和规则刷新不自动重试；上游凭据不回传、不存入浏览器持久化存储。
+      授权仅用于此商品，有效期最多十分钟。短信、验证码校验和规则刷新不自动重试；账号凭据不回传、不存入浏览器持久化存储。
     </p>
     <div class="account-actions">
       <el-button
@@ -81,7 +81,7 @@
         v-if="verified && session.canRefreshRules"
         :loading="working"
         @click="refresh"
-        >刷新上游规则</el-button
+        >刷新可用规则</el-button
       >
       <el-button v-if="session && !verified" :loading="working" @click="check"
         >检查授权状态</el-button
@@ -138,13 +138,13 @@ const statusText = computed(() => {
       CREATED: "授权会话已创建，等待下一步。",
       SMS_SENDING: "短信发送结果待确认，请检查状态，不要再次发送。",
       SMS_SENT:
-        "上游已受理发送，请输入收到的验证码。未收到时至少等待一分钟后重新授权。",
+        "验证码已发送，请输入收到的验证码。未收到时至少等待一分钟后重新授权。",
       VERIFYING: "正在核实账号，请检查原会话状态，不要重复提交验证码。",
       READY: "账号已核实，请选择服务计划并预览金额。",
-      REFRESHING: "上游规则正在更新，旧计划暂不可用于下单。",
+      REFRESHING: "可用规则正在更新，旧计划暂不可用于下单。",
       REAUTHORIZE:
-        "规则更新已受理，但上游未提供可复用的授权凭据；请重新验证后读取新规则。",
-      UNKNOWN: "上游结果无法确认，本会话不会再次提交。请核对后重新授权。",
+        "规则更新已受理，但未获得可复用的授权信息；请重新验证后读取新规则。",
+      UNKNOWN: "处理结果无法确认，本会话不会再次提交。请核对后重新授权。",
       EXPIRED: "授权已过期，请重新授权。",
       USED: "此授权已用于一笔订单。请到我的服务订单查看结果。",
       REVOKED: "授权已撤销。",
