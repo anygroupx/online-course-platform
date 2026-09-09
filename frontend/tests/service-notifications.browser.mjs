@@ -257,6 +257,16 @@ try {
     await drawer
       .getByRole("textbox", { name: "ShowDoc 推送密钥", exact: true })
       .fill(token);
+    // The settings label can render before its async history request enables the form.
+    // Wait on the real checkbox state, then click the visible Element Plus label.
+    const consent = drawer.getByRole("checkbox", {
+      name: "此接收方式由我控制，同意向 ShowDoc 发送上述有限订单信息",
+      exact: true,
+    });
+    await page.waitForFunction(
+      (input) => input instanceof HTMLInputElement && !input.disabled,
+      await consent.elementHandle(),
+    );
     await drawer
       .getByText("此接收方式由我控制，同意向 ShowDoc 发送上述有限订单信息", {
         exact: true,
