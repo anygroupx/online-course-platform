@@ -62,3 +62,47 @@ export function projectQuoteReady(quote, now = Date.now()) {
     !serviceAccountExpired(quote, now)
   );
 }
+
+export const projectOpeningFunded = (operation) =>
+  operation?.action === "PROVISION" && (decimal6(operation.units) ?? 0n) > 0n;
+
+export function projectOpeningUnits(funded, value) {
+  if (!funded) return null;
+  const amount = decimal6(value);
+  return amount !== null && amount > 0n && amount <= 100000000000n ? String(value) : undefined;
+}
+
+/** A paid opening must show a complete, self-consistent receipt; partial replies are not success. */
+export function validProjectOpeningOperation(value, expected = {}) {
+  const uuid = (v) => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
+  if (!value || value.action !== "PROVISION" || !uuid(value.id) || !uuid(value.accountId) ||
+      !Number.isSafeInteger(value.projectId) || value.projectId < 1 ||
+      typeof value.projectTitle !== "string" || !value.projectTitle.trim() || value.projectTitle.length > 100 ||
+      !["READY", "DISPATCHING", "UNKNOWN", "SUCCEEDED", "NOT_ACCEPTED", "EXPIRED"].includes(value.state) ||
+      !Array.isArray(value.warnings) || value.warnings.length > 20 ||
+      !value.warnings.every((v) => typeof v === "string" && v.length <= 1000) ||
+      serviceAccountExpired(value, 0) || !/^\d{1,10}\.\d{2}$/.test(String(value.amount))) return false;
+  const quantity = decimal6(value.units), rate = decimal6(value.unitPrice);
+  if (quantity === null || quantity < 0n || quantity > 100000000000n || rate === null || rate <= 0n || rate > 9999000000n) return false;
+  const amount = quantity === 0n ? "0.00" : estimateProjectTransfer(value.units, value.unitPrice);
+  if (value.amount !== amount || (value.state === "SUCCEEDED" ? decimal6(value.balanceAfter) === null : value.balanceAfter !== null)) return false;
+  if (expected.projectId !== undefined && expected.projectId !== value.projectId) return false;
+  if (expected.units !== undefined && decimal6(expected.units ?? "0") !== quantity) return false;
+  if (expected.id !== undefined && (expected.id !== value.id || expected.accountId !== value.accountId ||
+      decimal6(expected.unitPrice) !== rate || expected.amount !== value.amount)) return false;
+  return true;
+}
+
+export function projectResolutionEffect(operation, outcome) {
+  if (!operation) return "";
+  if (outcome === "NOT_ACCEPTED") {
+    return operation.action === "TOP_UP" || projectOpeningFunded(operation)
+      ? `返还原充值预扣 ¥${operation.amount}；不会再次提交退款。`
+      : "关闭待核对操作，不增加平台余额。";
+  }
+  if (projectOpeningFunded(operation))
+    return `确认开户及初始充值已受理，记录 ${operation.units} 额度和 ¥${operation.amount} 的已付费用；不会再次扣款或开户。`;
+  return operation.action === "WITHDRAW"
+    ? `确认扣除已成功后，向原用户入账 ¥${operation.amount}。`
+    : "确认原操作已受理，完成账户关联或额度记录；不会再次提交操作。";
+}

@@ -130,7 +130,7 @@ class ProviderCatalogImportIntegrationTest {
     }
 
     @Test
-    void reproducesOld193Byte502WhenCategoryQueryIsFollowedByUnfilteredImport() throws Exception {
+    void categoryQueryFollowedByUnfilteredImportStillReturnsBoundedClassified502() throws Exception {
         limits.setProviderMaxResponseBytes(1_048_576);
         mvc.perform(get("/admin/docking/products").param("apiProviderId", "6").param("categoryId", "60"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1));
@@ -138,8 +138,11 @@ class ProviderCatalogImportIntegrationTest {
                         .content(body(null, "\"selected\"")))
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.data.reason").value("RESPONSE_TOO_LARGE"))
+                .andExpect(jsonPath("$.message").value("服务接口响应超过大小限制"))
                 .andReturn().getResponse();
-        assertEquals(193, response.getContentAsByteArray().length);
+        // The historical 193-byte failure envelope is 3 bytes shorter after the UI copy update.
+        // Keep the exact bound, error classification and no-import assertions.
+        assertEquals(190, response.getContentAsByteArray().length);
         assertEquals("60", upstreamRequests.get(0).get("fenlei"));
         assertFalse(upstreamRequests.get(1).containsKey("fenlei"));
         verify(platforms, never()).insert(any(CoursePlatform.class));

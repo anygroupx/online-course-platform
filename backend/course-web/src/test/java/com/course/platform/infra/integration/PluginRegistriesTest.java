@@ -16,13 +16,14 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class PluginRegistriesTest {
-    @Test void springDiscoversFiveServiceProbesAndOnePrimaryNativeRouterButNoCourseStrategies() {
+    @Test void springDiscoversSevenServiceProbesAndOnePrimaryNativeRouterButNoCourseStrategies() {
         try (var context = new AnnotationConfigApplicationContext()) {
             context.registerBean(ApiHttpClient.class, () -> mock(ApiHttpClient.class));
             context.registerBean(ProviderUrlNormalizer.class);
             context.register(PluginConnectorConfiguration.class, PluginConnectorRegistry.class,
                     ProviderConnectionProbeRegistry.class, PluginResearchCatalog.class, PlatformDockingStrategyFactory.class,
                     com.course.platform.infra.servicecommerce.WuxinNativeServiceGateway.class,
+                    com.course.platform.infra.servicecommerce.SsbenzDistanceGateway.class,
                     com.course.platform.infra.servicecommerce.PhpNativeServiceGateway.class,
                     com.course.platform.infra.servicecommerce.NativeServiceGatewayRouter.class,
                     com.course.platform.infra.servicecommerce.InternshipNativeServiceGateway.class,
@@ -30,13 +31,13 @@ class PluginRegistriesTest {
                     com.course.platform.infra.projectcenter.ProjectTicketImagePolicy.class,
                     com.course.platform.infra.projectclient.ProjectTicketImageCodec.class);
             context.refresh();
-            assertEquals(4, context.getBeansOfType(PluginReadOnlyConnector.class).size());
-            assertEquals(6, context.getBeansOfType(ProviderConnectionProbe.class).size());
+            assertEquals(5, context.getBeansOfType(PluginReadOnlyConnector.class).size());
+            assertEquals(7, context.getBeansOfType(ProviderConnectionProbe.class).size());
             assertEquals(1, context.getBeansOfType(com.course.platform.application.service.servicecommerce.ServiceAccountGateway.class).size());
             assertTrue(context.getBeansOfType(PlatformDockingStrategy.class).isEmpty());
             assertInstanceOf(com.course.platform.infra.servicecommerce.NativeServiceGatewayRouter.class,
                     context.getBean(com.course.platform.application.service.servicecommerce.NativeServiceGateway.class));
-            for (String type : List.of("flash", "heisha", "jiguang", "wuxin", "sxdk_tw", "syyv5")) {
+            for (String type : List.of("flash", "heisha", "jiguang", "wuxin", "sxdk_tw", "syyv5", "ssbenz_xbd")) {
                 assertNotNull(context.getBean(ProviderConnectionProbeRegistry.class).getProbe(type));
                 assertNull(context.getBean(PlatformDockingStrategyFactory.class).getStrategy(type));
             }
@@ -44,7 +45,11 @@ class PluginRegistriesTest {
             assertEquals(12, catalog.size());
             assertEquals(12, catalog.stream().map(c -> c.id()).distinct().count());
             assertEquals(0, catalog.stream().filter(c -> "READ_ONLY".equals(c.integrationStatus())).count());
-            assertEquals(6, catalog.stream().filter(c -> "NATIVE_PARTIAL".equals(c.integrationStatus())).count());
+            assertEquals(7, catalog.stream().filter(c -> "NATIVE_PARTIAL".equals(c.integrationStatus())).count());
+            var distance = catalog.stream().filter(c -> "P05".equals(c.id())).findFirst().orElseThrow();
+            assertEquals("ssbenz_xbd", distance.providerType());
+            assertEquals(List.of("CATALOG"), distance.availableCapabilities());
+            assertEquals(List.of("CREATE", "SYNC"), com.course.platform.infra.servicecommerce.PhpNativeServiceGateway.capabilities("ssbenz_xbd"));
             var flash = catalog.stream().filter(c -> "P01".equals(c.id())).findFirst().orElseThrow();
             assertEquals("NATIVE_PARTIAL", flash.integrationStatus());
             assertTrue(flash.availableCapabilities().contains("CATALOG"));

@@ -47,22 +47,22 @@
             <span>{{
               item.providerType === "sxdk_tw"
                 ? "累计已购服务日"
-                : "完成 / 总次数"
+                : isTotalDistanceService(item) ? "订单数量" : "完成 / 总次数"
             }}</span
             ><strong
               >{{
-                item.providerType === "sxdk_tw"
+                item.providerType === "sxdk_tw" || isTotalDistanceService(item)
                   ? item.quantity
                   : (item.completed ?? "—")
               }}
               <small>{{
-                item.providerType === "sxdk_tw" ? "天" : `/ ${item.quantity}`
+                item.providerType === "sxdk_tw" ? "天" : isTotalDistanceService(item) ? "单" : `/ ${item.quantity}`
               }}</small></strong
             >
           </div>
           <div>
             <span>{{
-              item.providerType === "sxdk_tw" ? "服务截止日" : "每次距离"
+              item.providerType === "sxdk_tw" ? "服务截止日" : isTotalDistanceService(item) ? "总公里数" : "每次距离"
             }}</span
             ><strong
               >{{
@@ -82,7 +82,7 @@
           </div>
         </div>
         <el-progress
-          v-if="item.completed != null"
+          v-if="item.completed != null && !isTotalDistanceService(item)"
           :percentage="
             Math.min(100, Math.round((item.completed / item.quantity) * 100))
           "
@@ -90,11 +90,15 @@
           :stroke-width="5"
         />
         <p
-          v-if="item.completed == null && item.providerType !== 'sxdk_tw'"
+          v-if="item.completed == null && item.providerType !== 'sxdk_tw' && !isTotalDistanceService(item)"
           class="unknown-progress"
         >
           当前订单只返回状态，未返回完成次数；具体执行情况请查看执行记录。
         </p>
+        <template v-if="isTotalDistanceService(item)">
+          <TotalDistancePlanSummary v-if="item.distancePlan" :plan="item.distancePlan" />
+          <p class="unknown-progress">仅提供提交状态，暂无单笔完成进度；状态更新不代表执行完成，不会自动退款。</p>
+        </template>
         <p v-if="item.providerType === 'sxdk_tw'" class="unknown-progress">
           {{ internshipCalendarText(item.schedule) }} ·
           执行结果请查看订单记录，日历不代表考勤已完成。
@@ -125,12 +129,12 @@
                 :disabled="['CANCELLED', 'REFUNDED'].includes(item.status)"
                 :loading="busyId === item.id"
                 @click="sync(item)"
-                >更新进度</el-button
+                >{{ isTotalDistanceService(item) ? "核对提交状态" : "更新进度" }}</el-button
               ><el-button @click="showEvents(item)">操作记录</el-button
               ><el-button v-if="item.providerType === 'sxdk_tw'" @click="notificationOrder=item; notificationOpen=true">微信通知</el-button
               ><el-button
                 v-if="
-                  item.providerType !== 'heisha' && !item.pendingOperationId
+                  item.providerType !== 'heisha' && !isTotalDistanceService(item) && !item.pendingOperationId
                 "
                 @click="showRunLogs(item)"
                 >执行记录</el-button
@@ -155,7 +159,7 @@
                 >核对处理结果</el-button
               >
               <el-button
-                v-else-if="item.status === 'REFUND_REVIEW'"
+                v-else-if="item.status === 'REFUND_REVIEW' && !isTotalDistanceService(item)"
                 type="warning"
                 @click="openSettlement(item)"
                 >核对退款入账</el-button
@@ -465,7 +469,7 @@
         </p>
         <el-form-item label="已核实的处理结果"
           ><el-radio-group v-model="resolution.outcome"
-            ><el-radio value="ACCEPTED">已受理</el-radio
+            ><el-radio value="ACCEPTED">{{ resolveQuote.distancePlan ? "已受理提交记录（不确认执行完成）" : "已受理" }}</el-radio
             ><el-radio value="NOT_ACCEPTED"
               >未受理，退回本次扣款</el-radio
             ></el-radio-group
@@ -545,6 +549,8 @@ import {
 } from "@/utils/serviceCommerce";
 import InternshipPlanFields from "@/components/InternshipPlanFields.vue";
 import ServiceNotifications from "@/components/ServiceNotifications.vue";
+import TotalDistancePlanSummary from "@/components/TotalDistancePlanSummary.vue";
+import { isTotalDistanceService } from "@/utils/totalDistanceServices";
 const notificationOpen = ref(false), notificationOrder = ref(null);
 import {
   internshipFields,
@@ -611,7 +617,7 @@ const resolution = ref({
 function tagType(state) {
   return ["COMPLETED", "REFUNDED"].includes(state)
     ? "success"
-    : ["CONFIRMING", "ATTENTION", "REFUND_REVIEW"].includes(state)
+    : ["CONFIRMING", "ATTENTION", "REFUND_REVIEW", "SUBMISSION_REVIEW"].includes(state)
       ? "warning"
       : "info";
 }
@@ -939,7 +945,7 @@ async function openResolve(item) {
     resolution.value = {
       outcome: "NOT_ACCEPTED",
       externalOrderNo: "",
-      refundedUnits: 0,
+      refundedUnits: isTotalDistanceService(item) ? null : 0,
       evidence: "",
       upstreamChecked: false,
     };

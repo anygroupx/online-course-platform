@@ -269,6 +269,7 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
         }
 
         Map<String, Long> categoryCache = new HashMap<>();
+        Map<Long, BigDecimal> categoryMultiplierCache = new HashMap<>();
         for (PlatformItem item : items) {
             try {
                 if (StrUtil.isBlank(item.getId()) || StrUtil.isBlank(item.getName())) {
@@ -291,7 +292,12 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
                 if (remotePrice == null || remotePrice.compareTo(BigDecimal.ZERO) < 0) {
                     throw new BusinessException("第三方商品价格缺失或无效");
                 }
-                BigDecimal localPrice = remotePrice.multiply(priceMultiplier);
+                Long pricingCategoryId = shouldSyncCategory
+                        ? categoryId
+                        : existing == null ? null : existing.getCategoryId();
+                BigDecimal effectiveMultiplier = resolveCategoryMultiplier(
+                        pricingCategoryId, priceMultiplier, categoryMultiplierCache);
+                BigDecimal localPrice = remotePrice.multiply(effectiveMultiplier);
 
                 if (existing != null) {
                     existing.setBasePrice(localPrice);
@@ -342,6 +348,19 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
             result.put("categoryCreated", categoryCreated);
         }
         return result;
+    }
+
+    private BigDecimal resolveCategoryMultiplier(Long categoryId, BigDecimal fallback,
+                                                 Map<Long, BigDecimal> cache) {
+        if (categoryId == null) {
+            return fallback;
+        }
+        if (!cache.containsKey(categoryId)) {
+            PlatformCategory category = platformCategoryMapper.selectById(categoryId);
+            cache.put(categoryId, category == null ? null : category.getPriceMultiplier());
+        }
+        BigDecimal categoryMultiplier = cache.get(categoryId);
+        return categoryMultiplier == null ? fallback : categoryMultiplier;
     }
 
     /**

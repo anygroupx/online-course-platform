@@ -40,6 +40,7 @@ class CatalogRefreshTransactionTest {
     CatalogRefreshServiceImpl service;
     CoursePriceRefreshMapper batches;
     CoursePlatformMapper platforms;
+    PlatformCategoryMapper categories;
     PlatformDockingService docking;
     List<PlatformItem> remote;
     ValidatorFactory validators;
@@ -69,6 +70,19 @@ class CatalogRefreshTransactionTest {
                             .replaceAll("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4.*?;", ";"));
         }
         jdbc.execute("ALTER TABLE course_platform ADD COLUMN category_id BIGINT");
+        jdbc.execute(
+                "CREATE TABLE platform_category("
+                        + "id BIGINT AUTO_INCREMENT PRIMARY KEY,name VARCHAR(100) NOT NULL,"
+                        + "sort_order INT DEFAULT 0,status TINYINT DEFAULT 1,"
+                        + "remote_category_id VARCHAR(50),remote_api_provider_id BIGINT,"
+                        + "create_time DATETIME DEFAULT CURRENT_TIMESTAMP,"
+                        + "update_time DATETIME DEFAULT CURRENT_TIMESTAMP)" );
+        String localizedMigration =
+                Files.readString(
+                                root.resolve(
+                                        "database/migrations/029_localized_display_and_category_multiplier.sql"))
+                        .replaceAll("(?m)^--.*$", "");
+        for (String sql : localizedMigration.split(";")) if (!sql.isBlank()) jdbc.execute(sql);
         String migration =
                 Files.readString(
                                 root.resolve(
@@ -97,6 +111,7 @@ class CatalogRefreshTransactionTest {
                 List.of(
                         CoursePriceRefreshMapper.class,
                         CoursePlatformMapper.class,
+                        PlatformCategoryMapper.class,
                         ApiProviderMapper.class)) config.addMapper(type);
         var factory = new MybatisSqlSessionFactoryBean();
         factory.setDataSource(ds);
@@ -104,6 +119,7 @@ class CatalogRefreshTransactionTest {
         var sql = new SqlSessionTemplate(factory.getObject());
         batches = sql.getMapper(CoursePriceRefreshMapper.class);
         platforms = sql.getMapper(CoursePlatformMapper.class);
+        categories = sql.getMapper(PlatformCategoryMapper.class);
         docking = mock(PlatformDockingService.class);
         remote =
                 new ArrayList<>(
@@ -124,6 +140,7 @@ class CatalogRefreshTransactionTest {
                 new CatalogRefreshServiceImpl(
                         batches,
                         platforms,
+                        categories,
                         sql.getMapper(ApiProviderMapper.class),
                         docking,
                         new DataSourceTransactionManager(ds),
@@ -173,6 +190,40 @@ class CatalogRefreshTransactionTest {
 
     View confirm(String id) {
         return service.confirm(id, new ConfirmForm(true));
+    }
+
+    @Test
+    void localizedMigrationAddsNullableColumnsInMysqlCompatibleH2() {
+        assertEquals(
+                1,
+                jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS"
+                                + " WHERE TABLE_NAME='COURSE_PLATFORM' AND COLUMN_NAME='DISPLAY_NAME'"
+                                + " AND IS_NULLABLE='YES'",
+                        Integer.class));
+        assertEquals(
+                1,
+                jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS"
+                                + " WHERE TABLE_NAME='PLATFORM_CATEGORY' AND COLUMN_NAME='PRICE_MULTIPLIER'"
+                                + " AND IS_NULLABLE='YES'",
+                        Integer.class));
+    }
+
+    @Test
+    void categoryMultiplierOverridesGlobalMultiplierDuringPreviewAndApply() {
+        jdbc.update(
+                "INSERT INTO platform_category(id,name,price_multiplier) VALUES(88,'本地分类',2.00)");
+        jdbc.update("UPDATE course_platform SET display_name='本地显示名' WHERE id=1");
+
+        View view = preview();
+
+        assertEquals("2.47", view.plan().rows().get(0).newPrice());
+        assertEquals("5.00", view.plan().rows().get(1).newPrice());
+        confirm(view.id());
+        prices("2.47", "5.00");
+        assertEquals("本地显示名", platforms.selectById(1L).getDisplayName());
+        assertEquals("Local 1", platforms.selectById(1L).getName());
     }
 
     void prices(String a, String b) {

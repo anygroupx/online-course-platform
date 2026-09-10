@@ -32,6 +32,18 @@ public class CoursePlatform implements Serializable {
     private String name;
 
     /**
+     * 本地显示别名，为空时用户侧回退使用同步名称
+     */
+    @TableField(value = "display_name", updateStrategy = FieldStrategy.ALWAYS)
+    private String displayName;
+
+    /**
+     * 所属分类名称（仅用于接口展示，不持久化）
+     */
+    @TableField(exist = false)
+    private String categoryName;
+
+    /**
      * 分类ID
      */
     @TableField("category_id")
@@ -121,4 +133,3 @@ public class CoursePlatform implements Serializable {
     @TableField(value = "update_time", fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
 }
-

@@ -231,4 +231,23 @@ class ServiceCommerceControllerTest {
         verify(service)
                 .quote(eq(1L), argThat(form -> form.distance() == null && form.schedule() != null));
     }
+    @Test void httpBindingPreservesOneOrderAndExactLargeTotalDistanceForServiceValidation() throws Exception {
+        for (String distance : List.of("0.01", "120.50", "999999.99")) {
+            mvc.perform(post("/services/5/quotes").contentType("application/json")
+                    .content("{\"quantity\":1,\"distance\":\"" + distance + "\",\"fields\":{},\"authorizedAccount\":true}"))
+                    .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
+            verify(service).quote(eq(5L), argThat(form -> form.quantity() == 1
+                    && new java.math.BigDecimal(distance).equals(form.distance())));
+        }
+    }
+
+    @Test void httpBindingRejectsDistancePrecisionAndStorageOverflowBeforeBusinessCode() throws Exception {
+        for (String distance : List.of("0", "-1", "120.501", "1000000")) {
+            mvc.perform(post("/services/5/quotes").contentType("application/json")
+                    .content("{\"quantity\":1,\"distance\":\"" + distance + "\",\"fields\":{},\"authorizedAccount\":true}"))
+                    .andExpect(status().isUnprocessableEntity()).andExpect(header().string("Cache-Control", "no-store"));
+        }
+        verifyNoInteractions(service);
+    }
+
 }

@@ -19,11 +19,13 @@ public class NativeServiceGatewayRouter implements NativeServiceGateway {
     private final PhpNativeServiceGateway templates;
     private final WuxinNativeServiceGateway wuxin;
     private final InternshipNativeServiceGateway internship;
+    private final SsbenzDistanceGateway distance;
 
     private NativeServiceGateway forProvider(ApiProvider p) {
         return switch (p.getProviderType()) {
             case "wuxin" -> wuxin;
             case "sxdk_tw" -> internship;
+            case SsbenzDistanceGateway.TYPE -> distance;
             case "flash", "heisha", "jiguang" -> templates;
             default ->
                     throw new com.course.platform.common.exception.BusinessException("不支持的原生服务接口");

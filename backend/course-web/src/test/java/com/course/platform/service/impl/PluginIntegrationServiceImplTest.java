@@ -76,7 +76,7 @@ class PluginIntegrationServiceImplTest {
         verifyNoInteractions(mapper, providers, connector);
     }
 
-    @Test void allUnknownAndOpaquePluginsFailBeforeLoadingCredentialsOrCallingNetwork() {
+    @Test void unknownOpaqueOrMissingConnectorPluginsFailBeforeLoadingCredentialsOrCallingNetwork() {
         for (String id : List.of("P02", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "unknown")) {
             assertThrows(BusinessException.class, () -> service.fetchCatalog(id, 9L, null));
         }
@@ -145,4 +145,25 @@ class PluginIntegrationServiceImplTest {
         assertFalse(filter.getSqlSelect().contains("api_key")); assertFalse(filter.getSqlSelect().contains("api_url"));
         verifyNoInteractions(providers);
     }
+    @Test void p05PlaintextCatalogRequiresItsOwnEnabledVerifiedProviderAndNoSchoolCapability() {
+        PluginReadOnlyConnector distance = mock(PluginReadOnlyConnector.class);
+        when(distance.getProviderType()).thenReturn("ssbenz_xbd");
+        when(distance.projects()).thenReturn(List.of(new com.course.platform.domain.vo.plugin.PluginProjectOption("xbd", "总公里计划")));
+        var registry = new PluginConnectorRegistry(List.of(connector, distance));
+        service = new PluginIntegrationServiceImpl(new PluginResearchCatalog(registry), registry, mapper, providers);
+        ApiProvider provider = configured(1, true);
+        provider.setProviderType("ssbenz_xbd");
+        var rows = List.of(new PluginProduct("0", "总公里计划 · 方案 0", new BigDecimal("0.20"), "元/公里"));
+        when(distance.fetchCatalog(provider, "xbd")).thenReturn(rows);
+        assertEquals(rows, service.fetchCatalog("P05", 9L, "xbd"));
+        assertThrows(BusinessException.class, () -> service.searchSchools("P05", 9L, new PluginPageQuery(1, 20, "")));
+        provider.setStatus(2);
+        assertThrows(ProviderRequestException.class, () -> service.fetchCatalog("P05", 9L, "xbd"));
+        provider.setStatus(1);
+        provider.setProviderType("27");
+        assertThrows(BusinessException.class, () -> service.fetchCatalog("P05", 9L, "xbd"));
+        verify(distance, times(1)).fetchCatalog(any(), any());
+        verify(distance, never()).searchSchools(any(), any());
+    }
+
 }

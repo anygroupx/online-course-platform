@@ -29,7 +29,7 @@
               class="platform-option"
             >
               <div class="platform-option-content">
-                <span class="platform-name">{{ platform.name }}</span>
+                <span class="platform-name">{{ platform.displayName ?? platform.name }}</span>
                 <span class="platform-price">{{ (platform.basePrice * personalPriceMultiplier).toFixed(2) }}元</span>
               </div>
             </el-option>
@@ -405,10 +405,10 @@ const formatPlatformLabel = (platform) => {
   const price = (platform.basePrice * personalPriceMultiplier.value).toFixed(2);
   if (isMobile.value) {
     // 移动端：简化显示
-    return `${platform.name}（${price}元）`;
+    return `${platform.displayName ?? platform.name}（${price}元）`;
   }
   // PC端：完整显示
-  return `${platform.name}（${price}元）`;
+  return `${platform.displayName ?? platform.name}（${price}元）`;
 };
 
 const handlePlatformChange = (platformId) => {

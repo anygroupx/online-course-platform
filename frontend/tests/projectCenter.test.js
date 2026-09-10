@@ -58,3 +58,39 @@ test("only a current READY quote can be confirmed and naive timestamps mean Beij
   ])
     assert.equal(projectQuoteReady({ ...quote, ...change }, now), false);
 });
+
+test("initial account funding is opt-in and rejects malformed or unbounded units", async () => {
+  const { projectOpeningUnits } = await import("../src/utils/projectCenter.js");
+  assert.equal(projectOpeningUnits(false, "garbage"), null);
+  assert.equal(projectOpeningUnits(true, "8.123456"), "8.123456");
+  for (const value of ["", "0", "-1", "100001", "1e2", "0.0000001", null])
+    assert.equal(projectOpeningUnits(true, value), undefined);
+});
+
+test("opening quote requires exact arithmetic, identity, deadline and complete results", async () => {
+  const { validProjectOpeningOperation, projectOpeningFunded } = await import("../src/utils/projectCenter.js");
+  const q = { id: "7620966f-df58-4b6f-a035-000000000001", accountId: "7620966f-df58-4b6f-a035-000000000002",
+    projectId: 7, projectTitle: "项目甲", action: "PROVISION", state: "READY", units: "0.05", unitPrice: "0.25",
+    amount: "0.02", balanceAfter: null, expiresAt: "2099-01-01T10:00:00", warnings: [] };
+  assert.equal(validProjectOpeningOperation(q, { projectId: 7, units: "0.050000" }), true);
+  assert.equal(projectOpeningFunded(q), true);
+  for (const changed of [{ amount: "0.01" }, { units: "8" }, { unitPrice: "1e3" }, { id: "oops" },
+    { projectId: 8 }, { expiresAt: undefined }, { warnings: null }, { balanceAfter: "1" }, { state: "SUCCEEDED" }])
+    assert.equal(validProjectOpeningOperation({ ...q, ...changed }, q), false);
+  const done = { ...q, state: "SUCCEEDED", balanceAfter: "0.05" };
+  assert.equal(validProjectOpeningOperation(done, q), true);
+  assert.equal(validProjectOpeningOperation({ ...done, id: q.accountId }, q), false);
+  const free = { ...q, units: "0", amount: "0.00" };
+  assert.equal(validProjectOpeningOperation(free, { projectId: 7, units: null }), true);
+  assert.equal(projectOpeningFunded(free), false);
+});
+
+test("funded opening reconciliation states refund and acceptance effects without another charge", async () => {
+  const { projectResolutionEffect } = await import("../src/utils/projectCenter.js");
+  const paid = { action: "PROVISION", units: "8", amount: "2.00" };
+  assert.match(projectResolutionEffect(paid, "NOT_ACCEPTED"), /返还原充值预扣 ¥2.00/);
+  assert.match(projectResolutionEffect(paid, "ACCEPTED"), /8 额度和 ¥2.00/);
+  assert.match(projectResolutionEffect(paid, "ACCEPTED"), /不会再次扣款或开户/);
+  assert.doesNotMatch(projectResolutionEffect({ ...paid, units: "0", amount: "0.00" }, "NOT_ACCEPTED"), /返还/);
+  assert.match(projectResolutionEffect({ ...paid, action: "TOP_UP" }, "NOT_ACCEPTED"), /返还/);
+});

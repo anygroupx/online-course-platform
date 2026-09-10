@@ -11,6 +11,9 @@ public interface ProjectCenterGateway {
 
     CustomerReceipt provision(ApiProvider provider, String remoteProjectId);
 
+    /** A single account-creation request with explicitly confirmed initial credit; never replay. */
+    CustomerReceipt provision(ApiProvider provider, String remoteProjectId, BigDecimal initialUnits);
+
     CustomerReceipt customer(ApiProvider provider, String remoteProjectId, String customerId);
 
     AdjustmentReceipt adjust(

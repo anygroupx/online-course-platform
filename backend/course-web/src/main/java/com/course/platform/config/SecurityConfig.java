@@ -120,7 +120,8 @@ public class SecurityConfig {
                         // Native-service controllers enforce finer, dual financial permissions at method level.
                         .requestMatchers("/admin/service-products/**", "/admin/service-orders/**", "/admin/service-order-operations/**",
                                 "/admin/plugin-integrations/**", "/admin/service-projects/**", "/admin/service-project-catalog", "/admin/project-operations/**",
-                                "/admin/project-tickets/**", "/admin/project-ticket-operations/**", "/admin/project-reports/overview")
+                                "/admin/project-tickets/**", "/admin/project-ticket-operations/**", "/admin/project-reports/overview", "/admin/project-reports/owners", "/admin/project-reports/owners/*",
+                                "/admin/project-reports/owners/*/accounts", "/admin/project-reports/owners/*/clients", "/admin/project-reports/ledger")
                                 .hasAuthority("api-provider:update")
                         .requestMatchers("/admin/platforms/**", "/admin/platform-categories/**").hasAuthority("platform:update")
                         .requestMatchers("/admin/security/**").authenticated()

@@ -14,6 +14,11 @@
         prop="title"
         label="商品名称"
         min-width="180"
+      /><el-table-column
+        prop="displayName"
+        label="显示别名"
+        min-width="180"
+      ><template #default="{ row }">{{ row.displayName ?? row.title }}</template></el-table-column
       /><el-table-column label="服务项目" min-width="140"
         ><template #default="{ row }"
           >{{ serviceNames[row.providerType] }} · {{ row.project }}</template
@@ -114,6 +119,8 @@
               :label="label"
               :value="key" /></el-select
         ></el-form-item>
+        <el-alert v-if="selectedType === 'ssbenz_xbd'" type="info" :closable="false"
+          title="总公里计划按公里计价；方案 0 / 1 仅为编号，请根据已核实的服务说明命名。只提供提交状态，不提供完成进度或自动退款。" />
         <el-form-item v-if="selectedType !== 'sxdk_tw'" label="服务商品"
           ><div class="provider-row">
             <el-select
@@ -351,7 +358,7 @@ function providerChanged() {
   }
   form.value.project = ["flash", "wuxin"].includes(selectedType.value)
     ? "sdxy"
-    : "default";
+    : selectedType.value === "ssbenz_xbd" ? "xbd" : "default";
   form.value.remoteProductId = "";
   remoteProducts.value = [];
 }
@@ -367,9 +374,9 @@ async function readCatalog() {
     type = selectedType.value;
   try {
     const r = await fetchPluginCatalog(
-      { flash: "P01", heisha: "P03", jiguang: "P04", wuxin: "P10" }[type],
+      { flash: "P01", heisha: "P03", jiguang: "P04", wuxin: "P10", ssbenz_xbd: "P05" }[type],
       providerId,
-      type === "flash" ? project : null,
+      ["flash", "ssbenz_xbd"].includes(type) ? project : null,
     );
     if (form.value.providerId !== providerId || form.value.project !== project)
       return;

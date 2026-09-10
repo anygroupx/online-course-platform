@@ -159,6 +159,11 @@
       >
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="name" label="平台名称" width="150" />
+        <el-table-column label="显示别名" width="150">
+          <template #default="scope">
+            {{ scope.row.displayName ?? scope.row.name }}
+          </template>
+        </el-table-column>
         <el-table-column prop="basePrice" label="基础价格" width="100" />
         <el-table-column prop="rateType" label="费率类型" width="100">
           <template #default="scope">
@@ -250,6 +255,14 @@
       <el-form :model="form" label-width="120px" status-icon>
         <el-form-item label="平台名称">
           <el-input v-model="form.name" placeholder="请输入平台名称" />
+        </el-form-item>
+        <el-form-item label="显示别名">
+          <el-input
+            v-model="form.displayName"
+            clearable
+            maxlength="100"
+            placeholder="留空时显示平台名称"
+          />
         </el-form-item>
         <el-form-item label="基础价格">
           <el-input-number v-model="form.basePrice" :min="0" :precision="2" />
@@ -405,7 +418,7 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :xs="24" :md="8">
-            <el-form-item label="价格倍率">
+            <el-form-item label="默认价格倍率">
               <el-input-number
                 v-model="importForm.priceMultiplier"
                 :min="0.01"
@@ -413,6 +426,7 @@
                 :precision="2"
                 style="width: 100%"
               />
+              <span class="form-tip">分类已设置倍率时优先使用分类倍率</span>
             </el-form-item>
           </el-col>
           <el-col :xs="24" :md="8">
@@ -465,7 +479,7 @@
         </el-table-column>
         <el-table-column label="导入价格" width="105" align="right">
           <template #default="scope">
-            ¥{{ formatProductPrice(Number(scope.row.price || 0) * Number(importForm.priceMultiplier || 1)) }}
+            ¥{{ formatProductPrice(Number(scope.row.price || 0) * productImportMultiplier(scope.row)) }}
           </template>
         </el-table-column>
         <el-table-column label="状态" width="105" align="center">
@@ -499,6 +513,19 @@
       <el-form :model="categoryForm" label-width="100px" status-icon>
         <el-form-item label="分类名称">
           <el-input v-model="categoryForm.name" placeholder="请输入分类名称" />
+        </el-form-item>
+        <el-form-item label="价格倍率">
+          <el-input-number
+            v-model="categoryForm.priceMultiplier"
+            :min="0.01"
+            :max="999.99"
+            :step="0.1"
+            :precision="2"
+            clearable
+            placeholder="留空时使用导入倍率"
+            style="width: 100%"
+          />
+          <span class="form-tip">留空时使用导入时填写的倍率</span>
         </el-form-item>
         <el-form-item label="排序">
           <el-input-number v-model="categoryForm.sortOrder" :min="0" />
@@ -564,6 +591,7 @@ const dialogVisible = ref(false);
 const dialogTitle = ref("添加平台");
 const form = ref({
   name: "",
+  displayName: null,
   basePrice: 0,
   rateType: "MULTIPLY",
   passwordEnabled: 0,
@@ -615,6 +643,7 @@ const categoryDialogTitle = ref("编辑分类");
 const categoryForm = ref({
   id: null,
   name: "",
+  priceMultiplier: null,
   sortOrder: 0,
   status: 1,
 });
@@ -702,6 +731,7 @@ const handleQuickAdd = (categoryData) => {
   dialogTitle.value = "添加平台";
   form.value = {
     name: "",
+    displayName: null,
     basePrice: 0,
     rateType: "MULTIPLY",
     passwordEnabled: 0,
@@ -785,6 +815,7 @@ const handleEditCategory = (data) => {
   categoryForm.value = {
     id: data.realId,
     name: data.name,
+    priceMultiplier: data.priceMultiplier ?? null,
     sortOrder: data.sortOrder || 0,
     status: 1,
   };
@@ -884,6 +915,7 @@ const handleCreate = () => {
   dialogTitle.value = "添加平台";
   form.value = {
     name: "",
+    displayName: null,
     basePrice: 0,
     rateType: "MULTIPLY",
     passwordEnabled: 0,
@@ -1021,6 +1053,16 @@ const handleProductSelectionChange = (rows) => {
 const formatProductPrice = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? number.toFixed(2) : "0.00";
+};
+
+const productImportMultiplier = (product) => {
+  const matchedCategory = categories.value.find((category) => {
+    const sameProvider = Number(category.remoteApiProviderId) === Number(importForm.value.apiProviderId);
+    const sameRemoteCategory = String(category.remoteCategoryId ?? "") === String(product.categoryId ?? "");
+    const sameLegacyCategory = String(category.id) === String(product.categoryId ?? "");
+    return (sameProvider && sameRemoteCategory) || sameLegacyCategory;
+  });
+  return Number(matchedCategory?.priceMultiplier ?? importForm.value.priceMultiplier ?? 1);
 };
 
 const submitImport = async () => {

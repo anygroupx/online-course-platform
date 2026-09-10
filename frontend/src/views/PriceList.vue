@@ -24,7 +24,7 @@
           <template #default="scope">
             <div class="platform-name">
               <el-icon><Reading /></el-icon>
-              <span>{{ scope.row.name }}</span>
+              <span>{{ scope.row.displayName ?? scope.row.name }}</span>
             </div>
           </template>
         </el-table-column>

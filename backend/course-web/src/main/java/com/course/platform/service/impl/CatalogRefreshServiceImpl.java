@@ -12,6 +12,7 @@ import com.course.platform.domain.catalogrefresh.CatalogRefreshTypes.*;
 import com.course.platform.domain.dto.PlatformItem;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.entity.CoursePlatform;
+import com.course.platform.domain.entity.PlatformCategory;
 import com.course.platform.domain.servicecommerce.ServiceTime;
 import com.course.platform.infra.persistence.mapper.*;
 import com.course.platform.security.SecurityUtils;
@@ -39,6 +40,7 @@ import java.util.function.Supplier;
 public class CatalogRefreshServiceImpl implements CatalogRefreshService {
     private final CoursePriceRefreshMapper batches;
     private final CoursePlatformMapper platforms;
+    private final PlatformCategoryMapper categories;
     private final ApiProviderMapper providers;
     private final PlatformDockingService docking;
     private final PlatformTransactionManager transactions;
@@ -108,6 +110,20 @@ public class CatalogRefreshServiceImpl implements CatalogRefreshService {
                                         .orderByAsc(CoursePlatform::getId)
                                         .last("LIMIT 501"));
         if (locals.size() > 500) throw bad("单次最多更新500个本地课程，请缩小分类或勾选范围");
+        var categoryIds =
+                locals.stream()
+                        .map(CoursePlatform::getCategoryId)
+                        .filter(Objects::nonNull)
+                        .collect(java.util.stream.Collectors.toSet());
+        Map<Long, BigDecimal> categoryMultipliers =
+                categoryIds.isEmpty()
+                        ? Map.of()
+                        : categories.selectBatchIds(categoryIds).stream()
+                                .filter(categoryEntity -> categoryEntity.getPriceMultiplier() != null)
+                                .collect(
+                                        java.util.stream.Collectors.toMap(
+                                                PlatformCategory::getId,
+                                                PlatformCategory::getPriceMultiplier));
         var byRemote = new HashMap<String, List<CoursePlatform>>();
         for (var local : locals)
             byRemote.computeIfAbsent(local.getDockParam(), k -> new ArrayList<>()).add(local);
@@ -125,11 +141,16 @@ public class CatalogRefreshServiceImpl implements CatalogRefreshService {
                 unimported++;
                 continue;
             }
-            BigDecimal price = roundedPrice(item.getPrice(), form.multiplier());
             if (item.getContent() != null && item.getContent().length() > 500)
                 throw bad("上游说明超过本平台500字限制，未生成预览");
             for (var local : matches) {
                 if (local.getBasePrice() == null) throw bad("本地课程价格缺失，请先修复课程配置");
+                BigDecimal multiplier =
+                        local.getCategoryId() == null
+                                ? form.multiplier()
+                                : categoryMultipliers.getOrDefault(
+                                        local.getCategoryId(), form.multiplier());
+                BigDecimal price = roundedPrice(item.getPrice(), multiplier);
                 String description =
                         item.getContent() == null ? local.getDescription() : item.getContent();
                 boolean changed =

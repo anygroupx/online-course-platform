@@ -4,7 +4,7 @@
       <div>
         <span class="eyebrow">PROJECTS / 项目中心</span>
         <h1>每个项目，独立一份额度。</h1>
-        <p>开通专属账户，再从平台余额充值。先预览、后确认，资金去向可追溯。</p>
+        <p>开通专属账户，可选择同时充值初始额度。先预览、后确认，费用和记录清晰可查。</p>
       </div>
       <el-button :loading="loading" @click="load">刷新项目</el-button>
     </header>
@@ -57,7 +57,7 @@
             {{
               project.account?.balanceCheckedAt
                 ? `${project.account.balanceCheckedAt.replace("T", " ")} 更新`
-                : "尚未读取余额；开通不会自动充值"
+                : "尚未读取余额；只有确认充值后才扣款"
             }}
           </p>
         </div>
@@ -205,6 +205,7 @@
     </section>
     <ProjectTickets ref="ticketPanel" :accounts="ticketAccounts" />
     <el-drawer
+      class="project-action-drawer"
       v-model="formOpen"
       destroy-on-close
       size="min(500px,100vw)"
@@ -217,7 +218,14 @@
           {{ selected.title }}<span>独立子钱包 · 不自动执行其他项目任务</span>
         </div>
         <el-form label-position="top" :disabled="busy">
-          <el-form-item v-if="action !== 'PROVISION'" label="项目额度"
+          <el-form-item v-if="action === 'PROVISION'" label="开户方式">
+            <el-radio-group v-model="initialFunding" class="opening-options">
+              <el-radio :value="false" border>零余额开通</el-radio>
+              <el-radio :value="true" border>开通并充值</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          <el-alert v-if="formError" :title="formError" type="warning" :closable="false" class="opening-error" />
+          <el-form-item v-if="action !== 'PROVISION' || initialFunding" :label="action === 'PROVISION' ? '初始项目额度' : '项目额度'"
             ><el-input
               v-model="units"
               inputmode="decimal"
@@ -230,14 +238,15 @@
                 ? "预计扣除平台余额"
                 : action === "WITHDRAW"
                   ? "预计到账平台余额"
-                  : "开户初始余额"
+                  : initialFunding ? "开户并充值，预计扣除账户余额" : "零余额开户费用"
             }}</span
             ><strong>¥{{ estimate }}</strong>
             <p>最终以服务器校验的有效报价为准。</p>
           </div>
           <div class="policy-note">
+            <p v-if="action === 'PROVISION' && initialFunding">开户费率 ¥{{ selected.unitPrice }} / 额度，充值费用向上取整到分。修改开户方式或额度后须重新确认规则。</p>
             <p v-if="action === 'PROVISION'">
-              仅创建本人专属的零余额项目账户，不会自动充值。项目账户密钥已加密保管。
+              默认零余额开通，不扣款；也可选择初始额度，核对费用后同时开通和充值。
             </p>
             <p v-else>
               本账户费率冻结为 ¥{{ selected.account.unitPrice }} /
@@ -262,6 +271,7 @@
       >
     </el-drawer>
     <el-dialog
+      class="project-action-dialog"
       v-model="quoteOpen"
       title="确认项目操作"
       width="min(480px,calc(100vw - 24px))"
@@ -273,6 +283,10 @@
         ><p class="operation-name">
           {{ quote.projectTitle }} · {{ projectActions[quote.action] }}
         </p>
+        <dl v-if="quote.action === 'PROVISION'" class="opening-summary">
+          <div><dt>初始项目额度</dt><dd>{{ projectAmount(quote.units) }}</dd></div>
+          <div><dt>本次冻结费率</dt><dd>¥{{ projectAmount(quote.unitPrice) }} / 额度</dd></div>
+        </dl>
         <div class="confirm-amount">¥{{ quote.amount }}</div>
         <p class="amount-caption">
           {{
@@ -280,7 +294,7 @@
               ? "将扣除平台余额"
               : quote.action === "WITHDRAW"
                 ? "确认扣除成功后才转入账户余额"
-                : "零余额开户，不扣款"
+                : projectOpeningFunded(quote) ? "开户并充值，将扣除账户余额" : "零余额开户，不扣款"
           }}
         </p>
         <el-tag
@@ -309,7 +323,7 @@
           type="primary"
           :loading="busy"
           @click="confirm"
-          >确认{{ quote?.action === "PROVISION" ? "开户" : "兑换" }}</el-button
+          >确认{{ quote?.action === "PROVISION" ? (projectOpeningFunded(quote) ? "开户并充值" : "开户") : "兑换" }}</el-button
         ><el-button
           v-else-if="
             quote &&
@@ -325,7 +339,7 @@
   </main>
 </template>
 <script setup>
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import ProjectTickets from "@/components/projectcenter/ProjectTickets.vue";
 import {
   listProjects,
@@ -342,6 +356,9 @@ import {
   estimateProjectTransfer,
   projectActionAllowed,
   projectQuoteReady,
+  projectOpeningFunded,
+  projectOpeningUnits,
+  validProjectOpeningOperation,
 } from "@/utils/projectCenter";
 const projects = ref([]),
   total = ref(0),
@@ -361,6 +378,8 @@ const ticketAccounts = computed(() =>
 const selected = ref(null),
   action = ref("PROVISION"),
   units = ref("10"),
+  initialFunding = ref(false),
+  formError = ref(""),
   consent = ref(false),
   formOpen = ref(false),
   quote = ref(null),
@@ -370,14 +389,15 @@ const selected = ref(null),
   clock = ref(Date.now());
 let alive = true,
   loadVersion = 0,
-  historyVersion = 0;
+  historyVersion = 0,
+  operationVersion = 0;
 const timer = setInterval(() => (clock.value = Date.now()), 1000);
 const estimate = computed(() =>
-  action.value === "PROVISION"
+  action.value === "PROVISION" && !initialFunding.value
     ? "0.00"
     : estimateProjectTransfer(
         units.value,
-        selected.value?.account?.unitPrice,
+        action.value === "PROVISION" ? selected.value?.unitPrice : selected.value?.account?.unitPrice,
         action.value === "WITHDRAW",
       ),
 );
@@ -423,8 +443,12 @@ async function refreshBalance(project) {
     refreshing.value = null;
   }
 }
+watch([initialFunding, units], () => { consent.value = false; formError.value = ""; });
 function begin(project, next) {
-  if (!projectActionAllowed(project, next)) return;
+  if (busy.value || !projectActionAllowed(project, next)) return;
+  operationVersion++;
+  initialFunding.value = false;
+  formError.value = "";
   selected.value = project;
   action.value = next;
   units.value = "10";
@@ -435,64 +459,73 @@ function closeForm(done) {
   if (!busy.value) done();
 }
 async function preview() {
-  if (busy.value || !consent.value) return;
-  busy.value = true;
+  if (busy.value || !consent.value || estimate.value === "—") return;
+  const version = ++operationVersion, projectId = selected.value.id, actionValue = action.value;
+  const amount = actionValue === "PROVISION" ? projectOpeningUnits(initialFunding.value, units.value) : units.value;
+  if (amount === undefined) return;
+  busy.value = true; formError.value = "";
   try {
-    const data = await quoteProject(selected.value.id, {
-      action: action.value,
-      units: action.value === "PROVISION" ? null : units.value,
-      confirmedPolicy: true,
-    });
-    if (alive) {
-      quote.value = data;
-      attempted.value = false;
-      quoteOpen.value = true;
-      formOpen.value = false;
-    }
+    const data = await quoteProject(projectId, { action: actionValue, units: amount, confirmedPolicy: true });
+    if (!alive || version !== operationVersion) return;
+    if (actionValue === "PROVISION" && (data?.state !== "READY" || !validProjectOpeningOperation(data, { projectId, units: amount })))
+      throw new Error("incomplete opening quote");
+    quote.value = data;
+    attempted.value = false;
+    quoteOpen.value = true;
+    formOpen.value = false;
   } catch {
-  } finally {
-    busy.value = false;
-  }
+    if (alive && version === operationVersion) formError.value = "预览未完成或费用信息不完整，未开户、未扣款。请重新核对。";
+  } finally { if (alive && version === operationVersion) busy.value = false; }
+}
+function acceptOperation(value, previous) {
+  if (previous.action === "PROVISION" && !validProjectOpeningOperation(value, previous))
+    throw new Error("incomplete opening receipt");
+  quote.value = value;
 }
 async function confirm() {
   if (busy.value || attempted.value || !projectQuoteReady(quote.value)) return;
+  const previous = quote.value, version = ++operationVersion;
   busy.value = true;
   attempted.value = true;
   try {
-    quote.value = await confirmProjectOperation(quote.value.id);
+    const data = await confirmProjectOperation(previous.id);
+    if (!alive || version !== operationVersion) return;
+    acceptOperation(data, previous);
     await Promise.all([load(), loadHistory()]);
   } catch {
-    quote.value = {
-      ...quote.value,
-      state: "NETWORK_UNKNOWN",
+    if (alive && version === operationVersion) quote.value = {
+      ...previous, state: "NETWORK_UNKNOWN",
       warnings: ["请求结果尚未确认，请检查同一操作，不要重新提交或自动退款。"],
     };
-  } finally {
-    busy.value = false;
-  }
+  } finally { if (alive && version === operationVersion) busy.value = false; }
 }
 async function check() {
   if (!quote.value || busy.value) return;
+  const previous = quote.value, version = ++operationVersion;
   busy.value = true;
   try {
-    quote.value = await getProjectOperation(quote.value.id);
+    const data = await getProjectOperation(previous.id);
+    if (!alive || version !== operationVersion) return;
+    acceptOperation(data, previous);
     await Promise.all([load(), loadHistory()]);
   } catch {
-  } finally {
-    busy.value = false;
-  }
+    if (alive && version === operationVersion) quote.value = { ...previous, warnings: ["原操作结果尚未确认或数据不完整；没有重复开户、充值或退款。"] };
+  } finally { if (alive && version === operationVersion) busy.value = false; }
 }
 async function inspect(id) {
   if (busy.value) return;
+  const version = ++operationVersion;
   busy.value = true;
   try {
-    quote.value = await getProjectOperation(id);
+    const data = await getProjectOperation(id);
+    if (!alive || version !== operationVersion) return;
+    if (data?.id !== id || data?.action === "PROVISION" && !validProjectOpeningOperation(data)) throw new Error("incomplete operation");
+    quote.value = data;
     attempted.value = true;
     quoteOpen.value = true;
   } catch {
-  } finally {
-    busy.value = false;
-  }
+    if (alive && version === operationVersion) error.value = "操作记录读取失败或信息不完整，请重试；未再次提交操作。";
+  } finally { if (alive && version === operationVersion) busy.value = false; }
 }
 load();
 loadHistory();
@@ -500,6 +533,7 @@ onBeforeUnmount(() => {
   alive = false;
   loadVersion++;
   historyVersion++;
+  operationVersion++;
   clearInterval(timer);
 });
 </script>
@@ -643,6 +677,16 @@ h2 {
   font-weight: 400;
   margin-top: 8px;
 }
+:global(.project-action-drawer .el-button), :global(.project-action-dialog .el-button),
+:global(.project-action-drawer .el-input__wrapper) { min-height: 44px; box-sizing: border-box; }
+:global(.project-action-drawer .el-drawer__close-btn), :global(.project-action-dialog .el-dialog__headerbtn) { min-width: 44px; min-height: 44px; }
+.opening-options { display: grid; gap: 12px; width: 100%; }
+.opening-options :deep(.el-radio) { margin: 0; min-height: 48px; height: auto; padding: 14px; }
+.opening-error { margin-bottom: 18px; }
+.opening-summary { display: grid; gap: 12px; padding: 16px; background: var(--el-fill-color-extra-light); border-radius: 8px; }
+.opening-summary > div { display: flex; justify-content: space-between; gap: 16px; font-size: 13px; line-height: 1.8; }
+.opening-summary dt { color: var(--el-text-color-secondary); }
+.opening-summary dd { margin: 0; overflow-wrap: anywhere; text-align: right; }
 .quote-estimate {
   display: grid;
   gap: 12px;

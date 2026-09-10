@@ -85,7 +85,7 @@
             <el-option
               v-for="platform in platformList"
               :key="platform.id"
-              :label="`${platform.name}（基础价格：${platform.basePrice}元）`"
+              :label="`${platform.displayName ?? platform.name}（基础价格：${platform.basePrice}元）`"
               :value="platform.id"
             />
           </el-select>
@@ -232,7 +232,7 @@
           currentOrder.orderNo
         }}</el-descriptions-item>
         <el-descriptions-item label="平台名称">{{
-          currentOrder.platformName
+          displayOrderPlatformName(currentOrder)
         }}</el-descriptions-item>
         <el-descriptions-item label="学校名称">{{
           currentOrder.schoolName
@@ -370,6 +370,11 @@ const exportDialogVisible = ref(false);
 
 // 数据源
 const platformList = ref([]);
+
+const displayOrderPlatformName = (order) => {
+  const platform = platformList.value.find((item) => item.id === order?.platformId);
+  return platform?.displayName ?? platform?.name ?? order?.displayName ?? order?.platformName;
+};
 const currentOrder = ref(null);
 const exportLoading = ref(false);
 const exportForm = ref({

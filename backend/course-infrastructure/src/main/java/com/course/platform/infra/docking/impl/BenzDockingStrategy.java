@@ -110,42 +110,10 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
 
         JSONObject json = ProviderResponseParser.parseObject(response);
         if (json.getInt("code") == 1 || json.getInt("code") == 0) { // 参考代码中 code==0 为成功
-            // 尝试从响应中提取订单ID
-            String thirdOrderId = null;
-            
-            // 方式1: 检查 data.id 字段
-            if (json.containsKey("data")) {
-                Object dataObj = json.get("data");
-                if (dataObj instanceof JSONObject) {
-                    JSONObject data = (JSONObject) dataObj;
-                    thirdOrderId = data.getStr("id");
-                } else if (dataObj instanceof JSONArray) {
-                    JSONArray dataArray = (JSONArray) dataObj;
-                    if (dataArray.size() > 0 && dataArray.get(0) instanceof JSONObject) {
-                        thirdOrderId = ((JSONObject) dataArray.get(0)).getStr("id");
-                    }
-                }
-            }
-            
-            // 方式2: 直接从根级别获取 id 字段
-            if (StrUtil.isBlank(thirdOrderId)) {
-                thirdOrderId = json.getStr("id");
-            }
-            
-            // 方式3: 从 msg 中提取（某些API可能在msg中返回订单号）
-            if (StrUtil.isBlank(thirdOrderId)) {
-                String msg = json.getStr("msg");
-                // 如果msg包含数字，尝试提取
-                if (StrUtil.isNotBlank(msg) && msg.matches(".*\\d+.*")) {
-                    // 提取第一个连续的数字序列
-                    java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("\\d+");
-                    java.util.regex.Matcher matcher = pattern.matcher(msg);
-                    if (matcher.find()) {
-                        thirdOrderId = matcher.group();
-                    }
-                }
-            }
-            
+            // An accepted order without one unambiguous structured ID stays unbound.
+            // Digits in message text can be a price/count, never an ownership receipt.
+            String thirdOrderId = BenzReceiptMatcher.createdId(response);
+
             log.info("Benz下单成功，已获取第三方订单ID: {}", StrUtil.isNotBlank(thirdOrderId));
             return DockResult.success("下单成功", thirdOrderId);
         } else {
@@ -155,36 +123,15 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
 
     @Override
     public OrderProgressResult queryOrderProgress(CourseOrder order, CoursePlatform platform, ApiProvider apiProvider) {
-        String url = apiProvider.getApiUrl() + "/api.php?act=chadan";
-        
-        Map<String, Object> params = new HashMap<>();
-        params.put("uid", apiProvider.getUsername());
-        params.put("key", apiProvider.getApiKey());
-        params.put("user", order.getStudentAccount()); // 学生账号
-        params.put("pass", order.getStudentPassword()); // 学生密码
-        params.put("school", order.getSchoolName());    // 学校名称
-        params.put("kcname", order.getCourseName());    // 课程名称（更精确匹配）
-
-        log.info("Benz查单请求: params={}", DockingLogSanitizer.sanitize(params));
-        String response = apiHttpClient.postForString(apiProvider, url, params);
-        log.debug("Benz查单响应已接收: length={}", response == null ? 0 : response.length());
-
-        JSONObject json = ProviderResponseParser.parseObject(response);
-        if (json.getInt("code") == 1) {
-            JSONArray data = json.getJSONArray("data");
-            if (data != null && data.size() > 0) {
-                // 返回第一个匹配的订单（已通过参数精确匹配）
-                return parseProgressItem(data.getJSONObject(0));
-            }
-            // 未找到对应课程
-            return OrderProgressResult.builder()
-                    .progress(order.getProgress())
-                    .orderStatus(order.getOrderStatus())
-                    .remarks("未在第三方平台找到该课程订单")
-                    .build();
-        } else {
-            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
+        if (StrUtil.isBlank(order.getThirdOrderId())) {
+            // Never infer a receipt from the first account/name result, including before budan.
+            throw new ProviderRequestException(ProviderRequestException.Reason.UNSUPPORTED_OPERATION);
         }
+        String response = apiHttpClient.postForString(apiProvider,
+                apiProvider.getApiUrl() + "/api.php?act=chadan",
+                BenzReceiptMatcher.query(order, apiProvider.getUsername(), apiProvider.getApiKey()));
+        return parseProgressItem(BenzReceiptMatcher.select(response, order, platform,
+                order.getThirdOrderId(), false));
     }
 
     private OrderProgressResult parseProgressItem(JSONObject item) {
@@ -240,24 +187,8 @@ public class BenzDockingStrategy implements PlatformDockingStrategy {
         // 补单需要第三方订单ID (yid)
         String thirdOrderId = order.getThirdOrderId();
         
-        // 如果没有 thirdOrderId，尝试通过查单获取
         if (StrUtil.isBlank(thirdOrderId)) {
-            log.warn("订单缺少第三方订单ID，尝试通过查单获取：orderId={}", order.getId());
-            try {
-                OrderProgressResult progressResult = queryOrderProgress(order, platform, apiProvider);
-                thirdOrderId = progressResult.getThirdOrderId();
-                
-                if (StrUtil.isNotBlank(thirdOrderId)) {
-                    log.info("通过查单获取到第三方订单ID");
-                    // 更新订单的 third_order_id
-                    order.setThirdOrderId(thirdOrderId);
-                } else {
-                    return DockResult.fail("无法获取第三方订单ID，补单失败");
-                }
-            } catch (Exception e) {
-                log.error("查询第三方订单ID失败：{}", e.getMessage(), e);
-                return DockResult.fail(ProviderRequestException.PUBLIC_MESSAGE);
-            }
+            return DockResult.fail("请先核对并恢复执行编号，再发起补单");
         }
 
         Map<String, Object> params = new HashMap<>();

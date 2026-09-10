@@ -1,5 +1,6 @@
 package com.course.platform.controller;
 
+import cn.hutool.core.util.StrUtil;
 import org.springframework.security.access.prepost.PreAuthorize;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -50,6 +51,7 @@ public class CoursePlatformManageController {
                                         Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         checkAdmin(userId);
+        platform.setDisplayName(StrUtil.trimToNull(platform.getDisplayName()));
 
         Long id = coursePlatformService.createPlatform(platform);
 
@@ -69,6 +71,7 @@ public class CoursePlatformManageController {
                                         Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         checkAdmin(userId);
+        platform.setDisplayName(StrUtil.trimToNull(platform.getDisplayName()));
 
         coursePlatformService.updatePlatform(platform);
 

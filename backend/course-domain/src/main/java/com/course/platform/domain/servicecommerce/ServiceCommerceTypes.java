@@ -62,7 +62,7 @@ public final class ServiceCommerceTypes {
 
     public record OrderForm(
             @Min(0) @Max(365) int quantity,
-            @DecimalMin("0.1") @DecimalMax("50") @Digits(integer = 2, fraction = 2)
+            @DecimalMin("0.01") @DecimalMax("999999.99") @Digits(integer = 6, fraction = 2)
                     BigDecimal distance,
             @NotNull @Size(max = 64) Map<@Size(max = 40) String, @Size(max = 2048) String> fields,
             @Size(max = 365) List<@Size(max = 19) String> taskTimes,
@@ -191,7 +191,8 @@ public final class ServiceCommerceTypes {
             Long version,
             List<String> actions,
             InternshipSchedule schedule,
-            String quantityUnit) {}
+            String quantityUnit,
+            TotalDistancePlan distancePlan) {}
 
     public record QuoteView(
             String id,
@@ -204,7 +205,9 @@ public final class ServiceCommerceTypes {
             String amountLabel,
             LocalDateTime expiresAt,
             String errorCategory,
-            String quantityUnit) {
+            String quantityUnit,
+            TotalDistancePlan distancePlan,
+            String unitCharge) {
         public QuoteView(
                 String id,
                 String orderId,
@@ -227,7 +230,9 @@ public final class ServiceCommerceTypes {
                     amountLabel,
                     expiresAt,
                     errorCategory,
-                    "次");
+                    "次",
+                    null,
+                    null);
         }
     }
 
@@ -281,7 +286,14 @@ public final class ServiceCommerceTypes {
             BigDecimal distance,
             BigDecimal billablePerUnit,
             String accountLabel,
-            DailyServicePlan plan) {
+            DailyServicePlan plan,
+            TotalDistancePlan distancePlan) {
+        public PreparedOrder(
+                Map<String, Object> fields, int quantity, BigDecimal distance,
+                BigDecimal billablePerUnit, String accountLabel, DailyServicePlan plan) {
+            this(fields, quantity, distance, billablePerUnit, accountLabel, plan, null);
+        }
+
         public PreparedOrder(
                 Map<String, Object> fields,
                 int quantity,
