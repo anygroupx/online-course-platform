@@ -42,7 +42,7 @@
             item.available ? "可下单" : "暂不可用"
           }}</el-tag>
         </div>
-        <h2>{{ item.title }}</h2>
+        <h2>{{ item.displayName ?? item.title }}</h2>
         <p class="description">
           {{ item.description || "选择服务计划，确认价格后使用平台余额下单。" }}
         </p>
@@ -52,7 +52,7 @@
               (x) => !['CREATE', 'LOOKUP'].includes(x),
             )"
             :key="action"
-            >{{ actionNames[action] }}</span
+            >{{ isTotalDistanceService(item) && action === "SYNC" ? "核对提交状态" : actionNames[action] }}</span
           >
         </div>
         <footer>
@@ -91,8 +91,9 @@
 
     <el-drawer
       v-model="checkout"
+      :class="{ 'distance-checkout': isTotalDistanceService(selected) }"
       destroy-on-close
-      :title="selected?.title || '服务下单'"
+      :title="selected ? (selected.displayName ?? selected.title) : '服务下单'"
       size="min(700px, 100vw)"
       :close-on-click-modal="false"
       :before-close="beforeClose"
@@ -204,8 +205,8 @@
                     @input="clearLookup"
                 /></el-form-item>
                 <el-form-item
-                  v-if="selected.project === 'sdxy'"
-                  label="学校名称"
+                  v-if="selected.project === 'sdxy' || isTotalDistanceService(selected)"
+                  :label="isTotalDistanceService(selected) ? '学校名称（选填）' : '学校名称'"
                   class="full"
                   ><el-input
                     v-model="fields.schoolName"
@@ -214,7 +215,7 @@
                 /></el-form-item>
               </div>
               <el-button
-                v-if="!usesServiceAccountSession(selected)"
+                v-if="!usesServiceAccountSession(selected) && selected.capabilities.includes('LOOKUP')"
                 type="primary"
                 plain
                 :disabled="
@@ -250,8 +251,9 @@
             </template>
           </section>
           <section v-if="selected.providerType !== 'sxdk_tw'">
-            <h3>购买计划</h3>
-            <div class="form-grid">
+            <h3>{{ isTotalDistanceService(selected) ? "总公里计划" : "购买计划" }}</h3>
+            <TotalDistancePlanFields v-if="isTotalDistanceService(selected)" v-model="fields" v-model:distance="distance" />
+            <div v-else class="form-grid">
               <el-form-item label="购买次数"
                 ><el-input-number
                   v-model="quantity"
@@ -400,6 +402,8 @@ import HeishaFaceFields from "@/components/HeishaFaceFields.vue";
 import { newInternshipSchedule } from "@/utils/internshipServices";
 import WuxinPlanFields from "@/components/WuxinPlanFields.vue";
 import ServiceQuoteConfirm from "@/components/ServiceQuoteConfirm.vue";
+import TotalDistancePlanFields from "@/components/TotalDistancePlanFields.vue";
+import { isTotalDistanceService, distanceOrderValid } from "@/utils/totalDistanceServices";
 import { latestRequest } from "@/utils/pluginIntegrations";
 const router = useRouter();
 const internshipSchedule = ref(newInternshipSchedule());
@@ -449,7 +453,9 @@ const canPreview = computed(
     consent.value &&
     !lookupLoading.value &&
     selected.value &&
-    (selected.value.providerType === "sxdk_tw"
+    (isTotalDistanceService(selected.value)
+      ? distanceOrderValid(distance.value, fields.value)
+      : selected.value.providerType === "sxdk_tw"
       ? fields.value.account &&
         fields.value.password &&
         fields.value.name &&
@@ -529,8 +535,12 @@ function open(item) {
   };
   lookupResult.value = null;
   consent.value = false;
-  quantity.value = 10;
-  distance.value = "2";
+  quantity.value = isTotalDistanceService(item) ? 1 : 10;
+  distance.value = isTotalDistanceService(item) ? "" : "2";
+  if (isTotalDistanceService(item)) {
+    fields.value.startTime = "09:00";
+    fields.value.endTime = "21:00";
+  }
   quote.value = null;
   schoolResults.value = [];
   repair.value = false;
@@ -591,7 +601,7 @@ async function preview() {
   busy.value = true;
   try {
     quote.value = await previewServiceOrder(selected.value.id, {
-      quantity: selected.value.providerType === "sxdk_tw" ? 0 : quantity.value,
+      quantity: isTotalDistanceService(selected.value) ? 1 : selected.value.providerType === "sxdk_tw" ? 0 : quantity.value,
       distance:
         selected.value.providerType === "sxdk_tw" ? null : distance.value,
       schedule:
@@ -618,7 +628,9 @@ function onResult(result) {
   if (result.state === "SUCCEEDED") {
     fields.value.password = "";
     fields.value.authCode = "";
-    ElMessage.success("订单已提交，可在服务订单中查看进度");
+    ElMessage.success(isTotalDistanceService(selected.value)
+      ? "已记录提交，可在服务订单中核对状态；执行结果尚未确认"
+      : "订单已提交，可在服务订单中查看进度");
     router.push({ path: "/service-orders", query: { focus: result.orderId } });
   } else if (result.orderId)
     ElMessage.warning(
@@ -639,6 +651,12 @@ onBeforeUnmount(() => {
 load();
 </script>
 <style scoped>
+:global(.distance-checkout .el-input__wrapper),
+:global(.distance-checkout .el-button),
+:global(.distance-checkout .el-checkbox) { min-height: 44px; box-sizing: border-box; }
+:global(.distance-checkout .el-input__inner) { min-width: 0; }
+:global(.distance-checkout .el-checkbox__label) { white-space: normal; line-height: 1.6; }
+
 .service-store {
   max-width: 1240px;
   margin: auto;

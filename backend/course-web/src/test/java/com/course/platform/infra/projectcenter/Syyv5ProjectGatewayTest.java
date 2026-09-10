@@ -126,6 +126,38 @@ class Syyv5ProjectGatewayTest {
     }
 
     @Test
+    void fundedOpeningUsesOneCreationCallWithExactDecimalAndExplicitMatchingReceipt() {
+        when(http.getForString(any(), anyString(), anyMap()))
+                .thenReturn("{\"status\":\"success\",\"customer\":" + CUSTOMER.replace("0.00", "12.123456") + "}");
+        var receipt = gateway.provision(provider, "7", new BigDecimal("12.123456"));
+        assertEquals(new BigDecimal("12.123456"), receipt.balance());
+        verify(http, times(1)).getForString(eq(provider), eq(provider.getApiUrl()),
+                eq(Map.of("action", "generateCustomer", "api_key", "private-owner-key", "project_id", "7", "balance", "12.123456")));
+        verifyNoMoreInteractions(http);
+        assertFalse(receipt.toString().contains("private-customer-key"));
+    }
+
+    @ParameterizedTest @ValueSource(strings={"-1", "100001", "0.0000001", "1e-1000000"})
+    void invalidOpeningCreditNeverCallsSupplier(String amount) {
+        assertThrows(ProviderRequestException.class, () -> gateway.provision(provider, "7", new BigDecimal(amount)));
+        verifyNoInteractions(http);
+    }
+
+    @Test
+    void partialWrongProjectOrWrongBalanceCannotConfirmInitialFunding() {
+        for (String row : new String[]{CUSTOMER, CUSTOMER.replace("0.00", "9"),
+                CUSTOMER.replace("0.00", "8").replace("project_id\":7", "project_id\":9"),
+                CUSTOMER.replace("0.00", "8").replace("status\":1", "status\":0"),
+                CUSTOMER.replace("0.00", "8").replace("\"api_key\":\"private-customer-key\",", "")}) {
+            when(http.getForString(any(), anyString(), anyMap())).thenReturn("{\"status\":\"success\",\"customer\":" + row + "}");
+            var error = assertThrows(ProviderRequestException.class, () -> gateway.provision(provider, "7", new BigDecimal("8")));
+            assertNull(error.getCause());
+        }
+        verify(http, times(5)).getForString(any(), anyString(), anyMap());
+        verify(http, never()).postForString(any(), anyString(), anyMap());
+    }
+
+    @Test
     void openingIsOneLegacyMutatingGetWithExactlyZeroInitialBalance() {
         when(http.getForString(any(), anyString(), anyMap()))
                 .thenReturn("{\"status\":\"success\",\"customer\":" + CUSTOMER + "}");

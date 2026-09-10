@@ -126,15 +126,15 @@
               <el-form-item label="卡密">
                 <el-input
                   v-model="cardForm.cardPassword"
-                  placeholder="请输入8位卡密"
-                  maxlength="8"
+                  placeholder="请输入卡密（8到64位）"
+                  maxlength="64"
                   clearable
                 />
               </el-form-item>
               <el-form-item>
                 <el-button
                   type="primary"
-                  @click="handleCardRecharge"
+                  native-type="submit"
                   :loading="recharging"
                   :disabled="!cardForm.cardNo || !cardForm.cardPassword"
                 >
@@ -152,7 +152,7 @@
               <template #default>
                 <ul>
                   <li>卡号：16位数字</li>
-                  <li>卡密：8位字符</li>
+                  <li>卡密：8到64位字符</li>
                   <li>充值成功后余额立即到账</li>
                   <li>如有问题请联系客服</li>
                 </ul>
@@ -225,6 +225,7 @@ import { ref, onMounted } from "vue";
 import { ElMessage } from "element-plus";
 import { getUserInfo } from "../api/user";
 import { createPayment, getPaymentOrders } from "../api/payment";
+import { rechargeByCard } from "../api/card";
 
 const activeTab = ref("alipay");
 const userInfo = ref(null);
@@ -289,6 +290,9 @@ const handleCardRecharge = async () => {
     }
   } catch (error) {
     console.error("充值失败：", error);
+    if (!error?.isAxiosError) {
+      ElMessage.error("充值请求未能提交，请刷新页面后重试");
+    }
   } finally {
     recharging.value = false;
   }

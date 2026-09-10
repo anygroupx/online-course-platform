@@ -30,7 +30,7 @@
               <div class="select-trigger" @click="toggleSelect">
                 <div class="trigger-content">
                   <span v-if="selectedPlatform" class="selected-text">
-                    {{ selectedPlatform.name }}
+                    {{ selectedPlatform.displayName ?? selectedPlatform.name }}
                     <span class="price-tag">¥{{ (selectedPlatform.basePrice * personalPriceMultiplier).toFixed(2) }}</span>
                   </span>
                   <span v-else class="placeholder">请选择网课平台</span>
@@ -46,7 +46,7 @@
                   class="option-item"
                   @click="selectPlatform(platform)"
                 >
-                  <span class="platform-name">{{ platform.name }}</span>
+                  <span class="platform-name">{{ platform.displayName ?? platform.name }}</span>
                   <span class="platform-price">¥{{ (platform.basePrice * personalPriceMultiplier).toFixed(2) }}</span>
                 </div>
               </div>

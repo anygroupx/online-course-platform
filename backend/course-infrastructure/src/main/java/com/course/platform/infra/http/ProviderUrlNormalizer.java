@@ -102,6 +102,12 @@ public class ProviderUrlNormalizer {
                 throw blocked();
             }
         }
+        if ("ssbenz_xbd".equals(providerType)) {
+            String path = normalized.getRawPath().toLowerCase(Locale.ROOT);
+            // A saved API directory, not a single action. No extension guessing or fallback paths.
+            if (!"https".equals(normalized.getScheme()) || path.matches(".*\\.php(?:/.*)?")
+                    || path.matches(".*/(?:school|add|order|student|upstu|tuid)(?:/.*)?")) throw blocked();
+        }
         return normalized;
     }
 

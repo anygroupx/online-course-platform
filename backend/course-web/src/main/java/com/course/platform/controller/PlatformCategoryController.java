@@ -3,6 +3,7 @@ package com.course.platform.controller;
 import org.springframework.security.access.prepost.PreAuthorize;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.Result;
 import com.course.platform.domain.entity.PlatformCategory;
 import com.course.platform.infra.persistence.mapper.PlatformCategoryMapper;
@@ -12,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -38,6 +40,7 @@ public class PlatformCategoryController {
 
     @PostMapping
     public Result<Void> create(@RequestBody PlatformCategory category) {
+        validatePriceMultiplier(category.getPriceMultiplier());
         platformCategoryMapper.insert(category);
         
         // 记录操作日志（管理员操作）
@@ -49,6 +52,7 @@ public class PlatformCategoryController {
 
     @PutMapping
     public Result<Void> update(@RequestBody PlatformCategory category) {
+        validatePriceMultiplier(category.getPriceMultiplier());
         platformCategoryMapper.updateById(category);
         
         // 记录操作日志（管理员操作）
@@ -56,6 +60,15 @@ public class PlatformCategoryController {
                 "更新平台分类：" + category.getName(), null, null);
         
         return Result.success();
+    }
+
+    private void validatePriceMultiplier(BigDecimal multiplier) {
+        if (multiplier != null
+                && (multiplier.compareTo(BigDecimal.ZERO) <= 0
+                || multiplier.compareTo(new BigDecimal("999.99")) > 0
+                || multiplier.scale() > 2)) {
+            throw new BusinessException("价格倍率必须是0.01到999.99之间、最多两位小数的数字");
+        }
     }
 
     @DeleteMapping("/{id}")

@@ -81,19 +81,28 @@ public class Syyv5ProjectGateway
 
     @Override
     public CustomerReceipt provision(ApiProvider p, String projectId) {
+        return provision(p, projectId, BigDecimal.ZERO);
+    }
+
+    @Override
+    public CustomerReceipt provision(ApiProvider p, String projectId, BigDecimal initialUnits) {
         requireId(projectId);
+        if (initialUnits == null || initialUnits.signum() < 0
+                || initialUnits.compareTo(new BigDecimal("100000")) > 0
+                || initialUnits.stripTrailingZeros().scale() > 6) throw invalid();
+        BigDecimal expected = initialUnits.stripTrailingZeros();
         var customer =
                 parseCustomer(
                         call(
                                         p,
                                         "generateCustomer",
-                                        Map.of("project_id", projectId, "balance", "0"),
+                                        Map.of("project_id", projectId, "balance", expected.toPlainString()),
                                         false)
                                 .path("customer"),
                         projectId,
                         null,
                         false);
-        if (customer.balance().signum() != 0) throw invalid();
+        if (customer.balance().compareTo(expected) != 0 || !customer.enabled()) throw invalid();
         return customer;
     }
 

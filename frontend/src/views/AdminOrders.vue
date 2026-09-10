@@ -1156,6 +1156,10 @@
         </el-descriptions-item>
       </el-descriptions>
 
+      <div v-if="currentOrder && !isSelfOperatedOrder(currentOrder)" class="receipt-entry">
+        <el-button @click="receiptOrderId = currentOrder.id; receiptVisible = true">恢复执行编号</el-button>
+        <span>已有回执但编号未记录时，先核对归属，再确认关联；不会重新下单。</span>
+      </div>
       <el-divider content-position="left">订单执行日志</el-divider>
       <div class="provider-log-header">
         <span class="provider-log-tip">日志来自订单关联的服务配置</span>
@@ -1208,6 +1212,10 @@
           </el-timeline-item>
         </el-timeline>
       </div>
+    </el-dialog>
+
+    <el-dialog v-model="receiptVisible" title="恢复订单执行编号" width="min(760px,calc(100vw - 24px))" append-to-body destroy-on-close>
+      <OrderReceiptRecovery v-if="receiptVisible && receiptOrderId" :order-id="receiptOrderId" @applied="loadOrders" />
     </el-dialog>
 
     <!-- 订单导出对话框 -->
@@ -1331,6 +1339,7 @@ import {
 import { getCoursePlatforms } from "@/api/course";
 import { useVariableStore } from "@/stores/variableStore";
 import StatusDisplay from "@/components/StatusDisplay.vue";
+import OrderReceiptRecovery from "@/components/orderreceipt/OrderReceiptRecovery.vue";
 import { getCountdownConfigs } from "@/api/countdownConfig";
 
 // 使用响应式 composable
@@ -1596,6 +1605,7 @@ const dockStatusDialogVisible = ref(false);
 const remarkDialogVisible = ref(false);
 const batchDialogVisible = ref(false);
 const detailDialogVisible = ref(false);
+const receiptVisible = ref(false), receiptOrderId = ref(null);
 const exportDialogVisible = ref(false);
 const exportResultVisible = ref(false);
 const columnManageDialogVisible = ref(false);
@@ -3618,4 +3628,6 @@ html.dark .indicator-failed {
 .provider-log-operator {
   margin-top: 8px;
 }
+.receipt-entry { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 22px 0; }
+.receipt-entry span { color: var(--text-secondary); font-size: 12px; line-height: 1.8; }
 </style>

@@ -16,6 +16,7 @@ import com.course.platform.domain.projectclient.ProjectClientTypes;
 import com.course.platform.application.service.projectcenter.ProjectCenterService;
 import com.course.platform.application.service.projectcenter.ProjectTicketService;
 import com.course.platform.application.service.projectcenter.ProjectReportingService;
+import com.course.platform.application.service.projectcenter.ProjectRecordsService;
 import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.application.service.servicecommerce.ServiceCommerceService;
 import com.course.platform.application.service.servicenotification.ServiceNotificationService;
@@ -36,6 +37,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.junit.jupiter.web.SpringJUnitWebConfig;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
@@ -55,6 +57,8 @@ class ProjectCenterHttpSecurityTest {
         ProjectCenterController.class,
         ProjectClientController.class,
         ProjectReportingController.class,
+        ProjectRecordsController.class,
+        OrderReceiptRecoveryController.class,
         ProjectClientTicketController.class,
         ExternalProjectClientController.class,
         CatalogRefreshController.class,
@@ -72,6 +76,8 @@ class ProjectCenterHttpSecurityTest {
         @Bean ProjectClientTicketService clientTickets(){return mock(ProjectClientTicketService.class);}
         @Bean ProjectClientService clients(){return mock(ProjectClientService.class);}
         @Bean ProjectReportingService reports(){return mock(ProjectReportingService.class);}
+        @Bean com.course.platform.application.service.orderreceipt.OrderReceiptRecoveryService receiptRecovery(){return mock(com.course.platform.application.service.orderreceipt.OrderReceiptRecoveryService.class);}
+        @Bean ProjectRecordsService records(){return mock(ProjectRecordsService.class);}
         @Bean ProjectApiKeyService projectKeys(){return mock(ProjectApiKeyService.class);}
 
         @Bean com.course.platform.application.service.catalogrefresh.CatalogRefreshService catalogue(){return mock(com.course.platform.application.service.catalogrefresh.CatalogRefreshService.class);}
@@ -150,6 +156,8 @@ class ProjectCenterHttpSecurityTest {
     @Autowired ProjectTicketService tickets;
     @Autowired ProjectClientService clients;
     @Autowired ProjectReportingService reports;
+    @Autowired ProjectRecordsService records;
+    @Autowired com.course.platform.application.service.orderreceipt.OrderReceiptRecoveryService receiptRecovery;
     @Autowired ProjectClientTicketService clientTickets;
     @Autowired ProjectApiKeyService projectKeys;
     @Autowired ServiceCommerceService commerce;
@@ -159,7 +167,7 @@ class ProjectCenterHttpSecurityTest {
 
     @BeforeEach
     void setup() {
-        reset(projects, commerce, plugins, limiter, clients, projectKeys, clientTickets, tickets, reports);
+        reset(projects, commerce, plugins, limiter, clients, projectKeys, clientTickets, tickets, reports, records, receiptRecovery);
         when(limiter.check(any())).thenReturn(RateLimitDecision.allowed(1));
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
     }
@@ -194,6 +202,90 @@ class ProjectCenterHttpSecurityTest {
         mvc.perform(get(root+"/self").contextPath("/api").header("X-Project-Key",key)).andExpect(status().isForbidden());
         verify(projectKeys).record(caller,"SELF",false);
         verify(projectKeys,never()).web();
+    }
+
+    @Test
+    void receiptRecoveryRequiresBothPermissionsAndRejectsUrlKeySubstitution() throws Exception {
+        String path="/api/admin/orders/1/receipt-recoveries";
+        mvc.perform(get(path).contextPath("/api")).andExpect(status().isUnauthorized());
+        for(String permission:List.of("ROLE_SUPER_ADMIN","order:update","api-provider:update"))
+            mvc.perform(get(path).contextPath("/api").with(authentication(auth(permission)))).andExpect(status().isForbidden());
+        mvc.perform(get(path).contextPath("/api").header("X-Project-Key","npo_"+"a".repeat(64))).andExpect(status().isUnauthorized());
+        verifyNoInteractions(receiptRecovery);
+        mvc.perform(get(path).contextPath("/api").with(authentication(auth("order:update","api-provider:update"))))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"));
+        verify(receiptRecovery).recent(1);
+        verify(limiter,atLeastOnce()).check(argThat(r->r.dimension().startsWith("order-receipt:")));
+    }
+
+    @Test
+    void receiptPreviewAndConfirmationAreDistinctScopedNoStoreRequests() throws Exception {
+        String path="/api/admin/orders/1/receipt-recoveries", id="11111111-1111-4111-8111-111111111111";
+        var auth=authentication(auth("order:update","api-provider:update"));
+        mvc.perform(post(path).contextPath("/api").with(auth).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"requestId\":\""+id+"\",\"receiptId\":\"receipt-9\",\"evidence\":\"已核对原始回执并确认该订单归属\",\"ownershipConfirmed\":true,\"amount\":999}"))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"));
+        verify(receiptRecovery).preview(eq(1L),argThat(f->f.receiptId().equals("receipt-9")&&f.ownershipConfirmed()));
+        mvc.perform(get(path+"/"+id).contextPath("/api").with(auth)).andExpect(status().isOk());
+        verify(receiptRecovery).get(1,id);
+        mvc.perform(post(path+"/"+id+"/confirm").contextPath("/api").with(auth).contentType(MediaType.APPLICATION_JSON).content("{\"consent\":true}"))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"));
+        verify(receiptRecovery).confirm(eq(1L),eq(id),argThat(f->f.consent()));
+        mvc.perform(get(path+"/"+id+"/confirm").contextPath("/api").with(auth)).andExpect(status().isMethodNotAllowed());
+    }
+
+    @Test
+    void ownerRecordsAndLedgerEnforceBothPermissionsOnEveryActualHttpRoute() throws Exception {
+        for (String path : List.of("/admin/project-reports/owners", "/admin/project-reports/owners/8",
+                "/admin/project-reports/owners/8/accounts", "/admin/project-reports/owners/8/clients", "/admin/project-reports/ledger")) {
+            mvc.perform(get("/api" + path).contextPath("/api")).andExpect(status().isUnauthorized());
+            for (String permission : List.of("ROLE_SUPER_ADMIN", "api-provider:update", "payment:reconcile"))
+                mvc.perform(get("/api" + path).contextPath("/api").with(authentication(auth(permission))))
+                        .andExpect(status().isForbidden());
+        }
+        verifyNoInteractions(records);
+        for (String path : List.of("/admin/project-reports/owners", "/admin/project-reports/owners/8",
+                "/admin/project-reports/owners/8/accounts", "/admin/project-reports/owners/8/clients", "/admin/project-reports/ledger"))
+            mvc.perform(get("/api" + path).contextPath("/api").with(authentication(auth("api-provider:update", "payment:reconcile"))))
+                    .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
+        verify(records).owners(null, 1, 20); verify(records).owner(8); verify(records).accounts(8, 1, 20);
+        verify(records).customers(8, null, null, 1, 20);
+        verify(limiter, atLeastOnce()).check(argThat(r -> "project-report:user".equals(r.dimension())));
+        mvc.perform(get("/api/admin/project-reports/owners/8/credentials").contextPath("/api")
+                        .with(authentication(auth("api-provider:update", "payment:reconcile"))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void ownLedgerScopeComesFromJwtNotOwnerIdOrNativeKeyInRequest() throws Exception {
+        String path = "/api/project-ledger";
+        mvc.perform(get(path).contextPath("/api").header("X-Project-Key", "npo_" + "a".repeat(64)))
+                .andExpect(status().isUnauthorized());
+        var caller = new ProjectClientTypes.Caller(7L, null, null, null, true);
+        when(projectKeys.web()).thenReturn(caller);
+        mvc.perform(get(path).contextPath("/api").param("ownerId", "8").param("book", "CUSTOMER_CREDIT")
+                        .param("fromDate", "2026-09-01").param("throughDate", "2026-09-10")
+                        .with(authentication(auth("ROLE_USER"))))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
+        verify(records).ownLedger(eq(caller), argThat(f -> f.ownerId() == null && f.book().equals("CUSTOMER_CREDIT")
+                && f.fromDate().equals(java.time.LocalDate.of(2026, 9, 1)) && f.throughDate().equals(java.time.LocalDate.of(2026, 9, 10))), eq(1), eq(20));
+        verify(projectKeys, never()).authenticate(anyString());
+        verify(records, never()).adminLedger(any(), anyInt(), anyInt());
+    }
+
+    @Test
+    void ledgerAdminFiltersAreTypedAndPreservedWithoutPermittingWrites() throws Exception {
+        var auth = authentication(auth("api-provider:update", "payment:reconcile"));
+        mvc.perform(get("/api/admin/project-reports/ledger").contextPath("/api").with(auth)
+                        .param("ownerId", "8").param("projectId", "2").param("book", "PROJECT_ACCOUNT")
+                        .param("direction", "CREDIT").param("keyword", "100%_!").param("page", "2").param("pageSize", "10"))
+                .andExpect(status().isOk());
+        verify(records).adminLedger(argThat(f -> Long.valueOf(8).equals(f.ownerId()) && Long.valueOf(2).equals(f.projectId())
+                && "PROJECT_ACCOUNT".equals(f.book()) && "CREDIT".equals(f.direction()) && "100%_!".equals(f.keyword())), eq(2), eq(10));
+        reset(records);
+        mvc.perform(post("/api/admin/project-reports/ledger").contextPath("/api").with(auth))
+                .andExpect(status().isMethodNotAllowed());
+        verifyNoInteractions(records);
     }
 
     @Test
@@ -620,6 +712,32 @@ class ProjectCenterHttpSecurityTest {
                                         authentication(
                                                 auth("api-provider:update", "payment:reconcile"))))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void fundedOpeningRequiresLoginAndRejectsInvalidCreditBeforeService() throws Exception {
+        String path = "/api/service-projects/1/quotes";
+        mvc.perform(post(path).contextPath("/api").header("X-Project-Key", "npo_" + "a".repeat(64))
+                .contentType("application/json").content("{\"action\":\"PROVISION\",\"units\":\"8\",\"confirmedPolicy\":true}"))
+                .andExpect(status().isUnauthorized());
+        for (String amount : List.of("-1", "100001", "0.0000001", "1e-1000000")) {
+            mvc.perform(post(path).contextPath("/api").with(authentication(auth("ROLE_USER")))
+                    .contentType("application/json").content("{\"action\":\"PROVISION\",\"units\":\"" + amount + "\",\"confirmedPolicy\":true}"))
+                    .andExpect(status().isUnprocessableEntity());
+        }
+        verifyNoInteractions(projects);
+    }
+
+    @Test
+    void freeOrFundedOpeningCreditRemainsExactAtTheHttpBoundary() throws Exception {
+        for (String amount : List.of("0", "0.05", "100000.000000")) {
+            mvc.perform(post("/api/service-projects/1/quotes").contextPath("/api").with(authentication(auth("ROLE_USER")))
+                    .contentType("application/json").content("{\"action\":\"PROVISION\",\"units\":\"" + amount + "\",\"confirmedPolicy\":true}"))
+                    .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
+            verify(projects).quote(eq(1L), argThat(f -> f.action().equals("PROVISION") && f.confirmedPolicy()
+                    && f.units().equals(new java.math.BigDecimal(amount))));
+        }
+        verify(projects, never()).confirm(anyString());
     }
 
     @Test

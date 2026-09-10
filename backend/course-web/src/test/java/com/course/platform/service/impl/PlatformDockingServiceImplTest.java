@@ -8,6 +8,7 @@ import com.course.platform.domain.dto.ProductImportRequest;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.entity.CourseOrder;
 import com.course.platform.domain.entity.CoursePlatform;
+import com.course.platform.domain.entity.PlatformCategory;
 import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.infra.docking.PlatformDockingStrategyFactory;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
@@ -233,6 +234,54 @@ class PlatformDockingServiceImplTest {
         assertEquals(1, result.get("requested"));
         assertEquals(1, result.get("created"));
         assertEquals(0, result.get("missing"));
+    }
+
+    @Test
+    @DisplayName("分类倍率优先于导入倍率且同步不会覆盖显示别名")
+    void importSelectedProducts_shouldUseCategoryMultiplierAndPreserveDisplayName() {
+        ApiProvider decrypted = new ApiProvider();
+        decrypted.setId(9L);
+        decrypted.setStatus(1);
+        decrypted.setProviderType("Daytime");
+        when(apiProviderService.loadDecrypted(9L)).thenReturn(decrypted);
+        when(strategyFactory.getStrategy("Daytime")).thenReturn(strategy);
+        when(strategy.fetchPlatformList(decrypted)).thenReturn(List.of(
+                PlatformItem.builder().id("b").name("远程新名称")
+                        .price(new BigDecimal("10.00"))
+                        .categoryId("88").categoryName("远程分类名称").build()
+        ));
+
+        PlatformCategory category = new PlatformCategory();
+        category.setId(88L);
+        category.setName("本地分类名称");
+        category.setRemoteCategoryId("88");
+        category.setRemoteApiProviderId(9L);
+        category.setPriceMultiplier(new BigDecimal("1.50"));
+        when(platformCategoryMapper.selectById(88L)).thenReturn(category);
+        when(platformCategoryMapper.selectOne(any())).thenReturn(category);
+
+        CoursePlatform existing = new CoursePlatform();
+        existing.setId(6L);
+        existing.setName("远程旧名称");
+        existing.setDisplayName("本地显示名称");
+        existing.setCategoryId(88L);
+        when(coursePlatformMapper.selectOne(any())).thenReturn(existing);
+
+        ProductImportRequest request = new ProductImportRequest();
+        request.setApiProviderId(9L);
+        request.setProductIds(List.of("b"));
+        request.setPriceMultiplier(new BigDecimal("2.00"));
+        request.setSyncCategories(true);
+
+        service.importSelectedProducts(request);
+
+        ArgumentCaptor<CoursePlatform> captor = ArgumentCaptor.forClass(CoursePlatform.class);
+        verify(coursePlatformMapper).updateById(captor.capture());
+        CoursePlatform updated = captor.getValue();
+        assertEquals("远程新名称", updated.getName());
+        assertEquals("本地显示名称", updated.getDisplayName());
+        assertEquals("本地分类名称", category.getName());
+        assertEquals(new BigDecimal("15.0000"), updated.getBasePrice());
     }
 
     @Test

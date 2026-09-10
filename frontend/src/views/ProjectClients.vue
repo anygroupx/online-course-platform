@@ -10,6 +10,7 @@
       </div>
       <div class="actions">
         <el-button :disabled="busy" @click="usageVisible = true">用量与统计</el-button>
+        <el-button :disabled="busy" @click="ledgerVisible = true">资金流水</el-button>
         <el-button @click="openTickets(null)">客户售后工单</el-button>
         <el-button @click="openKeys('OWNER')">项目 OpenAPI 密钥</el-button
         ><el-button type="primary" :disabled="busy" @click="beginOpen"
@@ -311,6 +312,9 @@
     <el-dialog v-model="usageVisible" title="项目用量与统计" width="min(1000px,calc(100vw - 24px))" destroy-on-close>
       <ProjectUsage v-if="usageVisible" />
     </el-dialog>
+    <el-dialog v-model="ledgerVisible" title="我的资金流水" width="min(1000px,calc(100vw - 24px))" destroy-on-close>
+      <ProjectLedger v-if="ledgerVisible" />
+    </el-dialog>
     <ProjectKeys v-model="keysVisible" :subject="keySubject" />
     <ProjectClientTickets v-model="ticketsVisible" :client="ticketClient" />
     <el-dialog
@@ -350,6 +354,7 @@ import { ElMessageBox } from "element-plus";
 import ProjectClientTickets from "@/components/projectclient/ProjectClientTickets.vue";
 import ProjectKeys from "@/components/projectclient/ProjectKeys.vue";
 import ProjectUsage from "@/components/projectcenter/ProjectUsage.vue";
+import ProjectLedger from "@/components/projectcenter/ProjectLedger.vue";
 import {
   clientCatalog,
   listProjectClients,
@@ -368,7 +373,7 @@ import {
   clientUnitsValid,
   clientActionAllowed,
 } from "@/utils/projectClients";
-const usageVisible = ref(false);
+const usageVisible = ref(false), ledgerVisible = ref(false);
 const clients = ref([]),
   page = ref(1),
   total = ref(0),

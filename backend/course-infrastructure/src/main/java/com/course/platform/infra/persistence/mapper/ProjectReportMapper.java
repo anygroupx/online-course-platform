@@ -49,7 +49,7 @@ public interface ProjectReportMapper {
     FundingRow localFunding(@Param("owner") Long owner);
 
     @Select("SELECT COALESCE(SUM(CASE WHEN state='SUCCEEDED' THEN 1 ELSE 0 END),0) AS settledOperations,"
-            + " COALESCE(SUM(CASE WHEN state='SUCCEEDED' AND action='TOP_UP' THEN amount ELSE 0 END),0) AS debited,"
+            + " COALESCE(SUM(CASE WHEN state='SUCCEEDED' AND action IN ('PROVISION','TOP_UP') THEN amount ELSE 0 END),0) AS debited,"
             + " COALESCE(SUM(CASE WHEN state='SUCCEEDED' AND action='WITHDRAW' THEN amount ELSE 0 END),0) AS returned,"
             + " COALESCE(SUM(CASE WHEN state IN ('DISPATCHING','UNKNOWN') THEN 1 ELSE 0 END),0) AS unresolvedOperations"
             + " FROM service_project_operation")

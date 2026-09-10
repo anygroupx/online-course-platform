@@ -15,7 +15,7 @@
       @tab-change="tab === 'review' ? loadOperations() : tab === 'projects' ? load() : undefined"
       ><el-tab-pane label="项目与费率" name="projects" /><el-tab-pane
         label="资金操作核对"
-        name="review" /><el-tab-pane label="项目工单" name="tickets" /><el-tab-pane label="运营统计" name="reports"
+        name="review" /><el-tab-pane label="项目工单" name="tickets" /><el-tab-pane label="运营统计" name="reports" /><el-tab-pane label="经营者明细" name="owners" /><el-tab-pane label="资金流水" name="ledger"
     /></el-tabs>
     <el-alert
       v-if="error"
@@ -105,6 +105,8 @@
     /></template>
     <ProjectTickets v-else-if="tab === 'tickets'" admin />
     <ProjectUsage v-else-if="tab === 'reports'" admin />
+    <ProjectOwners v-else-if="tab === 'owners'" />
+    <ProjectLedger v-else-if="tab === 'ledger'" admin />
     <el-drawer
       v-model="editingOpen"
       destroy-on-close
@@ -213,6 +215,7 @@
     >
     <el-dialog
       v-model="reviewOpen"
+      class="project-review-dialog"
       title="核对项目操作"
       width="min(540px,calc(100vw - 24px))"
       :close-on-click-modal="false"
@@ -233,6 +236,9 @@
           type="warning"
           :closable="false"
         />
+        <el-alert v-if="projectOpeningFunded(operation) && operation.state === 'UNKNOWN'"
+          title="必须同时核实客户归属、开户结果与初始充值；不能只凭当前余额认定成功或退款。"
+          type="warning" :closable="false" class="funded-review-warning" />
         <el-form
           v-if="operation.state === 'UNKNOWN'"
           label-position="top"
@@ -286,6 +292,8 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 import ProjectTickets from "@/components/projectcenter/ProjectTickets.vue";
 import ProjectUsage from "@/components/projectcenter/ProjectUsage.vue";
+import ProjectOwners from "@/components/projectcenter/ProjectOwners.vue";
+import ProjectLedger from "@/components/projectcenter/ProjectLedger.vue";
 import { ElMessage } from "element-plus";
 import request from "@/utils/request";
 import {
@@ -296,7 +304,7 @@ import {
   getProjectOperation,
   resolveProjectOperation,
 } from "@/api/projectCenter";
-import { projectActions, projectState } from "@/utils/projectCenter";
+import { projectActions, projectState, projectOpeningFunded, projectResolutionEffect, validProjectOpeningOperation } from "@/utils/projectCenter";
 const tab = ref("projects"),
   rows = ref([]),
   total = ref(0),
@@ -327,17 +335,8 @@ const attemptedReviews = new Set();
 let alive = true,
   providerGeneration = 0,
   editorGeneration = 0;
-const effect = computed(() =>
-  !operation.value
-    ? ""
-    : review.value.outcome === "NOT_ACCEPTED"
-      ? operation.value.action === "TOP_UP"
-        ? `返还原充值预扣 ¥${operation.value.amount}；不会再次提交退款。`
-        : "关闭待核对操作，不增加平台余额。"
-      : operation.value.action === "WITHDRAW"
-        ? `确认扣除已成功后，向原用户入账 ¥${operation.value.amount}。`
-        : "确认原操作已受理，完成账户关联或额度记录；不会再次提交操作。",
-);
+const effect = computed(() => projectResolutionEffect(operation.value, review.value.outcome));
+
 async function load() {
   loading.value = true;
   error.value = "";
@@ -456,10 +455,17 @@ async function save() {
     saving.value = false;
   }
 }
+function acceptOperation(value, id, previous) {
+  if (value?.id !== id || (value?.action === "PROVISION" || previous?.action === "PROVISION") && !validProjectOpeningOperation(value, previous || {}))
+    throw new Error("incomplete project opening result");
+  operation.value = value;
+}
 async function inspect(id) {
   if (saving.value) return;
   try {
-    operation.value = await getProjectOperation(id, true);
+    const value = await getProjectOperation(id, true);
+    if (!alive) return;
+    acceptOperation(value, id);
     review.value = {
       outcome: "NOT_ACCEPTED",
       customerId: "",
@@ -474,7 +480,10 @@ async function checkReview() {
   if (saving.value || !operation.value) return;
   saving.value = true;
   try {
-    operation.value = await getProjectOperation(operation.value.id, true);
+    const previous = operation.value;
+    const value = await getProjectOperation(previous.id, true);
+    if (!alive) return;
+    acceptOperation(value, previous.id, previous);
     await loadOperations();
   } catch {
   } finally {
@@ -488,7 +497,8 @@ async function resolve() {
   reviewAttempted.value = true;
   attemptedReviews.add(operation.value.id);
   try {
-    operation.value = await resolveProjectOperation(operation.value.id, {
+    const previous = operation.value;
+    const value = await resolveProjectOperation(previous.id, {
       ...review.value,
       customerId:
         operation.value.action === "PROVISION" &&
@@ -496,6 +506,8 @@ async function resolve() {
           ? review.value.customerId
           : null,
     });
+    if (!alive) return;
+    acceptOperation(value, previous.id, previous);
     await loadOperations();
   } catch {
   } finally {
@@ -510,6 +522,9 @@ onBeforeUnmount(() => {
 });
 </script>
 <style scoped>
+.funded-review-warning { margin: 16px 0; }
+:global(.project-review-dialog .el-button), :global(.project-review-dialog .el-input__wrapper) { min-height: 44px; box-sizing: border-box; }
+:global(.project-review-dialog .el-dialog__headerbtn) { min-height: 44px; min-width: 44px; }
 .admin-projects {
   max-width: 1400px;
   margin: auto;

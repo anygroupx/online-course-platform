@@ -15,6 +15,7 @@ import {
   editableWuxinPlan,
   nativeProductSupported,
   maxRefundableUnits,
+  quoteChargeDetails,
 } from "../src/utils/serviceCommerce.js";
 test("schedule matches chosen weekdays without timezone shifts", () => {
   assert.deepEqual(buildTaskTimes("2026-09-07", "08:00", 3, [1, 3, 5]), [
@@ -188,4 +189,40 @@ test("face navigation only accepts an unexpired one-use local ticket bound to th
       validFaceLaunchTicket({ ...ticket, ...changed }, "bound-session", now),
       false,
     );
+});
+
+const exactQuote = Object.freeze({ action: "CREATE", quantity: 3, quantityUnit: "次", unitCharge: "0.05499989", amount: "0.16" });
+test("quoted unit charge preserves eight decimals without recomputing the final cents", () => {
+  assert.deepEqual(quoteChargeDetails(exactQuote), { unitCharge: "0.05499989", quantity: 3, unit: "次", refund: false });
+  assert.equal(exactQuote.amount, "0.16");
+  assert.equal(quoteChargeDetails({ ...exactQuote, unitCharge: "9999999999.99999999" }).unitCharge, "9999999999.99999999");
+});
+test("legacy quotes keep their recorded price and service days have a distinct unit", () => {
+  assert.equal(quoteChargeDetails({ ...exactQuote, unitCharge: "0.055000", amount: "0.17" }).unitCharge, "0.055000");
+  assert.equal(quoteChargeDetails({ ...exactQuote, action: "EDIT_SCHEDULE", quantityUnit: "天" }).unit, "天");
+});
+test("refund details describe a cap instead of inventing an uncapped total", () => {
+  for (const action of ["REFUND", "SETTLE_REFUND"]) {
+    const value = quoteChargeDetails({ ...exactQuote, action, quantity: 6, amount: "0.32" });
+    assert.equal(value.refund, true);
+    assert.equal(value.quantity, 6);
+    assert.equal(value.amount, undefined);
+  }
+});
+test("charge details do not accept floating numbers, exponent notation or oversized values", () => {
+  for (const unitCharge of [0.05499989, undefined, null, "1e-8", "NaN", "Infinity", "-0.1", "0", "0.00000000", "0.054999891", "10000000000", "<script>", " 0.01"]) {
+    assert.equal(quoteChargeDetails({ ...exactQuote, unitCharge }), null, String(unitCharge));
+  }
+});
+test("nonbilling and malformed quotes cannot reuse an irrelevant stored price", () => {
+  for (const action of ["PAUSE", "RESUME", "DELAY", "CHANGE_TIME", "REPORT", "EDIT_PLAN"]) {
+    assert.equal(quoteChargeDetails({ ...exactQuote, action }), null);
+  }
+  for (const quantity of [0, -1, "3", 3.5, 10000, NaN]) assert.equal(quoteChargeDetails({ ...exactQuote, quantity }), null);
+  assert.equal(quoteChargeDetails({ ...exactQuote, quantityUnit: "unknown" }), null);
+  assert.equal(quoteChargeDetails(null), null);
+  assert.equal(quoteChargeDetails({ ...exactQuote, unitCharge: undefined }), null);
+});
+test("total distance keeps its existing plan summary instead of a misleading per-run breakdown", () => {
+  assert.equal(quoteChargeDetails({ ...exactQuote, quantity: 1, quantityUnit: "单", distancePlan: { totalDistance: "120.50" } }), null);
 });

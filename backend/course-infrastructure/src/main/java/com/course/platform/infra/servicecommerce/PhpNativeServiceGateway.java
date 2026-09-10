@@ -66,6 +66,7 @@ public class PhpNativeServiceGateway
     public static boolean supported(String type, String project, String productId) {
         return switch (type == null ? "" : type) {
             case "sxdk_tw" -> InternshipNativeServiceGateway.supported(project, productId);
+            case SsbenzDistanceGateway.TYPE -> SsbenzDistanceGateway.supported(project, productId);
             case "wuxin" -> "sdxy".equals(project) && "sdxy".equals(productId);
             case "jiguang" -> "default".equals(project) && Set.of("1", "2").contains(productId);
             case "heisha" ->
@@ -79,6 +80,7 @@ public class PhpNativeServiceGateway
     public static List<String> capabilities(String type) {
         return switch (type) {
             case "sxdk_tw" -> InternshipNativeServiceGateway.capabilities();
+            case SsbenzDistanceGateway.TYPE -> List.of("CREATE", "SYNC");
             case "wuxin" ->
                     List.of(
                             "LOOKUP",

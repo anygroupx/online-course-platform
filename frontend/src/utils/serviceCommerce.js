@@ -5,6 +5,7 @@ export const serviceNames = Object.freeze({
   jiguang: "极光",
   wuxin: "无心",
   sxdk_tw: "实习服务",
+  ssbenz_xbd: "公里计划",
 });
 export const actionNames = Object.freeze({
   CREATE: "下单",
@@ -39,6 +40,8 @@ export const stateNames = Object.freeze({
   REFUND_REVIEW: "退款待核对",
   ATTENTION: "需要处理",
   SUBMITTING: "提交中",
+  SUBMITTED: "已提交",
+  SUBMISSION_REVIEW: "提交待核对",
 });
 export const stateName = (state) => stateNames[state] || "待核对";
 export const fieldNames = Object.freeze({
@@ -55,6 +58,21 @@ export const knownOutcome = (state) =>
   ["SUCCEEDED", "NOT_ACCEPTED", "EXPIRED"].includes(state);
 export const moneyText = (value) =>
   /^\d{1,10}(?:\.\d{1,6})?$/.test(String(value ?? "")) ? String(value) : "—";
+// Display the immutable server quote, never derive a charge from live product/form values.
+export function quoteChargeDetails(quote) {
+  if (!quote || quote.distancePlan ||
+      !["CREATE", "ADD_TIMES", "EDIT_SCHEDULE", "RUN_NOW", "REFUND", "SETTLE_REFUND"].includes(quote.action) ||
+      !Number.isInteger(quote.quantity) || quote.quantity < 1 || quote.quantity > 9999 ||
+      !["次", "天"].includes(quote.quantityUnit) || typeof quote.unitCharge !== "string" ||
+      !/^\d{1,10}(?:\.\d{1,8})?$/.test(quote.unitCharge) || /^0+(?:\.0+)?$/.test(quote.unitCharge)) return null;
+  return {
+    unitCharge: quote.unitCharge,
+    quantity: quote.quantity,
+    unit: quote.quantityUnit,
+    refund: ["REFUND", "SETTLE_REFUND"].includes(quote.action),
+  };
+}
+
 export function buildTaskTimes(
   date,
   time,
@@ -86,6 +104,7 @@ export function buildTaskTimes(
 }
 
 const formKeys = Object.freeze({
+  ssbenz_xbd: ["account", "password", "schoolName", "startTime", "endTime", "weekdays"],
   jiguang: ["schoolName", "studentName", "studentAccount", "message"],
   heisha: ["account", "password", "planOptionId", "fenceOptionId", "runTime"],
   flash: [
@@ -145,6 +164,7 @@ export function nativeProductSupported(type, project, id) {
   if (type === "sxdk_tw")
     return Object.hasOwn(internshipProjects, project) && project === id;
   if (type === "wuxin") return project === "sdxy" && id === "sdxy";
+  if (type === "ssbenz_xbd") return project === "xbd" && ["0", "1"].includes(id);
   if (type === "flash")
     return ["sdxy", "ydsjxy", "xbd"].includes(project) && id === project;
   if (type === "heisha")
@@ -152,6 +172,7 @@ export function nativeProductSupported(type, project, id) {
   return type === "jiguang" && project === "default" && ["1", "2"].includes(id);
 }
 export function maxRefundableUnits(order) {
+  if (order.providerType === "ssbenz_xbd") return 0;
   return Math.max(0, order.quantity - (order.completed ?? 0));
 }
 

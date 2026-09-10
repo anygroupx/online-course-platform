@@ -23,6 +23,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class CoursePlatformControllerTest {
@@ -42,6 +43,7 @@ class CoursePlatformControllerTest {
     private PlatformCategory category(Long id, Integer status) {
         PlatformCategory c = new PlatformCategory();
         c.setId(id);
+        c.setName("分类" + id);
         c.setStatus(status);
         return c;
     }
@@ -81,5 +83,38 @@ class CoursePlatformControllerTest {
         String sql = capturedSql();
         assertTrue(sql.contains("category_id IS NULL"));
         assertFalse(sql.contains("category_id IN"));
+    }
+
+    @Test
+    void listReturnsEffectiveDisplayNameAndCategoryName() throws Exception {
+        PlatformCategory category = category(1L, 1);
+        CoursePlatform platform = new CoursePlatform();
+        platform.setId(7L);
+        platform.setName("kunba_学习通(全包)");
+        platform.setCategoryId(1L);
+        when(platformCategoryMapper.selectList(any())).thenReturn(List.of(category));
+        when(coursePlatformMapper.selectList(any())).thenReturn(List.of(platform));
+
+        mvc.perform(get("/courses"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].displayName").value("kunba_学习通(全包)"))
+                .andExpect(jsonPath("$.data[0].categoryName").value("分类1"));
+    }
+
+    @Test
+    void detailPreservesLocalAliasAndReturnsCategoryName() throws Exception {
+        PlatformCategory category = category(2L, 1);
+        CoursePlatform platform = new CoursePlatform();
+        platform.setId(8L);
+        platform.setName("远程同步名");
+        platform.setDisplayName("本地显示名");
+        platform.setCategoryId(2L);
+        when(coursePlatformMapper.selectById(8L)).thenReturn(platform);
+        when(platformCategoryMapper.selectById(2L)).thenReturn(category);
+
+        mvc.perform(get("/courses/8"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.displayName").value("本地显示名"))
+                .andExpect(jsonPath("$.data.categoryName").value("分类2"));
     }
 }

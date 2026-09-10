@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -36,7 +37,8 @@ public class CoursePlatformController {
     @Operation(summary = "获取课程平台列表", description = "获取所有可用的课程平台")
     @GetMapping
     public Result<List<CoursePlatform>> getCoursePlatforms() {
-        Set<Long> enabledCategoryIds = enabledCategoryIds();
+        Map<Long, String> enabledCategories = enabledCategories();
+        Set<Long> enabledCategoryIds = enabledCategories.keySet();
         List<CoursePlatform> list = coursePlatformMapper.selectList(new LambdaQueryWrapper<CoursePlatform>()
                 .eq(CoursePlatform::getStatus, 1)
                 .and(w -> {
@@ -46,13 +48,14 @@ public class CoursePlatformController {
                     }
                 })
                 .orderByAsc(CoursePlatform::getSortOrder));
+        list.forEach(platform -> decorate(platform, enabledCategories.get(platform.getCategoryId())));
         return Result.success(list);
     }
 
-    private Set<Long> enabledCategoryIds() {
+    private Map<Long, String> enabledCategories() {
         return platformCategoryMapper.selectList(new LambdaQueryWrapper<PlatformCategory>()
                 .eq(PlatformCategory::getStatus, 1)).stream()
-                .map(PlatformCategory::getId).collect(Collectors.toSet());
+                .collect(Collectors.toMap(PlatformCategory::getId, PlatformCategory::getName));
     }
 
     /**
@@ -62,7 +65,19 @@ public class CoursePlatformController {
     @GetMapping("/{id}")
     public Result<CoursePlatform> getCoursePlatform(@PathVariable Long id) {
         CoursePlatform platform = coursePlatformMapper.selectById(id);
+        if (platform != null) {
+            PlatformCategory category = platform.getCategoryId() == null
+                    ? null
+                    : platformCategoryMapper.selectById(platform.getCategoryId());
+            decorate(platform, category == null ? null : category.getName());
+        }
         return Result.success(platform);
     }
-}
 
+    private void decorate(CoursePlatform platform, String categoryName) {
+        if (platform.getDisplayName() == null) {
+            platform.setDisplayName(platform.getName());
+        }
+        platform.setCategoryName(categoryName);
+    }
+}

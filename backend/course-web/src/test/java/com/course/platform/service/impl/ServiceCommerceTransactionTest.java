@@ -71,7 +71,8 @@ class ServiceCommerceTransactionTest {
                 List.of(
                         "018_native_service_orders.sql",
                         "019_internship_service_plans.sql",
-                        "020_service_account_sessions.sql")) {
+                        "020_service_account_sessions.sql",
+                        "029_native_service_price_precision.sql")) {
             String migration =
                     Files.readString(root.resolve("database/migrations/" + name))
                             .replaceAll("(?m)^--.*$", "")
@@ -1981,4 +1982,504 @@ class ServiceCommerceTransactionTest {
         verify(authHttp, never()).postForString(any(), contains("act=collect_link"), anyMap());
         money("100");
     }
+    com.course.platform.infra.external.ApiHttpClient distanceHttp;
+
+    Long setupDistance(String price) {
+        distanceHttp = mock(com.course.platform.infra.external.ApiHttpClient.class);
+        var nativeDistance = new com.course.platform.infra.servicecommerce.SsbenzDistanceGateway(
+                distanceHttp, new com.course.platform.infra.http.ProviderUrlNormalizer());
+        provider.setProviderType("ssbenz_xbd");
+        provider.setApiUrl("https://authorized.example/xbd/ydapi");
+        ReflectionTestUtils.setField(service, "gateway", nativeDistance);
+        ReflectionTestUtils.setField(service, "catalogs", new PluginConnectorRegistry(List.of(nativeDistance)));
+        when(distanceHttp.postForString(any(), endsWith("/school"), anyMap()))
+                .thenReturn("{\"code\":1,\"xbdpr\":\"0.10\",\"xbdprs\":\"0.20\",\"dj\":\"ignored SQL\"}");
+        when(distanceHttp.postForString(any(), endsWith("/add"), anyMap())).thenAnswer(call -> {
+            assertFalse(TransactionSynchronizationManager.isActualTransactionActive());
+            assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM service_order_operation WHERE state='DISPATCHING'", Integer.class));
+            assertTrue(balance().compareTo(new BigDecimal("100")) < 0);
+            return "{\"code\":1,\"id\":42}";
+        });
+        when(distanceHttp.postForString(any(), endsWith("/order"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":[{\"id\":42,\"status\":1}]}");
+        auth(7, "api-provider:update", "payment:reconcile");
+        Long id = service.saveProduct(null, new ProductCommand(9L, "xbd", "0", "总公里计划", "按总公里数计费",
+                new BigDecimal(price), true, null)).id();
+        auth(7, "ROLE_USER");
+        clearInvocations(distanceHttp);
+        return id;
+    }
+
+    OrderForm distanceForm(String distance) {
+        return new OrderForm(1, new BigDecimal(distance), Map.of("account", "13800138000", "password", "distance-private-password",
+                "schoolName", "", "startTime", "09:05", "endTime", "21:10", "weekdays", "1,3,5"), List.of(), true);
+    }
+
+    @Test void totalDistancePreviewFreezesNonSecretPlanAndDebitsExactlyOnceOutsideRemoteTransaction() throws Exception {
+        Long product = setupDistance("0.25");
+        var quote = service.quote(product, distanceForm("120.50"));
+        assertEquals("30.13", quote.amount()); assertEquals("单", quote.quantityUnit());
+        assertEquals("120.50", quote.distancePlan().totalDistance());
+        money("100");
+        var operation = operations.selectById(quote.id());
+        assertTrue(operation.getPayloadEncrypted().startsWith("ENC:v1:"));
+        assertFalse(operation.getScheduleJson().contains("password"));
+        assertFalse(operation.getScheduleJson().contains("13800138000"));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM service_order", Integer.class));
+        var confirmed = service.confirm(quote.id());
+        service.confirm(quote.id()); service.confirm(quote.id());
+        assertEquals("SUCCEEDED", confirmed.state()); money("69.87");
+        var view = service.order(confirmed.orderId());
+        assertEquals("SUBMITTED", view.status()); assertNull(view.completed());
+        assertEquals(1, view.quantity()); assertEquals("单", view.quantityUnit());
+        assertEquals(quote.distancePlan(), view.distancePlan());
+        assertTrue(view.actions().isEmpty()); assertNull(view.schedule());
+        assertNull(operations.selectById(quote.id()).getPayloadEncrypted());
+        String json = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules().writeValueAsString(view);
+        assertFalse(json.contains("distance-private-password")); assertFalse(json.contains("13800138000"));
+        assertFalse(json.contains("upstream-secret"));
+        verify(distanceHttp, times(1)).postForString(any(), endsWith("/add"), anyMap());
+        verify(distanceHttp, times(1)).postForString(any(), endsWith("/school"), anyMap());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+    }
+
+    @Test void totalDistanceAvoidsDoubleRoundingAndPreservesExistingSchemaRange() {
+        Long product = setupDistance("0.499999");
+        assertThrows(BusinessException.class, () -> service.quote(product, distanceForm("0.01")));
+        var quote = service.quote(product, distanceForm("0.03"));
+        assertEquals("0.01", quote.amount()); // 0.01499997 -> 0.01, NOT 0.015000 -> 0.02.
+        service.confirm(quote.id()); money("99.99");
+        var largest = service.quote(product, distanceForm("999999.99"));
+        assertEquals("499999.00", largest.amount());
+        assertEquals("999999.99", largest.distancePlan().totalDistance());
+        assertThrows(BusinessException.class, () -> service.quote(product, distanceForm("1000000")));
+    }
+
+    @Test void oldPerRunServicesStillRejectMoreThanFiftyKilometres() {
+        var old = form();
+        assertThrows(BusinessException.class, () -> service.quote(1L, new OrderForm(10, new BigDecimal("50.01"), old.fields(), List.of(), true)));
+        assertThrows(BusinessException.class, () -> service.quote(1L, new OrderForm(10, new BigDecimal("0.01"), old.fields(), List.of(), true)));
+        verifyNoInteractions(gateway); money("100");
+    }
+
+    @Test void distanceOrdersRejectQuantityTaskOrSessionConfusionBeforeReadingCatalog() {
+        Long product = setupDistance("0.25");
+        var valid = distanceForm("120.50");
+        for (OrderForm form : List.of(
+                new OrderForm(120, valid.distance(), valid.fields(), List.of(), true),
+                new OrderForm(0, valid.distance(), valid.fields(), List.of(), true),
+                new OrderForm(1, valid.distance(), valid.fields(), List.of("2030-01-01 09:00:00"), true),
+                new OrderForm(1, valid.distance(), valid.fields(), List.of(), true, null, UUID.randomUUID().toString())))
+            assertThrows(BusinessException.class, () -> service.quote(product, form));
+        verifyNoInteractions(distanceHttp); money("100");
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM service_order_operation", Integer.class));
+    }
+
+    @Test void distanceSubmissionStatusesNeverSetCompletionOrRefundMoney() {
+        var q = service.quote(setupDistance("0.25"), distanceForm("120.50"));
+        var result = service.confirm(q.id());
+        assertEquals("SUBMITTED", service.sync(result.orderId()).status());
+        for (String state : List.of("0", "2", "1")) {
+            when(distanceHttp.postForString(any(), endsWith("/order"), anyMap()))
+                    .thenReturn("{\"code\":1,\"data\":[{\"id\":42,\"status\":" + state + ",\"fees\":30.13,\"statuslog\":\"已退回全部\"}]}");
+            var synced = service.sync(result.orderId());
+            assertEquals("1".equals(state) ? "SUBMITTED" : "SUBMISSION_REVIEW", synced.status());
+            assertNull(synced.completed()); assertTrue(synced.actions().isEmpty()); money("69.87");
+            assertEquals("0.00", synced.refundedAmount());
+        }
+        assertThrows(BusinessException.class, () -> service.quoteAction(result.orderId(), new ActionForm("REFUND", 0)));
+        assertThrows(BusinessException.class, () -> service.logs(result.orderId(), 1));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+    }
+
+    @Test void missingOrDuplicateDistanceStatusLeavesVersionAndFundsUntouched() {
+        var result = service.confirm(service.quote(setupDistance("0.25"), distanceForm("120.50")).id());
+        var before = service.order(result.orderId());
+        for (String raw : List.of("{\"code\":-1}", "{\"code\":1,\"data\":[]}",
+                "{\"code\":1,\"data\":[{\"id\":42,\"status\":1},{\"id\":42,\"status\":0}]}")) {
+            when(distanceHttp.postForString(any(), endsWith("/order"), anyMap())).thenReturn(raw);
+            assertThrows(ProviderRequestException.class, () -> service.sync(result.orderId()));
+            var after = service.order(result.orderId());
+            assertEquals(before.version(), after.version()); assertEquals(before.status(), after.status()); money("69.87");
+        }
+    }
+
+    @Test void rejectedOrLostDistanceCreateRemainsUnknownAndOnlyAuditedNonAcceptanceReturnsOriginalDebit() {
+        Long product = setupDistance("0.25");
+        when(distanceHttp.postForString(any(), endsWith("/add"), anyMap()))
+                .thenReturn("{\"code\":-1,\"msg\":\"可能已扣款，请重试\"}");
+        var q = service.quote(product, distanceForm("120.50"));
+        var unknown = service.confirm(q.id());
+        assertEquals("UNKNOWN", unknown.state()); money("69.87");
+        assertEquals("CONFIRMING", service.order(unknown.orderId()).status());
+        service.confirm(q.id()); service.confirm(q.id());
+        assertThrows(BusinessException.class, () -> service.sync(unknown.orderId()));
+        var rejection = new ResolveForm("NOT_ACCEPTED", null, null, "已独立核查此笔提交及全部资金记录，确认没有受理", true);
+        for (String permission : List.of("ROLE_ADMIN", "api-provider:update", "payment:reconcile")) {
+            auth(7, permission); assertThrows(BusinessException.class, () -> service.resolve(q.id(), rejection)); money("69.87");
+        }
+        auth(7, "api-provider:update", "payment:reconcile");
+        var resolved = service.resolve(q.id(), rejection);
+        assertEquals("NOT_ACCEPTED", resolved.state()); money("100");
+        assertEquals("CANCELLED", service.order(unknown.orderId()).status());
+        assertEquals("30.13", service.order(unknown.orderId()).refundedAmount());
+        assertThrows(BusinessException.class, () -> service.resolve(q.id(), rejection));
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+        verify(distanceHttp, times(1)).postForString(any(), endsWith("/add"), anyMap());
+    }
+
+    @Test void distanceManualAcceptanceBindsOnlyPositiveReceiptAndNeverClaimsExecutionOrRefundUnits() {
+        Long product = setupDistance("0.25");
+        when(distanceHttp.postForString(any(), endsWith("/add"), anyMap()))
+                .thenThrow(new ProviderRequestException(ProviderRequestException.Reason.TIMEOUT));
+        var q = service.quote(product, distanceForm("120.50"));
+        var unknown = service.confirm(q.id());
+        auth(7, "api-provider:update", "payment:reconcile");
+        String evidence = "已核对本人提交和资金记录，确认唯一的提交记录编号";
+        assertThrows(BusinessException.class, () -> service.resolve(q.id(), new ResolveForm("ACCEPTED", "wrong-id", null, evidence, true)));
+        assertThrows(BusinessException.class, () -> service.resolve(q.id(), new ResolveForm("ACCEPTED", "42", 1, evidence, true)));
+        assertEquals("UNKNOWN", service.operation(q.id()).state()); money("69.87");
+        var accepted = service.resolve(q.id(), new ResolveForm("ACCEPTED", "42", null, evidence, true));
+        assertEquals("SUCCEEDED", accepted.state());
+        assertEquals("SUBMITTED", service.order(unknown.orderId()).status());
+        assertNull(service.order(unknown.orderId()).completed()); money("69.87");
+        verify(distanceHttp, times(1)).postForString(any(), endsWith("/add"), anyMap());
+    }
+
+    @Test void distanceCannotEnterIntegerRefundSettlementEvenIfStoredStateIsCorrupted() {
+        var result = service.confirm(service.quote(setupDistance("0.25"), distanceForm("120.50")).id());
+        jdbc.update("UPDATE service_order SET status='REFUND_REVIEW' WHERE id=?", result.orderId());
+        auth(7, "api-provider:update", "payment:reconcile");
+        assertThrows(BusinessException.class, () -> service.quoteRefundSettlement(result.orderId(),
+                new RefundSettlementForm(service.order(result.orderId()).version(), 1, "已核查资金但不能用次数代表公里", true)));
+        money("69.87");
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM service_order_operation", Integer.class));
+    }
+
+    @Test void distanceInsufficientBalanceRollsBackReservationWithoutDispatch() {
+        Long product = setupDistance("0.50");
+        var q = service.quote(product, distanceForm("300.00"));
+        assertThrows(BusinessException.class, () -> service.confirm(q.id()));
+        assertEquals("READY", operations.selectById(q.id()).getState()); money("100");
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM service_order", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+        verify(distanceHttp, never()).postForString(any(), endsWith("/add"), anyMap());
+    }
+
+    @Test void distanceConcurrentConfirmationCanDispatchOnlyOnePaidOrder() throws Exception {
+        var q = service.quote(setupDistance("0.25"), distanceForm("120.50"));
+        var gate = new CountDownLatch(1);
+        Callable<QuoteView> confirm = () -> {
+            auth(7, "ROLE_USER"); assertTrue(gate.await(5, TimeUnit.SECONDS));
+            try { return service.confirm(q.id()); } finally { SecurityContextHolder.clearContext(); }
+        };
+        var first = threads.submit(confirm); var second = threads.submit(confirm); gate.countDown();
+        first.get(10, TimeUnit.SECONDS); second.get(10, TimeUnit.SECONDS);
+        assertEquals("SUCCEEDED", service.operation(q.id()).state()); money("69.87");
+        verify(distanceHttp, times(1)).postForString(any(), endsWith("/add"), anyMap());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+    }
+
+    @Test void duplicateDistanceReceiptOrLocalSettlementFailureKeepsSecondPreDebitUnknownWithoutReplaying() {
+        Long product = setupDistance("0.25");
+        service.confirm(service.quote(product, distanceForm("120.50")).id());
+        var q = service.quote(product, distanceForm("120.50"));
+        var second = service.confirm(q.id());
+        assertEquals("UNKNOWN", second.state()); money("39.74");
+        assertNull(orders.selectById(second.orderId()).getExternalOrderNo());
+        assertEquals(q.id(), service.order(second.orderId()).pendingOperationId());
+        service.confirm(q.id());
+        verify(distanceHttp, times(2)).postForString(any(), endsWith("/add"), anyMap());
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+    }
+
+    @Test void distanceOwnershipConfigurationAndFeatureGateStillApply() {
+        Long product = setupDistance("0.25");
+        var q = service.quote(product, distanceForm("120.50"));
+        auth(8, "ROLE_USER");
+        assertThrows(BusinessException.class, () -> service.confirm(q.id()));
+        assertThrows(BusinessException.class, () -> service.operation(q.id()));
+        auth(7, "ROLE_USER");
+        provider.setConfigVersion(3L);
+        assertThrows(BusinessException.class, () -> service.confirm(q.id()));
+        provider.setConfigVersion(2L);
+        ReflectionTestUtils.setField(service, "enabled", false);
+        assertThrows(BusinessException.class, () -> service.confirm(q.id()));
+        assertThrows(BusinessException.class, () -> service.quote(product, distanceForm("120.50")));
+        money("100"); verify(distanceHttp, never()).postForString(any(), endsWith("/add"), anyMap());
+    }
+
+    @Test void totalDistanceTokenChangeCannotReadAnotherAccountsSameReceipt() {
+        var created = service.confirm(service.quote(setupDistance("0.25"), distanceForm("120.50")).id());
+        String identity = orders.selectById(created.orderId()).getProviderIdentity();
+        assertTrue(identity.matches("[0-9a-f]{64}"));
+        clearInvocations(distanceHttp);
+        provider.setApiKey("different-account-token");
+        provider.setConfigVersion(3L);
+        assertThrows(BusinessException.class, () -> service.sync(created.orderId()));
+        verifyNoInteractions(distanceHttp); money("69.87");
+        // The unused UID is not identity, and normalized aliases do not create another account.
+        provider.setApiKey("upstream-secret");
+        provider.setUsername("unused-uid-changed");
+        provider.setApiUrl("https://AUTHORIZED.EXAMPLE/xbd/ydapi/");
+        provider.setConfigVersion(4L);
+        assertEquals("SUBMITTED", service.sync(created.orderId()).status());
+        assertEquals(identity, orders.selectById(created.orderId()).getProviderIdentity());
+        assertNull(service.order(created.orderId()).completed()); money("69.87");
+        verify(distanceHttp, times(1)).postForString(any(), endsWith("/order"), anyMap());
+    }
+
+    @Test void totalDistanceIdentityUsesServerSecretNotAnOfflineGuessableTokenHash() {
+        var created = service.confirm(service.quote(setupDistance("0.25"), distanceForm("120.50")).id());
+        clearInvocations(distanceHttp);
+        ReflectionTestUtils.setField(service, "cryptoSecret", "other-test-service-master-key");
+        assertThrows(BusinessException.class, () -> service.sync(created.orderId()));
+        verifyNoInteractions(distanceHttp); money("69.87");
+        ReflectionTestUtils.setField(service, "cryptoSecret", "test-service-master-key");
+        assertEquals("SUBMITTED", service.sync(created.orderId()).status());
+    }
+
+    @Test
+    void distanceChargesKeepEightDecimalSnapshotBeforeFinalCents() {
+        jdbc.update("UPDATE service_product SET unit_price=0.499999 WHERE id=1");
+        var preview = service.quote(1L, new OrderForm(3, new BigDecimal("0.11"),
+                form().fields(), List.of(), true));
+        assertEquals(0, new BigDecimal("0.16").compareTo(new BigDecimal(preview.amount())),
+                "Round price * distance * quantity only once, to final cents");
+        assertEquals(0, new BigDecimal("0.05499989").compareTo(operations.selectById(preview.id()).getUnitCharge()));
+        money("100.00");
+    }
+
+    QuoteView preciseDistanceQuote(int quantity) {
+        return preciseDistanceQuote("0.499999", "0.11", quantity);
+    }
+
+    QuoteView preciseDistanceQuote(String price, String distance, int quantity) {
+        jdbc.update("UPDATE service_product SET unit_price=? WHERE id=1", new BigDecimal(price));
+        when(catalog.fetchCatalog(any(), any())).thenReturn(List.of(
+                new PluginProduct("1", "测试服务", new BigDecimal("0.000001"), "元/公里")));
+        return service.quote(1L, new OrderForm(quantity, new BigDecimal(distance),
+                form().fields(), List.of(), true));
+    }
+
+    @Test
+    void preciseChargeSurvivesDatabaseAndConfirmationWithoutDuplicateDebit() {
+        var quote = preciseDistanceQuote(3);
+        assertEquals("0.05499989", quote.unitCharge());
+        assertEquals("0.05499989", service.operation(quote.id()).unitCharge());
+        var result = service.confirm(quote.id());
+        assertEquals("SUCCEEDED", result.state());
+        assertEquals("0.16", result.amount());
+        assertEquals(0, new BigDecimal("0.05499989").compareTo(orders.selectById(result.orderId()).getUnitCharge()));
+        assertEquals("0.16", service.confirm(quote.id()).amount());
+        assertEquals("0.16", service.order(result.orderId()).paidAmount());
+        money("99.84");
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+        verify(gateway, times(1)).execute(any(), any(), any(), eq("CREATE"), any());
+    }
+
+    @Test
+    void preciseAdditionsUseFrozenChargeAfterCatalogPriceChanges() {
+        var created = service.confirm(preciseDistanceQuote(3).id());
+        jdbc.update("UPDATE service_product SET unit_price=9,version=version+1 WHERE id=1");
+        when(gateway.execute(any(), any(), any(), eq("ADD_TIMES"), any()))
+                .thenReturn(new RemoteResult("receipt", "ACTIVE", null, null));
+        var addition = service.quoteAction(created.orderId(), new ActionForm("ADD_TIMES", 3));
+        assertEquals("0.16", addition.amount());
+        assertEquals("0.05499989", addition.unitCharge());
+        service.confirm(addition.id());
+        service.confirm(addition.id());
+        money("99.68");
+        assertEquals("0.32", service.order(created.orderId()).paidAmount());
+        assertEquals(6, service.order(created.orderId()).quantity());
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+        verify(gateway, times(1)).execute(any(), any(), any(), eq("ADD_TIMES"), any());
+    }
+
+    @Test
+    void preciseRefundUsesActualReceiptUnitsAndRoundsOnlyFinalAmount() {
+        var created = service.confirm(preciseDistanceQuote(6).id());
+        when(gateway.refundRemaining(any(), any())).thenReturn(6);
+        when(gateway.execute(any(), any(), any(), eq("REFUND"), any()))
+                .thenReturn(new RemoteResult("receipt", "REFUNDED", null, 3));
+        var refund = service.quoteAction(created.orderId(), new ActionForm("REFUND", 0));
+        assertEquals("0.33", refund.amount());
+        assertEquals("0.05499989", refund.unitCharge());
+        var result = service.confirm(refund.id());
+        assertEquals("0.16", result.amount());
+        assertEquals(3, result.quantity());
+        assertEquals("0.16", service.order(created.orderId()).refundedAmount());
+        service.confirm(refund.id());
+        money("99.83");
+        verify(gateway, times(1)).execute(any(), any(), any(), eq("REFUND"), any());
+    }
+
+    @Test
+    void accumulatedRoundingNeverRefundsMoreThanActualPaidAmount() {
+        var created = service.confirm(preciseDistanceQuote(3).id());
+        when(gateway.execute(any(), any(), any(), eq("ADD_TIMES"), any()))
+                .thenReturn(new RemoteResult("receipt", "ACTIVE", null, null));
+        service.confirm(service.quoteAction(created.orderId(), new ActionForm("ADD_TIMES", 3)).id());
+        when(gateway.refundRemaining(any(), any())).thenReturn(6);
+        when(gateway.execute(any(), any(), any(), eq("REFUND"), any()))
+                .thenReturn(new RemoteResult("receipt", "REFUNDED", null, 6));
+        var refund = service.quoteAction(created.orderId(), new ActionForm("REFUND", 0));
+        // Six units round to0.33, but two independently confirmed3-unit purchases paid only0.32.
+        assertEquals("0.32", refund.amount());
+        assertEquals("0.32", service.confirm(refund.id()).amount());
+        service.confirm(refund.id());
+        money("100.00");
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger WHERE direction=1", Integer.class));
+    }
+
+    @Test
+    void preciseUnknownOrderRetainsAndRestoresOnlyItsActualDebit() {
+        when(gateway.execute(any(), any(), any(), eq("CREATE"), any()))
+                .thenThrow(new ProviderRequestException(ProviderRequestException.Reason.TIMEOUT));
+        var preview = preciseDistanceQuote(3);
+        var unknown = service.confirm(preview.id());
+        assertEquals("UNKNOWN", unknown.state());
+        assertEquals("0.16", unknown.amount());
+        money("99.84");
+        service.confirm(preview.id());
+        verify(gateway, times(1)).execute(any(), any(), any(), eq("CREATE"), any());
+        var decision = new ResolveForm("NOT_ACCEPTED", null, null, "已核实订单未受理且无重复执行记录", true);
+        assertThrows(BusinessException.class, () -> service.resolve(preview.id(), decision));
+        auth(8, "api-provider:update", "payment:reconcile");
+        assertEquals("NOT_ACCEPTED", service.resolve(preview.id(), decision).state());
+        assertThrows(BusinessException.class, () -> service.resolve(preview.id(), decision));
+        money("100.00");
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+    }
+
+    @Test
+    void preciseManualRefundUsesEightDecimalsAndDoesNotSendRefundRequest() {
+        var created = service.confirm(preciseDistanceQuote(6).id());
+        when(gateway.sync(any(), any())).thenAnswer(call -> new RemoteResult(
+                ((ServiceOrder) call.getArgument(1)).getExternalOrderNo(), "REFUND_REVIEW", 3, null));
+        service.sync(created.orderId());
+        clearInvocations(gateway);
+        auth(8, "api-provider:update", "payment:reconcile");
+        var preview = service.quoteRefundSettlement(created.orderId(), settlement(created.orderId(), 3));
+        assertEquals("0.16", preview.amount());
+        assertEquals("0.05499989", preview.unitCharge());
+        service.confirmRefundSettlement(preview.id());
+        service.confirmRefundSettlement(preview.id());
+        money("99.83");
+        verifyNoInteractions(gateway);
+    }
+
+    @Test
+    void missingOperationPrecisionMigrationRollsBackQuoteInsteadOfSilentlyChangingPrice() {
+        jdbc.execute("ALTER TABLE service_order_operation MODIFY COLUMN unit_charge DECIMAL(16,6) NOT NULL");
+        assertThrows(BusinessException.class, () -> preciseDistanceQuote(3));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM service_order_operation", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+        money("100");
+        verify(gateway, never()).execute(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void partialPrecisionMigrationCannotDebitOrDispatchAndSameQuoteWorksAfterFix() {
+        jdbc.execute("ALTER TABLE service_order MODIFY COLUMN unit_charge DECIMAL(16,6) NOT NULL");
+        var preview = preciseDistanceQuote(3);
+        assertThrows(BusinessException.class, () -> service.confirm(preview.id()));
+        assertEquals("READY", service.operation(preview.id()).state());
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM service_order", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+        verify(gateway, never()).execute(any(), any(), any(), any(), any());
+        money("100");
+        jdbc.execute("ALTER TABLE service_order MODIFY COLUMN unit_charge DECIMAL(18,8) NOT NULL");
+        assertEquals("SUCCEEDED", service.confirm(preview.id()).state());
+        money("99.84");
+        verify(gateway, times(1)).execute(any(), any(), any(), eq("CREATE"), any());
+    }
+
+    @Test
+    void legacyReadyQuoteKeepsOriginalAmountAndSixDecimalContract() {
+        var preview = preciseDistanceQuote(3);
+        jdbc.update("UPDATE service_order_operation SET unit_charge=0.055000,amount=0.17 WHERE id=?", preview.id());
+        var legacy = service.confirm(preview.id());
+        assertEquals("0.17", legacy.amount());
+        assertEquals("0.05500000", legacy.unitCharge());
+        assertEquals(0, new BigDecimal("0.055000").compareTo(orders.selectById(legacy.orderId()).getUnitCharge()));
+        money("99.83");
+    }
+
+    @Test
+    void legacyOrderAdditionsAndRefundsKeepRecordedPriceRatherThanReconstructingIt() {
+        var preview = preciseDistanceQuote(3);
+        // An old READY snapshot settles through the real ledger, without rewriting its contract.
+        jdbc.update("UPDATE service_order_operation SET unit_charge=0.055000,amount=0.17 WHERE id=?", preview.id());
+        var created = service.confirm(preview.id());
+        jdbc.update("UPDATE service_product SET unit_price=9,version=version+1 WHERE id=1");
+        when(gateway.execute(any(), any(), any(), eq("ADD_TIMES"), any()))
+                .thenReturn(new RemoteResult("receipt", "ACTIVE", null, null));
+        var addition = service.quoteAction(created.orderId(), new ActionForm("ADD_TIMES", 3));
+        assertEquals("0.17", addition.amount());
+        service.confirm(addition.id());
+        when(gateway.refundRemaining(any(), any())).thenReturn(6);
+        when(gateway.execute(any(), any(), any(), eq("REFUND"), any()))
+                .thenReturn(new RemoteResult("receipt", "REFUNDED", null, 6));
+        var refund = service.quoteAction(created.orderId(), new ActionForm("REFUND", 0));
+        assertEquals("0.33", refund.amount());
+        service.confirm(refund.id());
+        money("99.99");
+    }
+
+    @Test
+    void unrepresentableAdapterChargeIsRejectedBeforePersistingOrDispatching() {
+        doReturn(new PreparedOrder(Map.of(), 3, new BigDecimal("0.11"), new BigDecimal("0.111"), "account"))
+                .when(gateway).prepare(any(), any(), any());
+        assertThrows(BusinessException.class, () -> preciseDistanceQuote(3));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM service_order_operation", Integer.class));
+        money("100");
+        verify(gateway, never()).execute(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void doubleRateBillableFactorAlsoKeepsItsExactEightDecimals() {
+        doReturn(new PreparedOrder(Map.of(), 3, new BigDecimal("0.11"), new BigDecimal("0.22"), "account"))
+                .when(gateway).prepare(any(), any(), any());
+        var preview = preciseDistanceQuote("0.249999", "0.11", 3);
+        assertEquals("0.05499978", preview.unitCharge());
+        assertEquals("0.16", preview.amount());
+    }
+
+    @Test
+    void tinyExactOrderCanReachOneCentWithoutRoundingItsUnitDownPrematurely() {
+        var preview = preciseDistanceQuote("0.007143", "0.10", 7);
+        assertEquals("0.00071430", preview.unitCharge());
+        assertEquals("0.01", preview.amount());
+        service.confirm(preview.id());
+        money("99.99");
+    }
+
+    @Test
+    void tinyOrderBelowHalfCentCannotBecomeChargeableThroughDoubleRounding() {
+        assertThrows(BusinessException.class, () -> preciseDistanceQuote("0.049999", "0.10", 1));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM service_order_operation", Integer.class));
+        money("100");
+    }
+
+    @Test
+    void concurrentPreciseConfirmationStillCreatesOnlyOneOrderAndOneDebit() throws Exception {
+        var preview = preciseDistanceQuote(3);
+        var gate = new CountDownLatch(1);
+        Callable<QuoteView> attempt = () -> {
+            auth(7, "ROLE_USER");
+            assertTrue(gate.await(10, TimeUnit.SECONDS));
+            return service.confirm(preview.id());
+        };
+        var first = threads.submit(attempt);
+        var second = threads.submit(attempt);
+        gate.countDown();
+        first.get(10, TimeUnit.SECONDS);
+        second.get(10, TimeUnit.SECONDS);
+        money("99.84");
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM service_order", Integer.class));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+        verify(gateway, times(1)).execute(any(), any(), any(), eq("CREATE"), any());
+    }
+
 }

@@ -201,7 +201,7 @@ public class ProjectCenterServiceImpl implements ProjectCenterService, ProjectAc
         if (!withdraw && !Boolean.TRUE.equals(p.getEnabled())) throw bad("该项目暂未开放开户或充值");
         var account = findAccount(uid, projectId);
         if (provision) {
-            if (f.units() != null && f.units().signum() != 0) throw bad("开户只能是零初始余额，充值需要独立确认");
+            if (f.units() != null && f.units().signum() != 0) units(f.units());
             if (account != null && !"NEW".equals(account.getState()))
                 throw bad("项目账户已存在或仍待核对，请检查原操作");
         } else {
@@ -213,14 +213,14 @@ public class ProjectCenterServiceImpl implements ProjectCenterService, ProjectAc
         var rate = provision ? p.getUnitPrice() : account.getUnitPrice();
         if (!withdraw && rate.compareTo(p.getUnitCost()) < 0)
             throw bad("原冻结售价低于当前已核实成本，暂不能充值，请联系管理员");
-        var quantity = provision ? ZERO : f.units();
+        var quantity = f.units() == null ? ZERO : f.units().stripTrailingZeros();
         var amount =
-                provision
+                provision && quantity.signum() == 0
                         ? ZERO
                         : money(
                                 quantity.multiply(rate),
                                 withdraw ? RoundingMode.DOWN : RoundingMode.UP);
-        if (!provision && (amount.signum() <= 0 || amount.compareTo(MAX_MONEY) > 0))
+        if (quantity.signum() > 0 && (amount.signum() <= 0 || amount.compareTo(MAX_MONEY) > 0))
             throw bad("兑换金额太小或超出安全上限");
         if (withdraw) {
             withdrawal(account, quantity, amount);
@@ -276,7 +276,9 @@ public class ProjectCenterServiceImpl implements ProjectCenterService, ProjectAc
         if (d == null) return operation(id, false);
         try {
             if ("PROVISION".equals(d.operation().getAction())) {
-                var receipt = gateway.provision(d.provider(), d.account().getRemoteProjectId());
+                var receipt = d.operation().getUnits().signum() == 0
+                        ? gateway.provision(d.provider(), d.account().getRemoteProjectId())
+                        : gateway.provision(d.provider(), d.account().getRemoteProjectId(), d.operation().getUnits());
                 settle(d.operation().getId(), receipt, null, null);
             } else {
                 var op = d.operation();
@@ -363,6 +365,10 @@ public class ProjectCenterServiceImpl implements ProjectCenterService, ProjectAc
                 ledger.debit(uid, op.getAmount(), BIZ, "SYY:" + op.getId(), "项目额度充值预扣，等待上游确认");
             }
         }
+        if (fundedProvision(op)) {
+            // Reserve funds and the sole dispatch in the same transaction, before remote I/O.
+            ledger.debit(uid, op.getAmount(), BIZ, "SYY:" + op.getId(), "项目开户初始额度预扣，等待确认");
+        }
         account.setPendingOperationId(op.getId());
         account.setState("BUSY");
         touch(account);
@@ -396,12 +402,15 @@ public class ProjectCenterServiceImpl implements ProjectCenterService, ProjectAc
                     boolean accepted = !manual || "ACCEPTED".equals(resolution.form().outcome());
                     if (accepted) {
                         if ("PROVISION".equals(op.getAction())) {
-                            if (customer == null
-                                    || !account.getRemoteProjectId().equals(customer.projectId()))
-                                throw bad("开户回执不匹配");
+                            if (customer == null || customer.balance() == null
+                                    || !account.getRemoteProjectId().equals(customer.projectId())
+                                    || !manual && (!customer.enabled() || customer.balance().compareTo(op.getUnits()) != 0))
+                                throw bad("开户回执与已确认的初始额度不匹配，请核对原操作");
                             account.setRemoteCustomerId(customer.id());
                             account.setCustomerKeyEncrypted(encrypt(customer.apiKey()));
                             account.setRemoteBalance(customer.balance());
+                            account.setRefundableUnits(op.getUnits());
+                            account.setRefundBudget(op.getAmount());
                         } else {
                             if (adjustment == null || adjustment.balanceAfter() == null)
                                 throw bad("兑换回执不完整");
@@ -432,13 +441,13 @@ public class ProjectCenterServiceImpl implements ProjectCenterService, ProjectAc
                         op.setBalanceAfter(account.getRemoteBalance());
                         op.setState("SUCCEEDED");
                     } else {
-                        if ("TOP_UP".equals(op.getAction()))
+                        if ("TOP_UP".equals(op.getAction()) || fundedProvision(op))
                             ledger.credit(
                                     op.getUserId(),
                                     op.getAmount(),
                                     BIZ,
                                     "SYY:" + op.getId(),
-                                    "人工确认上游未受理，返还项目充值预扣",
+                                    "已核实未受理，返还项目充值预扣",
                                     false);
                         account.setState(account.getRemoteCustomerId() == null ? "NEW" : "ACTIVE");
                         account.setRemoteBalance(null);
@@ -627,9 +636,16 @@ public class ProjectCenterServiceImpl implements ProjectCenterService, ProjectAc
 
     private OperationView operationView(ServiceProjectOperation op, boolean admin) {
         List<String> warnings = new ArrayList<>();
-        warnings.add("项目余额以当前上游回执为准；预览不扣款，确认后仅派发一次。");
-        if ("PROVISION".equals(op.getAction())) warnings.add("仅创建零余额账户，不自动充值；客户密钥仅由服务器加密保管。");
-        else warnings.add("充值向上取整到分，转回向下取整到分；转回只覆盖本平台已充值额度与金额，不自动兑付外部赠额。");
+        warnings.add("项目余额以核实后的记录为准；预览不扣款，确认后仅提交一次。");
+        if (fundedProvision(op)) {
+            warnings.add("本次同时开通账户并充值 " + plain(op.getUnits()) + " 额度；确认后预扣 ¥"
+                    + op.getAmount().setScale(2).toPlainString() + "，成功后计入可转回额度与金额。");
+            warnings.add("响应不确定时保留预扣并检查原操作；不能重新开户或凭余额变化自动退款。");
+        } else if ("PROVISION".equals(op.getAction())) {
+            warnings.add("零余额开通不扣款；账户凭据加密保管，不会在页面显示。");
+        }
+        if (!"PROVISION".equals(op.getAction()) || fundedProvision(op))
+            warnings.add("充值费用向上取整到分，转回金额向下取整到分；只能转回已充值且尚未退回的额度与金额，不兑付赠额。");
         if ("UNKNOWN".equals(op.getState()) || "DISPATCHING".equals(op.getState()))
             warnings.add("结果尚未核实，请检查原操作；不重复派发、不自动退款，不凭余额变化猜测是否成功。");
         return new OperationView(
@@ -795,6 +811,10 @@ public class ProjectCenterServiceImpl implements ProjectCenterService, ProjectAc
 
     private static void own(ServiceProjectOperation o, Long uid) {
         if (o == null || !uid.equals(o.getUserId())) throw missing();
+    }
+
+    private static boolean fundedProvision(ServiceProjectOperation op) {
+        return "PROVISION".equals(op.getAction()) && op.getUnits().signum() > 0;
     }
 
     private static void units(BigDecimal amount) {

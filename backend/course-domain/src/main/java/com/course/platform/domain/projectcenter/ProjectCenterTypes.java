@@ -57,7 +57,7 @@ public final class ProjectCenterTypes {
 
     public record QuoteForm(
             @Pattern(regexp = "PROVISION|TOP_UP|WITHDRAW") @NotBlank String action,
-            @DecimalMin("0.000001") @DecimalMax("100000") @Digits(integer = 6, fraction = 6)
+            @DecimalMin("0") @DecimalMax("100000") @Digits(integer = 6, fraction = 6)
                     BigDecimal units,
             boolean confirmedPolicy) {}
 

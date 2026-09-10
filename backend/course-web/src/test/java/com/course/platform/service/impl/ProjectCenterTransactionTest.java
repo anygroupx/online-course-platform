@@ -315,10 +315,10 @@ class ProjectCenterTransactionTest extends ProjectCenterTestSupport {
     }
 
     @Test
-    void missingConsentInitialFundsAndExpiredCostEvidenceFailBeforeSupplierWrites() {
+    void missingConsentInvalidInitialFundsAndExpiredCostEvidenceFailBeforeSupplierWrites() {
         assertThrows(
                 BusinessException.class,
-                () -> service.quote(projectId, new QuoteForm("PROVISION", BigDecimal.ONE, true)));
+                () -> service.quote(projectId, new QuoteForm("PROVISION", BigDecimal.ONE.negate(), true)));
         assertThrows(
                 BusinessException.class,
                 () -> service.quote(projectId, new QuoteForm("PROVISION", null, false)));

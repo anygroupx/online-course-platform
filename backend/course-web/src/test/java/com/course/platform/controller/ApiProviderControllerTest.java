@@ -118,7 +118,7 @@ class ApiProviderControllerTest {
                 .andExpect(status().isBadGateway())
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.data.reason").value("DNS_FAILURE"))
-                .andExpect(jsonPath("$.message").value("第三方域名解析失败"))
+                .andExpect(jsonPath("$.message").value("服务域名解析失败"))
                 .andExpect(jsonPath("$.errorId").value(failure.getErrorId()));
     }
 

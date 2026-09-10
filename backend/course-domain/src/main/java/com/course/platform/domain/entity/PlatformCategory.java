@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -26,6 +27,12 @@ public class PlatformCategory implements Serializable {
      */
     @TableField("name")
     private String name;
+
+    /**
+     * 分类价格倍率，为空时使用导入或刷新时传入的全局倍率
+     */
+    @TableField(value = "price_multiplier", updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal priceMultiplier;
 
     /**
      * 排序
