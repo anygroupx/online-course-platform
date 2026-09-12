@@ -117,21 +117,7 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
                                                    CoursePlatform platform,
                                                    ApiProvider apiProvider) {
         String thirdOrderId = requireThirdOrderId(order, "查询进度");
-
-        Map<String, Object> params = authParams(apiProvider);
-        params.put("yid", thirdOrderId);
-        params.put("username", order.getStudentAccount());
-        params.put("school", order.getSchoolName());
-
-        JSONObject json = parseResponse(post(apiProvider, "chadan", "进度查询", params), "进度查询");
-        if (!isCode(json, 1)) {
-            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
-        }
-
-        JSONObject item = findProgressItem(json.getJSONArray("data"), thirdOrderId);
-        if (item == null) {
-            throw new BusinessException("进度查询成功，但响应中没有订单数据");
-        }
+        JSONObject item = queryOrderItem(order, apiProvider, thirdOrderId, "进度查询");
 
         String remoteStatus = firstNonBlank(item.getStr("status"), item.getStr("status_text"));
         Integer localStatus = mapOrderStatus(remoteStatus, order.getOrderStatus());
@@ -236,19 +222,50 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
     @Override
     public List<ProviderOrderLog> fetchOrderLogs(CourseOrder order, ApiProvider apiProvider) {
         String thirdOrderId = requireThirdOrderId(order, "查询订单日志");
-        Map<String, Object> params = authParams(apiProvider);
-        params.put("oid", thirdOrderId);
+        // Daytime/29 does not expose the guessed getOrderLogs action used by the original
+        // adapter. Reuse its verified read-only chadan contract and present either embedded
+        // logs or a current execution snapshot instead of repeatedly calling a rejected API.
+        JSONObject item = queryOrderItem(order, apiProvider, thirdOrderId, "订单日志");
+        JSONArray data = responseArray(item, "logs", "log_list", "records");
+        if (data != null) {
+            return normalizeOrderLogs(data);
+        }
 
-        JSONObject json = parseResponse(post(apiProvider, "getOrderLogs", "订单日志", params), "订单日志");
-        if (!isCode(json, 0) && !isCode(json, 1)) {
+        String progress = item.getStr("process");
+        String remarks = item.getStr("remarks");
+        String content = snapshotContent(progress, remarks);
+        return List.of(ProviderOrderLog.builder()
+                .id(firstNonBlank(item.getStr("id"), item.getStr("yid"), thirdOrderId))
+                .title("当前执行状态")
+                .content(content)
+                .status(normalizeDisplayStatus(firstNonBlank(item.getStr("status"), item.getStr("status_text"))))
+                .operator(firstNonBlank(item.getStr("operator"), item.getStr("admin")))
+                .createTime(firstNonBlank(item.getStr("update_time"), item.getStr("updateTime"),
+                        item.getStr("addtime"), item.getStr("time")))
+                .build());
+    }
+
+    private JSONObject queryOrderItem(CourseOrder order, ApiProvider apiProvider,
+                                      String thirdOrderId, String operation) {
+        Map<String, Object> params = authParams(apiProvider);
+        params.put("yid", thirdOrderId);
+        params.put("username", order.getStudentAccount());
+        params.put("school", order.getSchoolName());
+
+        JSONObject json = parseResponse(post(apiProvider, "chadan", operation, params), operation);
+        if (!isCode(json, 1)) {
             throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
         }
 
-        JSONArray data = responseArray(json, "data", "logs", "list");
-        List<ProviderOrderLog> logs = new ArrayList<>();
-        if (data == null) {
-            return logs;
+        JSONObject item = findProgressItem(json.get("data"), thirdOrderId);
+        if (item == null) {
+            throw new BusinessException(operation + "成功，但响应中没有匹配订单数据");
         }
+        return item;
+    }
+
+    private List<ProviderOrderLog> normalizeOrderLogs(JSONArray data) {
+        List<ProviderOrderLog> logs = new ArrayList<>();
         for (int i = 0; i < data.size(); i++) {
             JSONObject item = data.getJSONObject(i);
             logs.add(ProviderOrderLog.builder()
@@ -261,6 +278,19 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
                     .build());
         }
         return logs;
+    }
+
+    private String snapshotContent(String progress, String remarks) {
+        if (StrUtil.isNotBlank(progress) && StrUtil.isNotBlank(remarks)) {
+            return "当前进度：" + progress + "；备注：" + remarks;
+        }
+        if (StrUtil.isNotBlank(progress)) {
+            return "当前进度：" + progress;
+        }
+        if (StrUtil.isNotBlank(remarks)) {
+            return remarks;
+        }
+        return "已获取最新执行状态";
     }
 
     protected Map<String, Object> authParams(ApiProvider apiProvider) {
@@ -329,18 +359,22 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
         }
     }
 
-    private JSONObject findProgressItem(JSONArray data, String thirdOrderId) {
-        if (data == null || data.isEmpty()) {
+    private JSONObject findProgressItem(Object data, String thirdOrderId) {
+        if (data instanceof JSONObject item) {
+            String responseId = firstNonBlank(item.getStr("id"), item.getStr("yid"));
+            return StrUtil.isBlank(responseId) || thirdOrderId.equals(responseId) ? item : null;
+        }
+        if (!(data instanceof JSONArray array) || array.isEmpty()) {
             return null;
         }
-        for (int i = 0; i < data.size(); i++) {
-            JSONObject item = data.getJSONObject(i);
+        for (int i = 0; i < array.size(); i++) {
+            JSONObject item = array.getJSONObject(i);
             String responseId = firstNonBlank(item.getStr("id"), item.getStr("yid"));
             if (thirdOrderId.equals(responseId)) {
                 return item;
             }
         }
-        return data.getJSONObject(0);
+        return null;
     }
 
     private String extractThirdOrderId(JSONObject json) {
@@ -393,6 +427,9 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
     }
 
     private String normalizeDisplayStatus(String status) {
+        if (StrUtil.isBlank(status)) {
+            return null;
+        }
         return switch (status) {
             case "待处理" -> "待上号";
             case "已退款" -> "等待退款";

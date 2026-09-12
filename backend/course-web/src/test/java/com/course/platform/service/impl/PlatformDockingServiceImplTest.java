@@ -1,6 +1,7 @@
 package com.course.platform.service.impl;
 
 import com.course.platform.application.service.platform.ApiProviderService;
+import com.course.platform.application.service.order.CourseOrderProgressLogService;
 import com.course.platform.application.service.platform.docking.PlatformDockingStrategy;
 import com.course.platform.domain.dto.DockResult;
 import com.course.platform.domain.dto.PlatformItem;
@@ -117,7 +118,8 @@ class PlatformDockingServiceImplTest {
                 coursePlatformMapper,
                 courseOrderMapper,
                 platformCategoryMapper,
-                apiProviderService
+                apiProviderService,
+                mock(CourseOrderProgressLogService.class)
         );
     }
 

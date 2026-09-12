@@ -2,6 +2,7 @@ package com.course.platform.security;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.course.platform.application.service.platform.PlatformDockingService;
+import com.course.platform.application.service.order.CourseOrderProgressLogService;
 import com.course.platform.application.service.support.OperationLogService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
@@ -44,10 +45,15 @@ class ObjectAuthorizationTest {
     }
 
     private CourseOrderServiceImpl orderService(CourseOrderMapper orderMapper) {
+        return orderService(orderMapper, mock(CourseOrderProgressLogService.class));
+    }
+
+    private CourseOrderServiceImpl orderService(CourseOrderMapper orderMapper,
+                                                CourseOrderProgressLogService progressLogService) {
         return new CourseOrderServiceImpl(orderMapper, mock(CoursePlatformMapper.class), mock(UserMapper.class),
                 mock(OperationLogService.class), mock(PlatformDockingService.class), mock(ApiProviderMapper.class),
                 mock(ApplicationEventPublisher.class), mock(AccountLedgerServiceImpl.class),
-                new ResourceAuthorizationService());
+                new ResourceAuthorizationService(), progressLogService);
     }
 
     @Test
@@ -62,6 +68,24 @@ class ObjectAuthorizationTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> orderService(mapper).getOrderById(99L, 10L));
         assertEquals(ResultCode.ORDER_NOT_FOUND.getCode(), ex.getCode());
+    }
+
+    @Test
+    void ordinaryUserCannotReadAnotherUsersProgressLogs() {
+        authenticate(10L, SecurityAuthorities.ROLE_USER);
+        CourseOrder order = new CourseOrder();
+        order.setId(99L);
+        order.setOrderNo("ORD-other");
+        order.setUserId(11L);
+        CourseOrderMapper mapper = mock(CourseOrderMapper.class);
+        CourseOrderProgressLogService progressLogs = mock(CourseOrderProgressLogService.class);
+        when(mapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(order);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> orderService(mapper, progressLogs).getProgressLogsByOrderNo("ORD-other", 10L));
+
+        assertEquals(ResultCode.ORDER_NOT_FOUND.getCode(), ex.getCode());
+        verifyNoInteractions(progressLogs);
     }
 
     @Test

@@ -1160,9 +1160,9 @@
         <el-button @click="receiptOrderId = currentOrder.id; receiptVisible = true">恢复执行编号</el-button>
         <span>已有回执但编号未记录时，先核对归属，再确认关联；不会重新下单。</span>
       </div>
-      <el-divider content-position="left">订单执行日志</el-divider>
+      <el-divider content-position="left">执行记录</el-divider>
       <div class="provider-log-header">
-        <span class="provider-log-tip">日志来自订单关联的服务配置</span>
+        <span class="provider-log-tip">仅记录进度、状态或备注发生变化的时间点</span>
         <el-button
           size="small"
           :icon="Refresh"
@@ -1170,13 +1170,13 @@
           :disabled="!currentOrder || isSelfOperatedOrder(currentOrder)"
           @click="loadProviderOrderLogs"
         >
-          刷新日志
+          重新加载
         </el-button>
       </div>
       <div v-loading="providerLogsLoading" class="provider-log-panel">
         <el-alert
           v-if="currentOrder && isSelfOperatedOrder(currentOrder)"
-          title="自营订单无执行日志"
+          title="完成进度会按倒计时自动计算"
           type="info"
           :closable="false"
           show-icon
@@ -1190,7 +1190,7 @@
         />
         <el-empty
           v-else-if="!providerLogsLoading && providerLogs.length === 0"
-          description="暂无订单执行日志"
+          description="暂无执行记录"
           :image-size="72"
         />
         <el-timeline v-else class="provider-log-timeline">
@@ -1199,15 +1199,17 @@
             :key="log.id || `${log.createTime || 'log'}-${index}`"
             :timestamp="log.createTime || ''"
             placement="top"
-            :type="getProviderLogType(log.status)"
+            :type="getProviderLogType(log.orderStatus)"
           >
             <div class="provider-log-card">
               <div class="provider-log-title">
-                <span>{{ log.title || log.status || "订单日志" }}</span>
-                <el-tag v-if="log.status" size="small" effect="plain">{{ log.status }}</el-tag>
+                <span>完成进度：{{ log.progress || "-" }}</span>
+                <el-tag :type="getStatusType(log.orderStatus)" size="small" effect="plain">
+                  {{ getStatusText(log.orderStatus) }}
+                </el-tag>
               </div>
-              <div class="provider-log-content">{{ log.content || "无详细内容" }}</div>
-              <div v-if="log.operator" class="provider-log-operator">操作人：{{ log.operator }}</div>
+              <div v-if="log.remarks" class="provider-log-content">{{ log.remarks }}</div>
+              <div class="provider-log-operator">{{ getProgressLogSourceText(log.source) }}</div>
             </div>
           </el-timeline-item>
         </el-timeline>
@@ -1334,7 +1336,7 @@ import {
   getRemainingCountdown,
   completeOrder,
   exportOrders,
-  getProviderOrderLogs,
+  getOrderProgressLogs,
 } from "@/api/order";
 import { getCoursePlatforms } from "@/api/course";
 import { useVariableStore } from "@/stores/variableStore";
@@ -2085,12 +2087,17 @@ const handleOperationCommand = (command, row) => {
 const isSelfOperatedOrder = (order) =>
   order?.isSelfOperated === true || Number(order?.isSelfOperated) === 1;
 
-const getProviderLogType = (status) => {
-  const value = String(status || "");
-  if (/成功|完成|正常/.test(value)) return "success";
-  if (/失败|异常|错误|取消/.test(value)) return "danger";
-  if (/等待|待处理|暂停/.test(value)) return "warning";
-  return "primary";
+const getProviderLogType = (orderStatus) => {
+  const type = getStatusType(orderStatus);
+  return ["success", "warning", "danger", "info", "primary"].includes(type)
+    ? type
+    : "primary";
+};
+
+const getProgressLogSourceText = (source) => {
+  if (source === "manual_refresh") return "手动刷新";
+  if (source === "scheduled_sync") return "自动更新";
+  return "进度更新";
 };
 
 const loadProviderOrderLogs = async () => {
@@ -2104,7 +2111,7 @@ const loadProviderOrderLogs = async () => {
   const orderId = order.id;
   providerLogsLoading.value = true;
   try {
-    const res = await getProviderOrderLogs(orderId);
+    const res = await getOrderProgressLogs(order.orderNo);
     if (requestVersion === providerLogsRequestVersion && currentOrder.value?.id === orderId) {
       providerLogs.value = Array.isArray(res.data) ? res.data : [];
     }
@@ -2112,7 +2119,7 @@ const loadProviderOrderLogs = async () => {
     if (requestVersion === providerLogsRequestVersion && currentOrder.value?.id === orderId) {
       providerLogsError.value =
         error?.response?.data?.message || error?.message || "订单执行日志加载失败";
-      console.error("加载上游订单日志失败：", error);
+      console.error("加载订单执行记录失败：", error);
     }
   } finally {
     if (requestVersion === providerLogsRequestVersion) {

@@ -75,6 +75,11 @@ class OrderReceiptRecoveryTest {
             assertEquals("saved-private-key",((com.course.platform.domain.entity.ApiProvider)a.getArgument(0)).getApiKey());
             return new Verified(a.getArgument(3));
         });
+        when(gateway.findCandidates(any(), any(), any())).thenAnswer(a -> {
+            assertFalse(TransactionSynchronizationManager.isActualTransactionActive());
+            assertEquals("saved-private-key", ((com.course.platform.domain.entity.ApiProvider) a.getArgument(0)).getApiKey());
+            return List.of(new Verified("receipt-9"), new Verified("receipt-10"));
+        });
         validators=Validation.buildDefaultValidatorFactory();
         service=new OrderReceiptRecoveryServiceImpl(rows,sql.getMapper(CourseOrderMapper.class),sql.getMapper(CoursePlatformMapper.class),sql.getMapper(ApiProviderMapper.class),sql.getMapper(UserMapper.class),authorities,gateway,new ProviderUrlNormalizer(),validators.getValidator(),new DataSourceTransactionManager(ds));
         ReflectionTestUtils.setField(service,"enabled",true);ReflectionTestUtils.setField(service,"cryptoSecret",SECRET);
@@ -267,4 +272,128 @@ class OrderReceiptRecoveryTest {
         assertNull(receipt(1));assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM course_order_receipt_claim",Integer.class));
     }
 
+
+    @Test void candidatesUseOneTransactionFreeReadAndExposeOnlyBoundedIdsWithNoDraftOrWrites() throws Exception {
+        var before = jdbc.queryForMap("SELECT * FROM course_order WHERE id=1");
+        var view = service.candidates(1);
+        assertEquals(1L, view.orderId()); assertEquals(List.of("receipt-9", "receipt-10"), view.receiptIds());
+        assertEquals("CURRENT_RESPONSE", view.scope()); assertNotNull(view.checkedAt());
+        assertEquals(before, jdbc.queryForMap("SELECT * FROM course_order WHERE id=1"));
+        var body = json.readTree(json.writeValueAsString(view));
+        assertEquals(Set.of("orderId", "receiptIds", "checkedAt", "scope"), json.convertValue(body, Map.class).keySet());
+        for (String secret : List.of("private", NOTE, "student", "sourceIdentity", "saved-user"))
+            assertFalse(body.toString().contains(secret));
+        assertNoCandidateWrites();
+        verify(gateway, times(1)).findCandidates(any(), any(), any());
+        verify(gateway, never()).verify(any(), any(), any(), anyString());
+    }
+    @Test void candidateChoiceAloneNeverAssociatesAndOriginalPreviewStillNeedsFreshProofAndTwoConsents() {
+        assertEquals("receipt-9", service.candidates(1).receiptIds().get(0));
+        assertNoCandidateWrites();
+        assertThrows(BusinessException.class, () -> service.preview(1, new PreviewForm(UUID.randomUUID().toString(), "receipt-9", NOTE, false)));
+        var ready = ready(); assertNull(receipt(1));
+        assertThrows(BusinessException.class, () -> service.confirm(1, ready.id(), new ConfirmForm(false)));
+        assertEquals("APPLIED", service.confirm(1, ready.id(), new ConfirmForm(true)).state());
+        verify(gateway, times(1)).findCandidates(any(), any(), any());
+        verify(gateway, times(1)).verify(any(), any(), any(), anyString()); noFunds();
+    }
+    @Test void candidateReadsNeedExplicitFeatureAndBothTokenAndLiveDatabasePermissions() {
+        assertThrows(BusinessException.class, () -> service.candidates(0));
+        for (String permission : List.of("ROLE_SUPER_ADMIN", "order:update", "api-provider:update")) {
+            auth(7, permission); assertThrows(BusinessException.class, () -> service.candidates(1));
+        }
+        auth(7, "order:update", "api-provider:update");
+        when(authorities.loadAuthorities(7L)).thenReturn(List.of());
+        assertThrows(BusinessException.class, () -> service.candidates(1));
+        when(authorities.loadAuthorities(7L)).thenReturn(List.of(new SimpleGrantedAuthority("order:update"), new SimpleGrantedAuthority("api-provider:update")));
+        jdbc.update("UPDATE sys_user SET status=0 WHERE id=7");
+        assertThrows(BusinessException.class, () -> service.candidates(1));
+        jdbc.update("UPDATE sys_user SET status=1 WHERE id=7");
+        ReflectionTestUtils.setField(service, "enabled", false);
+        jdbc.execute("DROP TABLE course_order_receipt_claim"); jdbc.execute("DROP TABLE course_order_receipt_recovery");
+        assertThrows(BusinessException.class, () -> service.candidates(1)); verifyNoInteractions(gateway);
+    }
+    @Test void candidatesNeverQueryAmbiguousLocalIdentityOrAlreadyBoundPendingAndUnverifiedOrders() {
+        order(2,9,"student"); assertThrows(BusinessException.class, () -> service.candidates(1));
+        jdbc.update("DELETE FROM course_order WHERE id=2");
+        for (String change : List.of("third_order_id='known'", "dock_status=0", "order_status=8", "is_deleted=1", "is_self_operated=1", "student_password=''")) {
+            jdbc.update("UPDATE course_order SET " + change + " WHERE id=1");
+            assertThrows(BusinessException.class, () -> service.candidates(1));
+            jdbc.update("DELETE FROM course_order"); order(1,9,"student");
+        }
+        jdbc.update("UPDATE api_provider SET verified_at=NULL WHERE id=9");
+        assertThrows(BusinessException.class, () -> service.candidates(1)); verifyNoInteractions(gateway); assertNoCandidateWrites();
+    }
+    @Test void changedOrderAndConfigurationDuringCandidateReadDiscardEveryCandidate() {
+        for (String change : List.of("UPDATE course_order SET user_id=8 WHERE id=1",
+                "UPDATE course_order SET amount=amount+1 WHERE id=1", "UPDATE course_order SET student_password='changed' WHERE id=1",
+                "UPDATE api_provider SET config_version=config_version+1 WHERE id=9",
+                "UPDATE api_provider SET api_key='rotated' WHERE id=9", "UPDATE course_platform SET dock_param='changed' WHERE id=1")) {
+            doAnswer(a -> { assertFalse(TransactionSynchronizationManager.isActualTransactionActive()); jdbc.update(change); return List.of(new Verified("receipt-9")); })
+                    .when(gateway).findCandidates(any(), any(), any());
+            assertThrows(BusinessException.class, () -> service.candidates(1), change);
+            jdbc.update("DELETE FROM course_order"); order(1,9,"student");
+            jdbc.update("UPDATE course_platform SET dock_param='product-2' WHERE id=1");
+            jdbc.update("UPDATE api_provider SET api_key=? WHERE id=9", SecretCrypto.encrypt("saved-private-key", SECRET));
+            assertNoCandidateWrites();
+        }
+    }
+    @Test void permissionRevocationAndActorChangeDuringCandidateReadCannotExposeResults() {
+        doAnswer(a -> { when(authorities.loadAuthorities(7L)).thenReturn(List.of()); return List.of(new Verified("receipt-9")); })
+                .when(gateway).findCandidates(any(), any(), any());
+        assertThrows(BusinessException.class, () -> service.candidates(1)); assertNoCandidateWrites();
+        when(authorities.loadAuthorities(7L)).thenReturn(List.of(new SimpleGrantedAuthority("order:update"), new SimpleGrantedAuthority("api-provider:update")));
+        doAnswer(a -> { auth(8, "order:update", "api-provider:update"); return List.of(new Verified("receipt-9")); })
+                .when(gateway).findCandidates(any(), any(), any());
+        assertThrows(BusinessException.class, () -> service.candidates(1)); assertNoCandidateWrites();
+    }
+    @Test void newDuplicateOrAliasDuringCandidateReadInvalidatesTheSnapshot() {
+        doAnswer(a -> { order(2,9,"student"); return List.of(new Verified("receipt-9")); }).when(gateway).findCandidates(any(), any(), any());
+        assertThrows(BusinessException.class, () -> service.candidates(1));
+        jdbc.update("DELETE FROM course_order WHERE id=2");
+        doAnswer(a -> { alias(); return List.of(new Verified("receipt-9")); }).when(gateway).findCandidates(any(), any(), any());
+        assertThrows(BusinessException.class, () -> service.candidates(1)); assertNoCandidateWrites();
+    }
+    @Test void candidatesExcludeExistingAndNewlyBoundReceiptsAcrossCanonicalAliases() {
+        alias(); order(2,10,"different student");
+        doAnswer(a -> { jdbc.update("UPDATE course_order SET third_order_id='receipt-9',is_deleted=1 WHERE id=2");
+            return List.of(new Verified("receipt-9"), new Verified("receipt-10")); }).when(gateway).findCandidates(any(), any(), any());
+        assertEquals(List.of("receipt-10"), service.candidates(1).receiptIds()); assertNoCandidateWrites();
+    }
+    @Test void historicalClaimsExcludeCandidatesEvenWhenVisibleReceiptWasCleared() {
+        var ready = ready(); service.confirm(1,ready.id(),new ConfirmForm(true));
+        jdbc.update("UPDATE course_order SET third_order_id=NULL WHERE id=1");
+        assertTrue(service.candidates(1).receiptIds().isEmpty());
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM course_order_receipt_claim",Integer.class));
+        assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM course_order_receipt_recovery",Integer.class));
+        assertNull(receipt(1)); noFunds();
+    }
+    @Test void malformedGatewayCandidateProofIsFailureNotAnEmptyOrPartialSuccess() {
+        List<List<Verified>> invalid = new ArrayList<>();
+        invalid.add(null); invalid.add(Arrays.asList((Verified)null)); invalid.add(List.of(new Verified(null)));
+        invalid.add(List.of(new Verified("../id"))); invalid.add(List.of(new Verified("receipt-9"),new Verified("receipt-9")));
+        invalid.add(java.util.stream.IntStream.range(0,21).mapToObj(i -> new Verified("receipt-"+i)).toList());
+        for (var found : invalid) {
+            doReturn(found).when(gateway).findCandidates(any(),any(),any());
+            var error = assertThrows(BusinessException.class, () -> service.candidates(1));
+            assertNull(error.getCause()); assertNoCandidateWrites();
+        }
+    }
+    @Test void candidateFailureIsSanitizedAndNeverRetriesOrCreatesARecoveryRequest() {
+        doThrow(new IllegalStateException("private-student-password saved-private-key")).when(gateway).findCandidates(any(),any(),any());
+        var error = assertThrows(BusinessException.class, () -> service.candidates(1));
+        assertFalse(error.toString().contains("private")); assertNull(error.getCause());
+        verify(gateway,times(1)).findCandidates(any(),any(),any()); verifyNoMoreInteractions(gateway); assertNoCandidateWrites();
+    }
+    @Test void emptyCandidatesRemainExplicitlyResponseScopedAndNeverProveOrderAbsence() {
+        doReturn(List.of()).when(gateway).findCandidates(any(),any(),any());
+        var view = service.candidates(1);
+        assertTrue(view.receiptIds().isEmpty()); assertEquals("CURRENT_RESPONSE", view.scope()); assertNoCandidateWrites();
+    }
+    void assertNoCandidateWrites() {
+        assertNull(receipt(1));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM course_order_receipt_recovery", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM course_order_receipt_claim", Integer.class));
+        noFunds();
+    }
 }

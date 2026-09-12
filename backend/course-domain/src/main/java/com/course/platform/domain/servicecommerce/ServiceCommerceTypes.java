@@ -99,7 +99,7 @@ public final class ServiceCommerceTypes {
             @NotBlank
                     @Pattern(
                             regexp =
-                                    "REFUND|ADD_TIMES|PAUSE|RESUME|DELAY|DELAY_TASK|CHANGE_TIME|EDIT_PLAN|REASSIGN|EDIT_SCHEDULE|RUN_NOW|REPORT")
+                                    "CANCEL|REFUND|ADD_TIMES|PAUSE|RESUME|DELAY|DELAY_TASK|CHANGE_TIME|EDIT_PLAN|REASSIGN|EDIT_SCHEDULE|RUN_NOW|REPORT")
                     String action,
             @Min(0) @Max(365) int quantity,
             @Size(max = 64) Map<@Size(max = 40) String, @Size(max = 2048) String> fields,
@@ -123,7 +123,13 @@ public final class ServiceCommerceTypes {
             @Size(max = 64) String externalOrderNo,
             @Min(0) @Max(9999) Integer refundedUnits,
             @NotBlank @Size(min = 10, max = 1000) String evidence,
-            boolean upstreamChecked) {}
+            boolean upstreamChecked,
+            @Size(max = 64) String externalSubOrderNo) {
+        public ResolveForm(String outcome, String externalOrderNo, Integer refundedUnits,
+                           String evidence, boolean upstreamChecked) {
+            this(outcome, externalOrderNo, refundedUnits, evidence, upstreamChecked, null);
+        }
+    }
 
     public record RefundSettlementForm(
             @NotNull @Min(0) Long orderVersion,
@@ -144,7 +150,12 @@ public final class ServiceCommerceTypes {
             String notice,
             InternshipSchedule schedule,
             List<LocalDate> paidDates,
-            InternshipAdvice advice) {
+            InternshipAdvice advice,
+            List<RunRule> runRules) {
+        public Lookup(Map<String, String> suggested, List<Choice> choices, String notice,
+                      InternshipSchedule schedule, List<LocalDate> paidDates, InternshipAdvice advice) {
+            this(suggested, choices, notice, schedule, paidDates, advice, null);
+        }
         public Lookup(Map<String, String> suggested, List<Choice> choices, String notice) {
             this(suggested, choices, notice, null, null, null);
         }
@@ -192,7 +203,13 @@ public final class ServiceCommerceTypes {
             List<String> actions,
             InternshipSchedule schedule,
             String quantityUnit,
-            TotalDistancePlan distancePlan) {}
+            TotalDistancePlan distancePlan,
+            StatusCheckView statusCheck) {}
+
+    public record StatusCheckView(
+            @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
+                    LocalDateTime checkedAt,
+            boolean delayed) {}
 
     public record QuoteView(
             String id,
@@ -276,7 +293,19 @@ public final class ServiceCommerceTypes {
         }
     }
 
-    public record RunLog(String id, String time, String status) {}
+    /** Safe running-rule projection, never an arbitrary remote form or HTML fragment. */
+    public record RunRule(String distance, String startTime, String endTime) {}
+
+    public record OrderText(String text) {
+        @Override
+        public String toString() { return "OrderText[text=REDACTED]"; }
+    }
+
+    public record RunLog(String id, String time, String status, boolean editable, String endTime) {
+        public RunLog(String id, String time, String status) {
+            this(id, time, status, false, null);
+        }
+    }
 
     public record RunLogPage(List<RunLog> items, int page, boolean hasMore) {}
 
@@ -287,7 +316,15 @@ public final class ServiceCommerceTypes {
             BigDecimal billablePerUnit,
             String accountLabel,
             DailyServicePlan plan,
-            TotalDistancePlan distancePlan) {
+            TotalDistancePlan distancePlan,
+            ServiceAccountFingerprint accountFingerprint) {
+        public PreparedOrder(
+                Map<String, Object> fields, int quantity, BigDecimal distance,
+                BigDecimal billablePerUnit, String accountLabel, DailyServicePlan plan,
+                TotalDistancePlan distancePlan) {
+            this(fields, quantity, distance, billablePerUnit, accountLabel, plan, distancePlan, null);
+        }
+
         public PreparedOrder(
                 Map<String, Object> fields, int quantity, BigDecimal distance,
                 BigDecimal billablePerUnit, String accountLabel, DailyServicePlan plan) {

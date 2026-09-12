@@ -45,10 +45,16 @@
           <template #title>订单管理</template>
         </el-menu-item>
 
-        <el-menu-item index="/services"><el-icon><Tickets /></el-icon><template #title>服务商城</template></el-menu-item>
-        <el-menu-item index="/service-projects"><el-icon><Wallet /></el-icon><template #title>项目中心</template></el-menu-item>
-        <el-menu-item index="/project-clients"><el-icon><User /></el-icon><template #title>客户与 API</template></el-menu-item>
-        <el-menu-item index="/service-orders"><el-icon><Document /></el-icon><template #title>服务订单</template></el-menu-item>
+        <el-sub-menu index="service-center">
+          <template #title>
+            <el-icon><Wallet /></el-icon>
+            <span>服务中心</span>
+          </template>
+          <el-menu-item index="/services">服务商城</el-menu-item>
+          <el-menu-item index="/service-projects">项目中心</el-menu-item>
+          <el-menu-item index="/project-clients">客户与 API</el-menu-item>
+          <el-menu-item index="/service-orders">服务订单</el-menu-item>
+        </el-sub-menu>
 
         <el-menu-item index="/courses">
           <el-icon><Reading /></el-icon>
@@ -62,7 +68,7 @@
 
         <el-menu-item index="/price-list">
           <el-icon><Tickets /></el-icon>
-          <template #title>价格列表</template>
+          <template #title>项目管理</template>
         </el-menu-item>
 
         <el-menu-item index="/recharge">
@@ -80,17 +86,24 @@
           <template #title>操作日志</template>
         </el-menu-item>
 
-        <el-sub-menu v-if="userStore.isAdmin" index="admin">
+        <el-sub-menu v-if="userStore.isAdmin" index="service-admin">
+          <template #title>
+            <el-icon><Tickets /></el-icon>
+            <span>服务管理</span>
+          </template>
+          <el-menu-item index="/admin/service-products">服务商品</el-menu-item>
+          <el-menu-item index="/admin/service-projects">项目与子钱包</el-menu-item>
+          <el-menu-item index="/admin/service-orders">服务订单与对账</el-menu-item>
+          <el-menu-item index="/admin/plugin-integrations">接口接入检查</el-menu-item>
+        </el-sub-menu>
+
+        <el-sub-menu v-if="userStore.isAdmin" index="system-admin">
           <template #title>
             <el-icon><Setting /></el-icon>
             <span>系统管理</span>
           </template>
           <el-menu-item index="/admin/platforms">课程平台</el-menu-item>
           <el-menu-item index="/admin/api-providers">接口配置</el-menu-item>
-          <el-menu-item index="/admin/service-products">服务商品</el-menu-item>
-          <el-menu-item index="/admin/service-projects">项目与子钱包</el-menu-item>
-          <el-menu-item index="/admin/service-orders">服务订单与对账</el-menu-item>
-          <el-menu-item index="/admin/plugin-integrations">接口接入检查</el-menu-item>
           <el-menu-item index="/admin/orders">订单管理</el-menu-item>
           <el-menu-item index="/admin/cards">充值卡密</el-menu-item>
           <el-menu-item index="/admin/announcements">公告管理</el-menu-item>
@@ -308,11 +321,11 @@ import { computed, ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useUserStore } from "@/stores/user";
 import { useTagsViewStore } from "@/stores/tagsView";
+import { useAppConfigStore } from "@/stores/appConfig";
 import { useResponsive } from "@/composables/useResponsive";
 import { ElMessage } from "element-plus";
 import { changePassword } from "@/api/user";
 import { getSystemAnnouncement } from "@/api/announcement";
-import { getSettings } from "@/api/setting";
 import TagsView from "@/components/TagsView.vue";
 import CustomerService from "@/components/CustomerService.vue";
 import ThemeToggle from "@/components/ThemeToggle.vue";
@@ -333,21 +346,16 @@ import {
   Menu,
 } from "@element-plus/icons-vue";
 
-const settings = ref({
-  site_name: "",
-  site_keywords: "",
-  site_description: "",
-  system_notice: "",
-  user_register_enabled: "1",
-  user_register_fee: 5,
-  min_recharge_amount: 10,
-  api_enable_threshold: 300,
-});
-
 const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
 const tagsViewStore = useTagsViewStore();
+const appConfigStore = useAppConfigStore();
+const settings = computed(() => ({
+  site_name: appConfigStore.branding.siteName,
+  site_keywords: appConfigStore.branding.siteKeywords,
+  site_description: appConfigStore.branding.siteDescription,
+}));
 
 // 缓存的视图组件名称
 const cachedViews = computed(() => tagsViewStore.cachedViewsList);
@@ -480,7 +488,7 @@ const breadcrumbList = computed(() => {
         name = "代理管理";
         break;
       case "price-list":
-        name = "价格列表";
+        name = "项目管理";
         break;
       case "logs":
         name = "操作日志";
@@ -638,21 +646,6 @@ const loadSystemAnnouncement = async () => {
   }
 };
 
-// 获取系统设置
-const loadSettings = async () => {
-  try {
-    const response = await getSettings();
-    if (response.code === 1) {
-      response.data.forEach((item) => {
-        settings.value[item.configKey] = item.configValue;
-      });
-      console.log("系统设置加载完成", settings.value);
-    }
-  } catch (error) {
-    console.log("加载系统设置失败:", error);
-  }
-};
-
 // 动态更新 SEO 信息
 const updateSEO = () => {
   // 更新网站标题
@@ -690,7 +683,7 @@ watch(
   () => {
     updateSEO();
   },
-  { deep: true }
+  { deep: true, immediate: true }
 );
 
 // 监听路由变化，更新页面标题
@@ -717,7 +710,7 @@ onMounted(() => {
     passwordDialogVisible.value = true;
   } else {
     loadSystemAnnouncement();
-    loadSettings();
+    appConfigStore.ensureLoaded();
   }
   window.addEventListener("must-change-password", handleMustChangePassword);
   window.addEventListener("keydown", handleWindowKeydown);

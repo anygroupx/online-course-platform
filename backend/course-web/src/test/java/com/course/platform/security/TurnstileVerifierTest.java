@@ -13,8 +13,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -61,8 +64,79 @@ class TurnstileVerifierTest {
                 true, true, "prod", "course.example.com");
 
         assertDoesNotThrow(() -> verifier.verify("opaque-one-time-token", "login", false));
-        verify(client).postForm(any(), argThat(form -> "opaque-one-time-token".equals(form.get("response"))),
+        verify(client).postForm(any(), argThat(form -> "opaque-one-time-token".equals(form.get("response"))
+                        && form.get("idempotency_key") instanceof String key && !key.isBlank()),
                 anyMap(), any());
+    }
+
+    @Test
+    void retriesTransientFailureWithStableIdempotencyKey() {
+        SafeHttpClient client = mock(SafeHttpClient.class);
+        AtomicInteger attempts = new AtomicInteger();
+        List<String> idempotencyKeys = new ArrayList<>();
+        when(client.postForm(any(), anyMap(), anyMap(), any())).thenAnswer(call -> {
+            Map<String, ?> form = call.getArgument(1);
+            idempotencyKeys.add(String.valueOf(form.get("idempotency_key")));
+            if (attempts.getAndIncrement() == 0) {
+                throw new SafeHttpException(SafeHttpException.Reason.DNS_FAILURE);
+            }
+            return new SafeHttpResponse(200, """
+                    {"success":true,"hostname":"course.example.com","action":"register","error-codes":[]}
+                    """, Map.of());
+        });
+        TurnstileVerifier verifier = verifier(client, mock(SecurityAuditService.class),
+                true, true, "prod", "course.example.com");
+
+        assertDoesNotThrow(() -> verifier.verify("token", "register", false));
+        assertEquals(2, idempotencyKeys.size());
+        assertFalse(idempotencyKeys.get(0).isBlank());
+        assertEquals(idempotencyKeys.get(0), idempotencyKeys.get(1));
+        verify(client, times(2)).postForm(any(), anyMap(), anyMap(), any());
+    }
+
+    @Test
+    void doesNotRetryPermanentOrClientSideFailures() {
+        for (SafeHttpException.Reason reason : List.of(
+                SafeHttpException.Reason.BLOCKED_DESTINATION,
+                SafeHttpException.Reason.PRIVATE_ADDRESS,
+                SafeHttpException.Reason.REDIRECT_BLOCKED,
+                SafeHttpException.Reason.RESPONSE_TOO_LARGE)) {
+            SafeHttpClient client = mock(SafeHttpClient.class);
+            when(client.postForm(any(), anyMap(), anyMap(), any()))
+                    .thenThrow(new SafeHttpException(reason));
+            TurnstileVerifier verifier = verifier(client, mock(SecurityAuditService.class),
+                    true, true, "prod", "course.example.com");
+
+            BusinessException error = assertThrows(BusinessException.class,
+                    () -> verifier.verify("token", "register", false));
+
+            assertEquals(ResultCode.HUMAN_VERIFICATION_UNAVAILABLE.getCode(), error.getCode());
+            verify(client, times(1)).postForm(any(), anyMap(), anyMap(), any());
+        }
+
+        SafeHttpClient clientError = mock(SafeHttpClient.class);
+        when(clientError.postForm(any(), anyMap(), anyMap(), any()))
+                .thenReturn(new SafeHttpResponse(400, "{}", Map.of()));
+        TurnstileVerifier verifier = verifier(clientError, mock(SecurityAuditService.class),
+                true, true, "prod", "course.example.com");
+
+        assertThrows(BusinessException.class, () -> verifier.verify("token", "register", false));
+        verify(clientError, times(1)).postForm(any(), anyMap(), anyMap(), any());
+    }
+
+    @Test
+    void retriesServerErrors() {
+        SafeHttpClient client = mock(SafeHttpClient.class);
+        when(client.postForm(any(), anyMap(), anyMap(), any()))
+                .thenReturn(new SafeHttpResponse(503, "{}", Map.of()))
+                .thenReturn(new SafeHttpResponse(200,
+                        "{\"success\":true,\"hostname\":\"course.example.com\",\"action\":\"register\"}",
+                        Map.of()));
+        TurnstileVerifier verifier = verifier(client, mock(SecurityAuditService.class),
+                true, true, "prod", "course.example.com");
+
+        assertDoesNotThrow(() -> verifier.verify("token", "register", false));
+        verify(client, times(2)).postForm(any(), anyMap(), anyMap(), any());
     }
 
     @Test
@@ -86,6 +160,7 @@ class TurnstileVerifierTest {
         BusinessException unavailable = assertThrows(BusinessException.class,
                 () -> failed.verify("token", "login", false));
         assertEquals(ResultCode.HUMAN_VERIFICATION_UNAVAILABLE.getCode(), unavailable.getCode());
+        verify(failedClient, times(3)).postForm(any(), anyMap(), anyMap(), any());
         verify(audit).record(eq("TURNSTILE_FAILED"), eq("CRITICAL"), isNull(), isNull(),
                 eq("/auth/login"), eq("POST"), anyString(), contains("provider-unavailable"));
     }

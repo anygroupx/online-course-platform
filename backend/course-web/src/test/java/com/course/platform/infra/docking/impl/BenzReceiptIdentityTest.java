@@ -94,4 +94,84 @@ class BenzReceiptIdentityTest {
             assertThrows(ProviderRequestException.class,()->gateway.verify(provider,platform,order,"receipt-9"));
         }
     }
+
+    @Test void candidateReadReturnsOnlyExactlyMatchedIdsWithoutPickingFirstOrLeakingPrivateRows() {
+        respond("{\"code\":1,\"data\":[" + ROW.replace("receipt-9", "someone-else").replace("student", "other")
+                + "," + ROW.replace("receipt-9", "candidate-2") + "," + ROW + "]}");
+        assertEquals(java.util.List.of("candidate-2", "receipt-9"), gateway.findCandidates(provider, platform, order)
+                .stream().map(com.course.platform.domain.orderreceipt.OrderReceiptTypes.Verified::receiptId).toList());
+        verify(http, times(1)).postForString(eq(provider), eq("https://receipt.invalid/api.php?act=chadan"),
+                argThat(p -> p.size() == 6 && p.get("user").equals("student") && p.get("pass").equals("private-password")
+                        && p.get("uid").equals("saved-user") && p.get("key").equals("saved-key")));
+        verifyNoMoreInteractions(http);
+    }
+    @ParameterizedTest @ValueSource(strings={"cid", "user", "pass", "kcname"})
+    void missingCandidateIdentityIsNeverEvidenceEvenWhenRequestWasFiltered(String field) {
+        for (String replacement : new String[]{"", "\"" + field + "\":null,"}) {
+            String row = ROW.replaceAll("\\\"" + field + "\\\":\\\"[^\\\"]*\\\",?", replacement).replace(",}", "}");
+            respond("{\"code\":1,\"data\":[" + row + "]}");
+            assertTrue(gateway.findCandidates(provider, platform, order).isEmpty());
+        }
+    }
+    @ParameterizedTest @ValueSource(strings={"student", "private-password", "exact-course", "product-2"})
+    void candidateIdentityMismatchIsExcludedRatherThanAssumedToBeOwned(String value) {
+        respond("{\"code\":1,\"data\":[" + ROW.replace(value, value + " ") + "]}");
+        assertTrue(gateway.findCandidates(provider, platform, order).isEmpty());
+    }
+    @Test void optionalCandidateIdentityMustNotContradictAndNumericProductIdentifiersRemainExact() {
+        for (String field : new String[]{"school", "kcid"}) {
+            respond("{\"code\":1,\"data\":[" + ROW.replace("\"cid\"", "\"" + field + "\":\"other\",\"cid\"") + "]}");
+            assertTrue(gateway.findCandidates(provider, platform, order).isEmpty());
+        }
+        platform.setDockParam("2");
+        respond("{\"code\":1,\"data\":[" + ROW.replace("\"product-2\"", "2").replace("\"receipt-9\"", "123") + "]}");
+        assertEquals("123", gateway.findCandidates(provider, platform, order).get(0).receiptId());
+        platform.setDockParam("02");
+        assertTrue(gateway.findCandidates(provider, platform, order).isEmpty());
+    }
+    @Test void candidateDuplicatesConflictingIdsAndMalformedRowsFailTheWholeRead() {
+        for (String rows : new String[]{ROW + "," + ROW.replace("student", "other"),
+                ROW.replace("\"cid\"", "\"yid\":\"different\",\"cid\""), ROW + ",null",
+                ROW.replace("\"student\"", "{}"), ROW.replace("\"cid\"", "\"school\":[],\"cid\""),
+                ROW.replace("receipt-9", "../id"), ROW.replace("\"cid\"", "\"user\":\"duplicate-key\",\"cid\"")}) {
+            respond("{\"code\":1,\"data\":[" + rows + "]}");
+            var error = assertThrows(ProviderRequestException.class, () -> gateway.findCandidates(provider, platform, order));
+            assertNull(error.getCause()); assertFalse(error.toString().contains("private-password"));
+        }
+    }
+    @ParameterizedTest @ValueSource(strings={"", "null", "[]", "{\"code\":0,\"data\":[]}", "{\"code\":\"1\",\"data\":[]}",
+            "{\"code\":4294967297,\"data\":[]}", "{\"code\":1.0,\"data\":[]}", "{\"code\":1,\"data\":{}}", "{\"code\":1}"})
+    void failedOrUnusableCandidateEnvelopeIsNotAnEmptySuccess(String response) {
+        respond(response);
+        assertThrows(ProviderRequestException.class, () -> gateway.findCandidates(provider, platform, order));
+    }
+    @Test void boundedCandidateSetRejectsOverflowInsteadOfSilentlyTruncatingOrPaginating() {
+        String twenty = java.util.stream.IntStream.range(0, 20).mapToObj(i -> ROW.replace("receipt-9", "receipt-" + i))
+                .collect(java.util.stream.Collectors.joining(","));
+        respond("{\"code\":1,\"data\":[" + twenty + "]}");
+        assertEquals(20, gateway.findCandidates(provider, platform, order).size());
+        respond("{\"code\":1,\"data\":[" + twenty + "," + ROW.replace("receipt-9", "receipt-20") + "]}");
+        assertThrows(ProviderRequestException.class, () -> gateway.findCandidates(provider, platform, order));
+        verify(http, times(2)).postForString(any(), anyString(), anyMap()); verifyNoMoreInteractions(http);
+    }
+    @Test void candidateParserCapsResponseRowsAndBodyAndRejectsConcatenatedDocuments() {
+        String thousand = java.util.stream.IntStream.range(0, 1000)
+                .mapToObj(i -> ROW.replace("receipt-9", "receipt-" + i).replace("student", "other"))
+                .collect(java.util.stream.Collectors.joining(","));
+        respond("{\"code\":1,\"data\":[" + thousand + "]}");
+        assertTrue(gateway.findCandidates(provider, platform, order).isEmpty());
+        for (String response : new String[]{"{\"code\":1,\"data\":[" + thousand + "," + ROW + "]}",
+                "{\"code\":1,\"data\":[" + ROW + "]}null", " ".repeat(1024 * 1024 + 1),
+                "{\"code\":1,\"data\":[" + ROW.replace("private-password", "a".repeat(8193)) + "]}"}) {
+            respond(response);
+            assertThrows(ProviderRequestException.class, () -> gateway.findCandidates(provider, platform, order));
+        }
+    }
+    @Test void emptyCandidateReadIsScopedAndUnsupportedProviderNeverMakesHttp() {
+        respond("{\"code\":1,\"data\":[]}");
+        assertTrue(gateway.findCandidates(provider, platform, order).isEmpty());
+        clearInvocations(http); provider.setProviderType("flash");
+        assertThrows(ProviderRequestException.class, () -> gateway.findCandidates(provider, platform, order));
+        verifyNoInteractions(http);
+    }
 }

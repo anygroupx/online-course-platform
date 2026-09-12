@@ -495,14 +495,21 @@ public class InternshipNativeServiceGateway
 
     @Override
     public RemoteResult sync(ApiProvider p, ServiceOrder order) {
-        JsonNode remote = findOrder(p, order);
         DailyServicePlan plan = plan(order);
+        JsonNode remote = findOrder(p, order);
         requireSameCalendar(remote, plan.schedule());
-        String code = text(remote.path("code"), 8);
-        String status =
-                plan.schedule().endDate().isBefore(today())
-                        ? "COMPLETED"
-                        : "1".equals(code) ? "ACTIVE" : "2".equals(code) ? "PAUSED" : "ATTENTION";
+        JsonNode code = remote.path("code");
+        if (!(code.isIntegralNumber() || code.isTextual())
+                || !code.asText().matches("-?(?:0|[1-9][0-9]{0,3})")) throw invalid();
+        // Only 1/2 are documented plan states. An unknown state must not be hidden by
+        // the calendar, and the end of the paid service period is NOT attendance success.
+        String status = switch (code.asText()) {
+            case "1" -> "ACTIVE";
+            case "2" -> "PAUSED";
+            default -> "ATTENTION";
+        };
+        if (!"ATTENTION".equals(status) && plan.schedule().endDate().isBefore(today()))
+            status = "COMPLETED";
         return new RemoteResult(order.getExternalOrderNo(), status, 0, null);
     }
 
@@ -530,30 +537,43 @@ public class InternshipNativeServiceGateway
     }
 
     private JsonNode findOrder(ApiProvider p, ServiceOrder order) {
+        if (order == null || !TYPE.equals(order.getProviderType())
+                || order.getProject() == null || !PROJECTS.containsKey(order.getProject())
+                || order.getExternalOrderNo() == null
+                || !order.getExternalOrderNo().matches("[A-Za-z0-9_-]{1,64}")) throw invalid();
         long start = System.nanoTime();
+        Set<String> seen = new HashSet<>();
         for (int page = 1; page <= 10; page++) {
+            if (Thread.currentThread().isInterrupted()) throw invalid();
             if (page > 1 && System.nanoTime() - start > 5_000_000_000L) break;
             JsonNode rows =
                     array(call(p, "getOrder", Map.of("page", page, "pagesize", 100), false), 100);
             JsonNode match = null;
-            for (JsonNode row : rows)
-                if (order.getExternalOrderNo().equals(row.path("id").asText())) {
-                    if (match != null || !order.getProject().equals(row.path("platform").asText()))
-                        throw invalid();
+            for (JsonNode row : rows) {
+                // Validate the entire fetched page before returning any match. Do not
+                // coerce booleans/objects into IDs, guess by credentials, or accept repeats.
+                if (!row.isObject() || !(row.path("id").isTextual() || row.path("id").isIntegralNumber())
+                        || !row.path("platform").isTextual()
+                        || !row.path("platform").asText().matches("[a-z0-9_]{1,32}")) throw invalid();
+                String remoteId = id(row.path("id"));
+                if (!seen.add(remoteId)) throw invalid();
+                if (order.getExternalOrderNo().equals(remoteId)) {
+                    if (!order.getProject().equals(row.path("platform").asText())) throw invalid();
                     match = row;
                 }
+            }
             if (match != null) return match;
             if (rows.size() < 100) break;
         }
-        throw new ProviderRequestException(ProviderRequestException.Reason.INVALID_RESPONSE);
+        throw invalid();
     }
 
     private void requireSameCalendar(JsonNode row, InternshipSchedule s) {
         if (!s.endDate().toString().equals(row.path("end_time").asText())
                 || !upstreamWeekdays(s).equals(normalizedWeekdays(row.path("check_week"))))
-            throw bad("上游周期与本平台购买记录不一致，请联系管理员核对，不能按不一致周期扣款或退款");
+            throw bad("服务周期与购买记录不一致，请联系管理员核对；核实前不能扣款或退款。");
         if (row.hasNonNull("runType") && count(row.path("runType")) != s.runMode())
-            throw bad("上游运行方式已变化，请核对价格");
+            throw bad("计划运行方式已变化，请联系管理员核对价格。");
     }
 
     private String normalizedWeekdays(JsonNode value) {

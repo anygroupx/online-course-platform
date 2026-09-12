@@ -8,6 +8,7 @@ import {
   refreshAccessSession,
   clearAuthSession,
 } from "@/utils/authSession";
+import { isClientAutoRefreshEnabled } from "@/utils/clientConfigState";
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
@@ -24,9 +25,8 @@ const publicPaths = new Set([
   "/register",
   "/register/validate-invite-code",
   "/theme/variables",
+  "/client/bootstrap",
 ]);
-
-const autoRefreshEnabled = () => localStorage.getItem("auto_refresh_token_enabled") !== "0";
 
 function clearAndRedirect() {
   clearAuthSession();
@@ -50,7 +50,7 @@ request.interceptors.request.use(async (config) => {
   if (publicPaths.has(config.url)) return config;
 
   let token = getAccessToken();
-  if ((!token || isAccessTokenExpired()) && autoRefreshEnabled()) {
+  if ((!token || isAccessTokenExpired()) && isClientAutoRefreshEnabled()) {
     try {
       token = await refreshAccessSession();
     } catch {
@@ -69,17 +69,20 @@ request.interceptors.response.use(
     const result = response.data;
     if (result?.code === 1) return result;
     if (result?.code === -100) clearAndRedirect();
-    ElMessage.error(result?.message || "请求失败");
+    if (!response.config.suppressGlobalError) {
+      ElMessage.error(result?.message || "请求失败");
+    }
     return Promise.reject(new Error(result?.message || "请求失败"));
   },
   async (error) => {
     if (axios.isCancel(error)) return Promise.reject(error);
     const status = error.response?.status;
     const original = error.config || {};
+    if (original.suppressGlobalError) return Promise.reject(error);
     const canRetry = status === 401
       && !original.__sessionRetry
       && !String(original.url || "").includes("/auth/refresh")
-      && autoRefreshEnabled();
+      && isClientAutoRefreshEnabled();
 
     if (canRetry) {
       try {

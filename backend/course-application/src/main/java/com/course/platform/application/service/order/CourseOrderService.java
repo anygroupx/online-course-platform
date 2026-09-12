@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.course.platform.domain.dto.OrderCreateRequest;
 import com.course.platform.domain.dto.OrderQueryRequest;
 import com.course.platform.domain.entity.CourseOrder;
+import com.course.platform.domain.vo.CourseOrderProgressLogVO;
+
+import java.util.List;
 
 /**
  * 课程订单服务接口
@@ -96,5 +99,14 @@ public interface CourseOrderService {
      * @param userId 用户ID（用于权限校验）
      */
     void updateOrderProgressByOrderNo(String orderNo, Long userId);
+
+    /**
+     * 根据订单号读取本地进度变化记录（带userId校验）。
+     *
+     * @param orderNo 订单编号
+     * @param userId 用户ID（用于权限校验）
+     * @return 按时间倒序排列的进度日志
+     */
+    List<CourseOrderProgressLogVO> getProgressLogsByOrderNo(String orderNo, Long userId);
 }
 

@@ -7,11 +7,35 @@
     <el-alert type="info" :closable="false" show-icon title="仅适用于已有执行回执、但编号未记录的订单。核对不会补单、取消、退款或修改余额。" />
     <p class="receipt-note">需要订单管理与接口管理双权限。核对账号、凭据、课程和商品的完整身份，不按课程名称猜测归属。</p>
 
-    <el-form v-if="!requestId" label-position="top" class="receipt-form" @submit.prevent="preview">
+    <section v-if="!requestId" class="receipt-discovery" aria-label="查找执行编号" :aria-busy="candidateLoading">
+      <header>
+        <div><h3>不知道执行编号？</h3><p>按这笔订单的完整身份查找，也可以直接填写已有回执编号。</p></div>
+        <el-button :loading="candidateLoading" :disabled="busy || candidateLoading" @click="findCandidates">查找执行编号</el-button>
+      </header>
+      <p class="receipt-scope">仅核对本次查询返回的记录，不代表全部订单；没有结果不表示订单不存在。</p>
+      <el-alert v-if="candidateError" :title="candidateError" type="warning" :closable="false" show-icon role="alert" />
+      <el-skeleton v-if="candidateLoading" :rows="2" animated />
+      <div v-else-if="candidates" class="receipt-candidate-result" aria-live="polite">
+        <p class="receipt-candidate-summary">{{ candidates.receiptIds.length ? `本次找到 ${candidates.receiptIds.length} 个可核对编号` : '本次未找到可核实编号' }}</p>
+        <p class="receipt-scope">查询时间：{{ receiptTime(candidates.checkedAt) }} · 北京时间</p>
+        <template v-if="candidates.receiptIds.length">
+          <p class="receipt-note">请按原始回执选择编号。填入后仍需填写核对依据，并单独确认关联。</p>
+          <ul class="receipt-candidates" aria-label="可核对的执行编号">
+            <li v-for="id in candidates.receiptIds" :key="id">
+              <code>{{ id }}</code>
+              <el-button :disabled="busy || form.receiptId === id" :aria-label="`填入执行编号 ${id}`" @click="chooseCandidate(id)">{{ form.receiptId === id ? '已填入表单' : '填入此编号' }}</el-button>
+            </li>
+          </ul>
+        </template>
+        <p v-else class="receipt-note">若已持有原始回执，可在下方手动填写编号继续核对；不要因此重复下单。</p>
+      </div>
+    </section>
+
+    <el-form v-if="!requestId" label-position="top" class="receipt-form" :disabled="busy || candidateLoading" @submit.prevent="preview">
       <el-form-item label="执行编号"><el-input v-model="form.receiptId" maxlength="50" placeholder="填写已核实的订单回执编号" autocomplete="off" /></el-form-item>
       <el-form-item label="核对依据"><el-input v-model="form.evidence" type="textarea" :rows="3" maxlength="1000" show-word-limit placeholder="至少10个字，说明回执及订单归属依据；不要填写密码或访问密钥。" autocomplete="off" /></el-form-item>
       <el-checkbox v-model="form.ownershipConfirmed">我已核实原始回执及执行账户，确认与此订单属于同一笔业务</el-checkbox>
-      <el-button type="primary" native-type="submit" :disabled="!validReceiptForm(form) || busy">核对执行编号</el-button>
+      <el-button type="primary" native-type="submit" :disabled="!validReceiptForm(form) || busy || candidateLoading">核对执行编号</el-button>
     </el-form>
 
     <el-alert v-if="error" :title="error" type="warning" :closable="false" show-icon role="alert" />
@@ -42,19 +66,47 @@
 </template>
 <script setup>
 import { ref, watch, onBeforeUnmount } from 'vue'
-import { previewOrderReceipt, getOrderReceipt, confirmOrderReceipt, recentOrderReceipts } from '@/api/orderReceipts'
-import { receiptStates, validReceiptForm, validReceiptView, receiptCanConfirm, receiptTime } from '@/utils/orderReceipts'
+import { previewOrderReceipt, getOrderReceipt, confirmOrderReceipt, recentOrderReceipts, findOrderReceiptCandidates } from '@/api/orderReceipts'
+import { receiptStates, validReceiptForm, validReceiptView, receiptCanConfirm, receiptTime, validReceiptCandidates } from '@/utils/orderReceipts'
 const props = defineProps({ orderId: { type: Number, required: true } })
 const emit = defineEmits(['applied'])
 const form = ref({ receiptId: '', evidence: '', ownershipConfirmed: false })
 const expectedReceipt = ref('')
 const requestId = ref(''), view = ref(null), busy = ref(false), consent = ref(false), confirmSent = ref(false), error = ref(''), clock = ref(Date.now())
 const recent = ref([]), showRecent = ref(false), recentLoading = ref(false), recentLoaded = ref(false), recentError = ref('')
-let generation = 0, controller, recentController, recentGeneration = 0
+const candidates = ref(null), candidateLoading = ref(false), candidateError = ref('')
+let generation = 0, controller, recentController, recentGeneration = 0, candidateController, candidateGeneration = 0
 const timer = setInterval(() => { clock.value = Date.now() }, 1000)
 function reset() {
+  clearCandidates()
   generation++; controller?.abort(); form.value = { receiptId: '', evidence: '', ownershipConfirmed: false }
   requestId.value = ''; expectedReceipt.value = ''; view.value = null; busy.value = false; consent.value = false; confirmSent.value = false; error.value = ''
+}
+function clearCandidates() {
+  candidateGeneration++; candidateController?.abort()
+  candidates.value = null; candidateLoading.value = false; candidateError.value = ''
+}
+async function findCandidates() {
+  if (busy.value || candidateLoading.value || requestId.value) return
+  clearCandidates(); candidateController = new AbortController()
+  const signal = candidateController.signal, order = props.orderId, version = candidateGeneration
+  candidateLoading.value = true; form.value.ownershipConfirmed = false
+  try {
+    const value = await findOrderReceiptCandidates(order, signal)
+    if (version !== candidateGeneration || signal.aborted || order !== props.orderId || requestId.value) return
+    if (!validReceiptCandidates(value, order)) throw new Error('incomplete candidate response')
+    candidates.value = value
+  } catch (e) {
+    if (version !== candidateGeneration || signal.aborted) return
+    candidateError.value = e.response?.status === 403 ? '需要订单管理与接口管理双权限，未获得查找权限。'
+      : e.response?.status === 409 || e.response?.data?.code === -110 ? '订单或编号记录已变化，请重新查找；未关联编号。'
+        : '编号查找未完成或返回数据不完整，请重试；未关联编号，也未重新下单。'
+  } finally { if (version === candidateGeneration) candidateLoading.value = false }
+}
+function chooseCandidate(id) {
+  if (busy.value || candidateLoading.value || requestId.value || !candidates.value?.receiptIds.includes(id)) return
+  form.value = { receiptId: id, evidence: '', ownershipConfirmed: false }
+  consent.value = false
 }
 function accept(value, order, id) {
   if (!validReceiptView(value, order, id) || expectedReceipt.value && value.receiptId !== expectedReceipt.value) throw new Error('incomplete receipt response')
@@ -62,7 +114,8 @@ function accept(value, order, id) {
   if (value.state === 'APPLIED') emit('applied', value)
 }
 async function preview() {
-  if (busy.value || requestId.value || !validReceiptForm(form.value)) return
+  if (busy.value || candidateLoading.value || requestId.value || !validReceiptForm(form.value)) return
+  clearCandidates()
   const order = props.orderId, id = crypto.randomUUID(), version = ++generation
   requestId.value = id; expectedReceipt.value = form.value.receiptId; busy.value = true; error.value = ''
   const body = { ...form.value, evidence: form.value.evidence.trim(), requestId: id }
@@ -111,6 +164,7 @@ async function loadRecent() {
   finally { if (version === recentGeneration) recentLoading.value = false }
 }
 function select(item) { if (busy.value) return; reset(); requestId.value = item.id; expectedReceipt.value = item.receiptId; check() }
+watch(() => form.value.receiptId, () => { form.value.ownershipConfirmed = false }, { flush: 'sync' })
 watch(() => props.orderId, () => { reset(); recentGeneration++; recentController?.abort(); recent.value = []; recentLoaded.value = false; showRecent.value = false; recentLoading.value = false })
 onBeforeUnmount(() => { reset(); recentGeneration++; recentController?.abort(); clearInterval(timer) })
 </script>
@@ -142,7 +196,21 @@ onBeforeUnmount(() => { reset(); recentGeneration++; recentController?.abort(); 
 .receipt-history article { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; padding: 16px 0; border-bottom: 1px solid var(--border-color-light); }
 .receipt-history article > div { display: grid; gap: 6px; min-width: 0; }
 .receipt-history span, .receipt-history code { color: var(--text-secondary); font-size: 12px; }
+.receipt-discovery { margin: 24px 0; padding: 20px; border: 1px solid var(--border-color-light); border-radius: 10px; background: var(--surface-mica); }
+.receipt-discovery header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.receipt-discovery h3 { margin: 0 0 6px; font-size: 16px; }
+.receipt-discovery p { margin: 6px 0; font-size: 12px; line-height: 1.8; color: var(--text-secondary); }
+.receipt-discovery .receipt-scope { font-size: 12px; }
+.receipt-discovery > .receipt-scope { margin: 12px 0 0; }
+.receipt-discovery :deep(.el-alert), .receipt-discovery :deep(.el-skeleton) { margin-top: 16px; }
+.receipt-candidate-result { margin-top: 16px; border-top: 1px solid var(--border-color-light); padding-top: 12px; }
+.receipt-discovery .receipt-candidate-summary { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.receipt-candidates { list-style: none; margin: 12px 0 0; padding: 0; max-height: 280px; overflow-y: auto; }
+.receipt-candidates li { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px solid var(--border-color-light); }
+.receipt-candidates code { min-width: 0; overflow-wrap: anywhere; font-size: 13px; line-height: 1.6; }
+.receipt-discovery .el-button { min-height: 44px; flex-shrink: 0; }
 @media(max-width:720px) {
+  .receipt-discovery { padding: 16px; }
   .receipt-heading h2 { font-size: 21px; }
   .receipt-preview { padding: 16px; }
   .receipt-preview dl div { grid-template-columns: 80px minmax(0,1fr); }

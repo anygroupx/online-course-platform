@@ -18,6 +18,7 @@ export function fixture(url, request, unknown) {
   const route = url.pathname.replace(/^\/api/, '');
   if (route === '/user/info') return user;
   if (route === '/theme/variables' || route === '/system/config') return [];
+  if (route === '/client/bootstrap') return { branding: { siteName: '二开台', siteKeywords: '网课,在线教育', siteDescription: '专业的在线网课服务平台' }, session: { autoRefreshEnabled: true } };
   if (route === '/courses') return [platform];
   if (route === '/courses/query') return { studentName: '测试学生', studentAccount: 'student', courses: [{ id: 'c1', name: '测试课程', selected: true }] };
   if (route === '/admin/platforms') return paged([platform]);

@@ -107,7 +107,7 @@
               批量同步
             </el-button>
             <el-button v-if="isReadOnlyProviderType(scope.row.providerType)" size="small" type="success"
-              @click="router.push({ path: '/admin/plugin-integrations', query: { plugin: { flash: 'P01', heisha: 'P03', jiguang: 'P04', wuxin: 'P10', sxdk_tw: 'P06', syyv5: 'P07', ssbenz_xbd: 'P05' }[scope.row.providerType] } })">目录查询</el-button>
+              @click="router.push({ path: '/admin/plugin-integrations', query: { plugin: { flash: 'P01', heisha: 'P03', jiguang: 'P04', wuxin: 'P10', sxdk_tw: 'P06', syyv5: 'P07', ssbenz_xbd: 'P05', appui: 'P09', leidian: 'P12', jingyu: 'P08' }[scope.row.providerType] } })">目录查询</el-button>
             <el-button
               size="small"
               type="danger"
@@ -154,6 +154,9 @@
             <el-option label="黑鲨（服务接口）" value="heisha" />
             <el-option label="极光（服务接口）" value="jiguang" />
             <el-option label="无心闪动（服务接口）" value="wuxin" />
+            <el-option label="AppUI 实习打卡（按天计费）" value="appui" />
+            <el-option label="雷电（四种运动项目）" value="leidian" />
+            <el-option label="鲸鱼（Keep / 步道乐跑）" value="jingyu" />
             <el-option label="总公里计划（P05 明文接口）" value="ssbenz_xbd" />
             <el-option label="sxdk_tw 实习（直接 API）" value="sxdk_tw" />
             <el-option label="syyv5 多项目与子钱包" value="syyv5" />
@@ -161,7 +164,7 @@
         </el-form-item>
         <el-alert v-if="isReadOnlyProviderType(form.providerType)" type="info" :closable="false" class="provider-notice"
           :title="form.providerType === 'ssbenz_xbd' ? '总公里计划：只需 API 目录与访问密钥，无需 UID。' : '服务接口：账号填写 UID，API Key 填写访问密钥。'"
-          :description="form.providerType === 'ssbenz_xbd' ? '填写已授权的 HTTPS API 目录，例如 https://service.example/xbd/ydapi；不要填写单个动作或 PHP 文件地址。访问密钥仅以表单 token 发送。连接检查只读取两种方案报价，不下单；商品需在服务商品页另行上架。更换密钥后，旧订单须人工核对，不能自动迁移。' : form.providerType === 'syyv5' ? '填写已授权的 HTTPS API 完整地址及主访问密钥。连接测试只读取项目目录，不开户、不兑换；项目中心需另外核实成本并发布。主密钥变更不能自动迁移既有用户子钱包。' : form.providerType === 'sxdk_tw' ? '填写已获授权的 HTTPS API 完整地址，不是旧 sxdk_tw PHP 页面。GET 使用已保存的 UID / key 查询，POST 业务字段按表单发送；连接检查不读取或猜测价格。上架时必须核实合同单价。' : '地址填写服务根目录，不要添加插件目录或 API 文件名。无心协议须通过 HTTPS 查询参数验证，系统不记录该查询串。连接测试只读。用户下单请在服务商品中上架；不要绑定普通课程。'" />
+          :description="form.providerType === 'jingyu' ? '填写已授权的 HTTPS 安装根目录，不要添加 jingyu 或 api.php。账号填写 UID，访问密钥仅通过表单正文发送。连接检查只读取 Keep 与步道乐跑报价，不下单；核实计费规则后在服务商品页上架。退款须核对实际次数后入账。' : form.providerType === 'leidian' ? '填写已授权的 HTTPS 安装根目录，不要添加 ldrun 或 api.php。账号填写 UID，API Key 填写访问密钥。连接检查只读取四种项目报价，不下单。核实计费规则后，在服务商品页上架；取消订单与退款入账需要分别核对。' : form.providerType === 'appui' ? '填写已授权的 HTTPS 安装根目录，不要添加 appui 或 api.php。账号填写 UID，访问密钥只通过表单正文发送。连接检查只读取实时报价；核实商品与退款规则后，在服务商品页上架。天数按账户记录核对，不代表签到成功。' : form.providerType === 'ssbenz_xbd' ? '填写已授权的 HTTPS API 目录，例如 https://service.example/xbd/ydapi；不要填写单个动作或 PHP 文件地址。访问密钥仅以表单 token 发送。连接检查只读取两种方案报价，不下单；商品需在服务商品页另行上架。更换密钥后，旧订单须人工核对，不能自动迁移。' : form.providerType === 'syyv5' ? '填写已授权的 HTTPS API 完整地址及主访问密钥。连接测试只读取项目目录，不开户、不兑换；项目中心需另外核实成本并发布。主密钥变更不能自动迁移既有用户子钱包。' : form.providerType === 'sxdk_tw' ? '填写已获授权的 HTTPS API 完整地址，不是旧 sxdk_tw PHP 页面。GET 使用已保存的 UID / key 查询，POST 业务字段按表单发送；连接检查不读取或猜测价格。上架时必须核实合同单价。' : '地址填写服务根目录，不要添加插件目录或 API 文件名。无心协议须通过 HTTPS 查询参数验证，系统不记录该查询串。连接测试只读。用户下单请在服务商品中上架；不要绑定普通课程。'" />
         <el-form-item label="API地址" prop="apiUrl">
           <el-input v-model="form.apiUrl" placeholder="https://provider.example.com 或 /openapi 基础目录" maxlength="2048" />
           <div class="field-help">默认仅允许 HTTPS 公网域名，不接受 IP、查询参数或片段。Daytime / 29 兼容以 /api.php 结尾的地址。</div>

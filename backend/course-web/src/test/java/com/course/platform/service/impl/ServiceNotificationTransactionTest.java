@@ -72,6 +72,7 @@ class ServiceNotificationTransactionTest {
                         "019_internship_service_plans.sql",
                         "020_service_account_sessions.sql",
                         "029_native_service_price_precision.sql",
+                        "030_native_service_status_refresh.sql",
                         "023_native_service_notifications.sql")) {
             String ddl =
                     Files.readString(root.resolve("database/migrations/" + file))

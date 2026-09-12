@@ -72,7 +72,8 @@ class ServiceCommerceTransactionTest {
                         "018_native_service_orders.sql",
                         "019_internship_service_plans.sql",
                         "020_service_account_sessions.sql",
-                        "029_native_service_price_precision.sql")) {
+                        "029_native_service_price_precision.sql",
+                        "030_native_service_status_refresh.sql")) {
             String migration =
                     Files.readString(root.resolve("database/migrations/" + name))
                             .replaceAll("(?m)^--.*$", "")
@@ -82,7 +83,7 @@ class ServiceCommerceTransactionTest {
         }
         jdbc.execute(
                 "CREATE TABLE sys_user(id BIGINT PRIMARY KEY,balance DECIMAL(14,2),total_recharge"
-                        + " DECIMAL(14,2),update_time TIMESTAMP)");
+                        + " DECIMAL(14,2),status INT NOT NULL DEFAULT 1,update_time TIMESTAMP)");
         jdbc.update("INSERT INTO sys_user(id,balance,total_recharge) VALUES (7,100,0),(8,100,0)");
         jdbc.execute(
                 "CREATE TABLE account_ledger(id BIGINT AUTO_INCREMENT PRIMARY KEY,user_id"
@@ -185,7 +186,22 @@ class ServiceCommerceTransactionTest {
     @AfterEach
     void cleanup() {
         SecurityContextHolder.clearContext();
-        threads.shutdownNow();
+        try {
+            if (threads != null) {
+                threads.shutdownNow();
+                try {
+                    if (!threads.awaitTermination(5, TimeUnit.SECONDS))
+                        throw new IllegalStateException("Fixture workers did not terminate");
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Interrupted while closing fixture workers", interrupted);
+                }
+            }
+        } finally {
+            // DB_CLOSE_DELAY=-1 keeps every per-test database alive until explicitly shut down.
+            // Releasing it prevents later large-payload tests from exhausting the shared JVM heap.
+            if (jdbc != null) jdbc.execute("SHUTDOWN");
+        }
     }
 
     void auth(long id, String... authorities) {

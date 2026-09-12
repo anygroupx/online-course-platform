@@ -1,6 +1,8 @@
 package com.course.platform.controller;
 
 import com.course.platform.application.service.projectclient.*;
+import com.course.platform.application.service.projectcenter.ProjectRecordsService;
+import com.course.platform.domain.projectcenter.ProjectRecordTypes.LedgerFilter;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.*;
 import com.course.platform.domain.projectclient.ProjectClientTypes.*;
@@ -13,8 +15,10 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.http.*;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.*;
 import java.util.function.Function;
 
@@ -25,6 +29,7 @@ import java.util.function.Function;
 public class ExternalProjectClientController {
     private final ProjectClientService clients;
     private final com.course.platform.application.service.projectcenter.ProjectReportingService reports;
+    private final ProjectRecordsService records;
     private final ProjectClientTicketService tickets;
     private final ProjectApiKeyService keys;
 
@@ -76,6 +81,26 @@ public class ExternalProjectClientController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         return invoke(request, "USAGE_PROJECTS", c -> reports.projects(c, page, pageSize));
+    }
+
+    @GetMapping("/ledger")
+    public ResponseEntity<?> ledger(HttpServletRequest request,
+            @RequestParam(required = false) Long projectId,
+            @RequestParam(required = false) String clientId,
+            @RequestParam(required = false) String book,
+            @RequestParam(required = false) String direction,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate throughDate,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int pageSize) {
+        return invoke(request, "LEDGER", c -> {
+            // The authenticated owner is the only scope; even an empty override is rejected.
+            if (request.getParameterMap().containsKey("ownerId"))
+                throw new BusinessException(ResultCode.PARAM_ERROR);
+            return records.ownLedger(c, new LedgerFilter(null, projectId, clientId, book, direction,
+                    fromDate, throughDate, keyword), page, pageSize);
+        });
     }
 
     @PostMapping("/quotes")

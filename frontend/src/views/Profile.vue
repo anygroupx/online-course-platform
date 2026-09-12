@@ -31,10 +31,10 @@
               <el-descriptions-item label="账户余额">
                 <span class="balance">¥{{ userInfo.balance || 0 }}</span>
               </el-descriptions-item>
-              <el-descriptions-item label="费率">
-                <el-tag type="success"
-                  >{{ (userInfo.rate * 100).toFixed(0) }}%</el-tag
-                >
+              <el-descriptions-item label="账户等级">
+                <el-tag :type="getUserLevelTagType(userInfo.rate)">
+                  {{ getUserLevelLabel(userInfo.rate) }}
+                </el-tag>
               </el-descriptions-item>
               <el-descriptions-item label="注册时间" v-if="userInfo.createTime">
                 {{ formatDate(userInfo.createTime) }}
@@ -228,11 +228,11 @@
                 </div>
 
                 <div class="invite-item" v-if="userInfo.inviteRate">
-                  <label>下级费率:</label>
+                  <label>邀请等级:</label>
                   <div class="invite-value">
-                    <el-tag type="info"
-                      >{{ (userInfo.inviteRate * 100).toFixed(0) }}%</el-tag
-                    >
+                    <el-tag :type="getUserLevelTagType(userInfo.inviteRate)">
+                      {{ getUserLevelLabel(userInfo.inviteRate) }}
+                    </el-tag>
                   </div>
                 </div>
               </div>
@@ -282,14 +282,16 @@
       :close-on-click-modal="false"
      append-to-body>
       <el-form :model="inviteForm" label-width="120px">
-        <el-form-item label="邀请费率(%)">
-          <el-input-number
-            v-model="inviteForm.inviteRate"
-            :min="0"
-            :max="100"
-            :step="1"
-          />
-          <div class="form-tip">设置下级用户的费率百分比</div>
+        <el-form-item label="邀请等级">
+          <el-select v-model="inviteForm.inviteRate" placeholder="请选择邀请等级">
+            <el-option
+              v-for="level in inviteLevelOptions"
+              :key="level.key"
+              :label="level.label"
+              :value="level.rate"
+            />
+          </el-select>
+          <div class="form-tip">受邀用户注册后将使用所选等级</div>
         </el-form-item>
         <el-form-item label="自定义邀请码">
           <el-input
@@ -349,6 +351,12 @@ import {
   Money,
 } from "@element-plus/icons-vue";
 import dayjs from "dayjs";
+import {
+  getAssignableUserLevels,
+  getDefaultAssignableRate,
+  getUserLevelLabel,
+  getUserLevelTagType,
+} from "@/utils/userLevel";
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -373,9 +381,12 @@ onDeactivated(clearIssuedKey);
 const inviteDialogVisible = ref(false);
 const settingInvite = ref(false);
 const inviteForm = ref({
-  inviteRate: 60,
+  inviteRate: 1,
   customInviteCode: "",
 });
+const inviteLevelOptions = computed(() =>
+  getAssignableUserLevels(userInfo.value.rate, inviteForm.value.inviteRate)
+);
 
 // 邀请链接
 const inviteLink = computed(() => {
@@ -484,7 +495,7 @@ const goToApiDocs = () => {
 // 显示设置邀请码对话框
 const showSetupInviteDialog = () => {
   inviteForm.value = {
-    inviteRate: 60,
+    inviteRate: getDefaultAssignableRate(userInfo.value.rate),
     customInviteCode: "",
   };
   inviteDialogVisible.value = true;
@@ -495,7 +506,7 @@ const handleSetupInviteCode = async () => {
   try {
     settingInvite.value = true;
     const res = await setupInviteCode({
-      inviteRate: inviteForm.value.inviteRate / 100,
+      inviteRate: inviteForm.value.inviteRate,
       customInviteCode: inviteForm.value.customInviteCode || undefined,
     });
     if (res.code === 1) {

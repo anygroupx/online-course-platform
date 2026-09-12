@@ -55,6 +55,17 @@
           >
         </template>
 
+        <template #column-level="{ row }">
+          <el-tag :type="getUserLevelTagType(row.rate)">{{ row.level }}</el-tag>
+        </template>
+
+        <template #column-inviteLevel="{ row }">
+          <el-tag v-if="row.inviteRate" :type="getUserLevelTagType(row.inviteRate)">
+            {{ row.inviteLevel }}
+          </el-tag>
+          <el-tag v-else type="info">未设置</el-tag>
+        </template>
+
         <!-- API密钥列自定义渲染 -->
         <template #column-apiEnabled="{ row }">
           <el-tag v-if="row.apiEnabled" type="success"
@@ -142,22 +153,16 @@
         <el-form-item label="昵称">
           <el-input v-model="createForm.nickname" placeholder="请输入昵称" />
         </el-form-item>
-        <el-form-item label="费率">
-          <el-input-number
-            v-model="createForm.rate"
-            :min="0.5"
-            :max="2"
-            :step="0.05"
-            :precision="2"
-          />
-          <span
-            style="
-              font-size: 12px;
-              color: var(--text-secondary);
-              margin-left: 10px;
-            "
-            >费率不能低于自己的费率</span
-          >
+        <el-form-item label="账户等级">
+          <el-select v-model="createForm.rate" placeholder="请选择账户等级">
+            <el-option
+              v-for="level in createLevelOptions"
+              :key="level.key"
+              :label="level.label"
+              :value="level.rate"
+            />
+          </el-select>
+          <div class="form-tip">只能选择当前账户可创建的等级</div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -222,26 +227,19 @@
             复制
           </el-button>
         </el-form-item>
-        <el-form-item label="邀请费率">
-          <el-input-number
-            v-model="inviteCodeForm.inviteRate"
-            :min="0.5"
-            :max="2"
-            :step="0.05"
-            :precision="2"
-          />
-          <span
-            style="
-              font-size: 12px;
-              color: var(--text-secondary);
-              margin-left: 10px;
-            "
-            >郀请费率不能低于自己的费率</span
-          >
+        <el-form-item label="邀请等级">
+          <el-select v-model="inviteCodeForm.inviteRate" placeholder="请选择邀请等级">
+            <el-option
+              v-for="level in inviteLevelOptions"
+              :key="level.key"
+              :label="level.label"
+              :value="level.rate"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="操作说明">
           <el-alert
-            title="设置邀请费率后，系统会自动生成邀请码。用户通过此邀请码注册时，将获得您设置的费率。"
+            title="保存后将生成邀请码，受邀用户注册时使用所选等级。"
             type="info"
             :closable="false"
             show-icon
@@ -276,26 +274,19 @@
             复制
           </el-button>
         </el-form-item>
-        <el-form-item label="邀请费率">
-          <el-input-number
-            v-model="myInviteCodeForm.inviteRate"
-            :min="0.5"
-            :max="2"
-            :step="0.05"
-            :precision="2"
-          />
-          <span
-            style="
-              font-size: 12px;
-              color: var(--text-secondary);
-              margin-left: 10px;
-            "
-            >邀请费率不能低于自己的费率</span
-          >
+        <el-form-item label="邀请等级">
+          <el-select v-model="myInviteCodeForm.inviteRate" placeholder="请选择邀请等级">
+            <el-option
+              v-for="level in myInviteLevelOptions"
+              :key="level.key"
+              :label="level.label"
+              :value="level.rate"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="操作说明">
           <el-alert
-            title="设置邀请费率后，系统会自动生成邀请码。用户通过此邀请码注册时，将获得您设置的费率。"
+            title="保存后将生成邀请码，受邀用户注册时使用所选等级。"
             type="info"
             :closable="false"
             show-icon
@@ -336,6 +327,12 @@ import {
   setupInviteCode,
   getUserInfo,
 } from "@/api/user";
+import {
+  getAssignableUserLevels,
+  getDefaultAssignableRate,
+  getUserLevelLabel,
+  getUserLevelTagType,
+} from "@/utils/userLevel";
 
 const router = useRouter();
 
@@ -391,6 +388,20 @@ const myInviteCodeForm = ref({
   inviteRate: 1.0,
 });
 
+const accountRate = ref(1);
+const createLevelOptions = computed(() =>
+  getAssignableUserLevels(accountRate.value, createForm.value.rate)
+);
+const inviteLevelOptions = computed(() =>
+  getAssignableUserLevels(
+    currentUser.value?.rate || accountRate.value,
+    inviteCodeForm.value.inviteRate
+  )
+);
+const myInviteLevelOptions = computed(() =>
+  getAssignableUserLevels(accountRate.value, myInviteCodeForm.value.inviteRate)
+);
+
 // 筛选模型（使用组合式函数的 filters）
 const filterModel = computed({
   get: () => filters.value,
@@ -409,7 +420,13 @@ const loadUsers = async () => {
       });
       if (res.code === 1) {
         return {
-          data: res.data.records || [],
+          data: (res.data.records || []).map((user) => ({
+            ...user,
+            level: getUserLevelLabel(user.rate),
+            inviteLevel: user.inviteRate
+              ? getUserLevelLabel(user.inviteRate)
+              : "未设置",
+          })),
           total: res.data.total || 0,
         };
       }
@@ -418,6 +435,17 @@ const loadUsers = async () => {
   } catch (error) {
     console.error("加载用户列表失败:", error);
     ElMessage.error("加载用户列表失败");
+  }
+};
+
+const loadCurrentAccount = async () => {
+  try {
+    const res = await getUserInfo();
+    if (res.code === 1) {
+      accountRate.value = Number(res.data?.rate || 1);
+    }
+  } catch (error) {
+    console.error("加载账户等级失败:", error);
   }
 };
 
@@ -437,7 +465,7 @@ const handleCreate = () => {
     username: "",
     password: "",
     nickname: "",
-    rate: 1.0,
+    rate: getDefaultAssignableRate(accountRate.value),
   };
   createDialogVisible.value = true;
 };
@@ -525,7 +553,8 @@ const copyInviteCode = (inviteCode) => {
 // 处理邀请码管理
 const handleInviteCode = (row) => {
   currentUser.value = row;
-  inviteCodeForm.value.inviteRate = row.inviteRate || 1.0;
+  inviteCodeForm.value.inviteRate =
+    row.inviteRate || getDefaultAssignableRate(row.rate || accountRate.value);
   inviteCodeDialogVisible.value = true;
 };
 
@@ -557,8 +586,10 @@ const handleMyInviteCode = async () => {
     // 获取当前用户信息
     const res = await getUserInfo();
     if (res.code === 1) {
+      accountRate.value = Number(res.data?.rate || 1);
       myInviteCodeForm.value.inviteCode = res.data.inviteCode || "";
-      myInviteCodeForm.value.inviteRate = res.data.inviteRate || 1.0;
+      myInviteCodeForm.value.inviteRate =
+        res.data.inviteRate || getDefaultAssignableRate(accountRate.value);
       myInviteCodeDialogVisible.value = true;
     }
   } catch (error) {
@@ -593,6 +624,7 @@ watch([currentPage, pageSize], () => {
 
 onMounted(() => {
   loadUsers();
+  loadCurrentAccount();
 });
 </script>
 

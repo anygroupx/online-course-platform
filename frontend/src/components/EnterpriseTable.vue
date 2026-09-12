@@ -406,8 +406,16 @@ const loadTableConfig = () => {
           ...config.columnVisible,
         };
       }
-      if (config.columnOrder) {
-        columnOrder.value = config.columnOrder;
+      if (Array.isArray(config.columnOrder)) {
+        const currentColumnKeys = props.columns.map((column) => column.key);
+        const savedColumnOrder = config.columnOrder.filter(
+          (key, index, keys) =>
+            currentColumnKeys.includes(key) && keys.indexOf(key) === index
+        );
+        const newColumnKeys = currentColumnKeys.filter(
+          (key) => !savedColumnOrder.includes(key)
+        );
+        columnOrder.value = [...savedColumnOrder, ...newColumnKeys];
       }
     }
   } catch (error) {

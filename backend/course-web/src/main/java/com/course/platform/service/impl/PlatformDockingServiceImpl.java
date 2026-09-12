@@ -1,5 +1,6 @@
 package com.course.platform.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.domain.vo.CourseInfoResponse;
@@ -12,6 +13,7 @@ import com.course.platform.domain.dto.ProviderOrderLog;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.domain.entity.CourseOrder;
+import com.course.platform.domain.entity.CourseOrderProgressLog;
 import com.course.platform.domain.entity.CoursePlatform;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
 import com.course.platform.infra.persistence.mapper.CourseOrderMapper;
@@ -19,6 +21,7 @@ import com.course.platform.infra.persistence.mapper.PlatformCategoryMapper;
 import com.course.platform.domain.entity.PlatformCategory;
 import com.course.platform.infra.persistence.mapper.CoursePlatformMapper;
 import com.course.platform.application.service.platform.ApiProviderService;
+import com.course.platform.application.service.order.CourseOrderProgressLogService;
 import com.course.platform.application.service.platform.PlatformDockingService;
 import com.course.platform.application.service.platform.docking.PlatformDockingStrategy;
 import com.course.platform.infra.docking.PlatformDockingStrategyFactory;
@@ -56,19 +59,22 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
     private final CourseOrderMapper courseOrderMapper;
     private final PlatformCategoryMapper platformCategoryMapper;
     private final ApiProviderService apiProviderService;
+    private final CourseOrderProgressLogService progressLogService;
 
     public PlatformDockingServiceImpl(PlatformDockingStrategyFactory strategyFactory,
                                       ApiProviderMapper apiProviderMapper,
                                       CoursePlatformMapper coursePlatformMapper,
                                       CourseOrderMapper courseOrderMapper,
                                       PlatformCategoryMapper platformCategoryMapper,
-                                      ApiProviderService apiProviderService) {
+                                      ApiProviderService apiProviderService,
+                                      CourseOrderProgressLogService progressLogService) {
         this.strategyFactory = strategyFactory;
         this.apiProviderMapper = apiProviderMapper;
         this.coursePlatformMapper = coursePlatformMapper;
         this.courseOrderMapper = courseOrderMapper;
         this.platformCategoryMapper = platformCategoryMapper;
         this.apiProviderService = apiProviderService;
+        this.progressLogService = progressLogService;
     }
 
     @Override
@@ -504,6 +510,20 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
                 // 批量更新订单
                 for (OrderProgressResult result : results) {
                     try {
+                        List<CourseOrder> matchingOrders = courseOrderMapper.selectList(
+                                new LambdaQueryWrapper<CourseOrder>()
+                                        .select(CourseOrder::getId,
+                                                CourseOrder::getThirdOrderId,
+                                                CourseOrder::getApiProviderId,
+                                                CourseOrder::getProgress,
+                                                CourseOrder::getOrderStatus,
+                                                CourseOrder::getRemarks)
+                                        .eq(CourseOrder::getStudentAccount, result.getStudentAccount())
+                                        .eq(CourseOrder::getStudentPassword, result.getStudentPassword())
+                                        .eq(CourseOrder::getCourseName, result.getCourseName())
+                                        .eq(CourseOrder::getThirdOrderId, result.getThirdOrderId())
+                                        .eq(CourseOrder::getApiProviderId, apiProviderId));
+
                         // Native orders have a bound remote order ID; do not guess missing IDs from a course name.
                         int updated = courseOrderMapper.updateOrderProgressByFullMatch(
                                 result.getStudentAccount(),
@@ -521,6 +541,14 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
                         );
                         if (updated > 0) {
                             totalUpdated += updated;
+                            for (CourseOrder previousOrder : matchingOrders) {
+                                CourseOrder currentOrder = progressSnapshotAfterSync(previousOrder, result);
+                                progressLogService.recordIfChanged(currentOrder,
+                                        previousOrder.getProgress(),
+                                        previousOrder.getOrderStatus(),
+                                        previousOrder.getRemarks(),
+                                        CourseOrderProgressLog.SOURCE_SCHEDULED_SYNC);
+                            }
                         }
                     } catch (Exception e) {
                         // Roll back the batch and retain its old watermark; SQL messages may contain credentials.
@@ -550,6 +578,17 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
         result.put("totalUpdated", totalUpdated);
         result.put("message", "已同步" + totalUpdated + "条订单");
         return result;
+    }
+
+    private CourseOrder progressSnapshotAfterSync(CourseOrder previousOrder, OrderProgressResult result) {
+        CourseOrder currentOrder = new CourseOrder();
+        currentOrder.setId(previousOrder.getId());
+        currentOrder.setThirdOrderId(previousOrder.getThirdOrderId());
+        currentOrder.setApiProviderId(previousOrder.getApiProviderId());
+        currentOrder.setProgress(result.getProgress());
+        currentOrder.setOrderStatus(result.getOrderStatus());
+        currentOrder.setRemarks(result.getRemarks());
+        return currentOrder;
     }
 
     /**

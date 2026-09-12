@@ -4,7 +4,8 @@ export const executionReceiptId = (v) => typeof v === 'string' && /^[A-Za-z0-9_-
 const time = (v) => {
   if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?$/.test(v)) return false
   const [year, month, day] = v.slice(0, 10).split('-').map(Number)
-  return year >= 1000 && year <= 9998 && month >= 1 && month <= 12 && day >= 1 && day <= new Date(Date.UTC(year, month, 0)).getUTCDate() && Number.isFinite(Date.parse(v.replace(/(\.\d{3})\d+/, '$1') + '+08:00'))
+  const [hour, minute, second] = v.slice(11, 19).split(':').map(Number)
+  return hour <= 23 && minute <= 59 && second <= 59 && year >= 1000 && year <= 9998 && month >= 1 && month <= 12 && day >= 1 && day <= new Date(Date.UTC(year, month, 0)).getUTCDate() && Number.isFinite(Date.parse(v.replace(/(\.\d{3})\d+/, '$1') + '+08:00'))
 }
 export const receiptStates = {
   READING: ['核对中', '正在核对；请检查原请求，不重复发起查询。'],
@@ -26,6 +27,14 @@ export function validReceiptView(value, orderId, requestId) {
     typeof value.courseName === 'string' && value.courseName.length > 0 && value.courseName.length <= 255 &&
     executionReceiptId(value.receiptId) && Object.hasOwn(receiptStates, value.state) && time(value.expiresAt) &&
     (value.state === 'APPLIED' ? time(value.appliedAt) : value.appliedAt === null)
+}
+export function validReceiptCandidates(value, orderId) {
+  return !!value && typeof value === 'object' && !Array.isArray(value) &&
+    Object.keys(value).length === 4 && Object.keys(value).every((key) => ['orderId', 'receiptIds', 'checkedAt', 'scope'].includes(key)) &&
+    Number.isSafeInteger(value.orderId) && value.orderId > 0 && value.orderId === orderId &&
+    value.scope === 'CURRENT_RESPONSE' && time(value.checkedAt) &&
+    Array.isArray(value.receiptIds) && value.receiptIds.length <= 20 && value.receiptIds.every(executionReceiptId) &&
+    new Set(value.receiptIds).size === value.receiptIds.length
 }
 export const receiptCanConfirm = (view, now) => view?.state === 'READY' && !serviceAccountExpired(view, now)
 export const receiptTime = (value) => value?.replace('T', ' ').replace(/\.\d+$/, '') || '未记录'

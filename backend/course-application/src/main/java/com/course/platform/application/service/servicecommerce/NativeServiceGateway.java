@@ -46,4 +46,8 @@ public interface NativeServiceGateway {
     RunLogPage logs(ApiProvider provider, ServiceOrder order, int page);
 
     RemoteResult sync(ApiProvider provider, ServiceOrder order);
+
+    default OrderText scoreInfo(ApiProvider provider, ServiceOrder order) {
+        throw new com.course.platform.common.exception.BusinessException("该服务不支持成绩信息查询");
+    }
 }

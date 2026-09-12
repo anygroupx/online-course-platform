@@ -70,7 +70,7 @@ try {
       if (reads > 1) { quote.state = "SUCCEEDED"; order.status = "SUBMITTED"; order.pendingOperationId = null; }
       return respond(quote);
     }
-    if ((endpoint === "/service-orders" || endpoint === "/admin/service-orders") && method === "GET") return respond({ records: created ? [order] : [], total: created ? 1 : 0 });
+    if ((endpoint === "/service-orders" || endpoint === "/admin/service-orders") && method === "GET") return respond({ records: created ? [order] : [], total: created ? 1 : 0, current: 1, size: 20 });
     if (endpoint === `/service-orders/${order.id}/sync`) {
       assert.equal(method, "POST"); assert.deepEqual(body(), {}); syncs++;
       if (failSync) return respond(null, 502);
@@ -157,7 +157,7 @@ try {
   assert.equal(await card.locator(".el-progress").count(), 0);
   for (const label of ["执行记录", "取消并退款", "增加次数", "编辑计划"]) assert.equal(await card.getByRole("button", { name: label, exact: true }).count(), 0);
   await page.getByRole("button", { name: "核对提交状态", exact: true }).click();
-  await page.getByText("提交待核对", { exact: true }).waitFor();
+  await page.locator(".order-card .order-title").getByText("提交待核对", { exact: true }).waitFor();
   assert.equal(order.refundedAmount, "0.00"); assert.equal(order.completed, null);
   failSync = true;
   await page.getByRole("button", { name: "核对提交状态", exact: true }).click();
@@ -183,9 +183,9 @@ try {
   await resolution.locator("textarea").fill("已独立核查此笔提交和完整资金记录，确认没有受理");
   await resolution.getByText("我已核查订单和账务记录，确认上述结论", { exact: true }).click();
   await resolution.getByRole("button", { name: "确认并记入审计", exact: true }).click();
-  await page.getByText("已取消", { exact: true }).waitFor(); assert.equal(resolutions, 1);
+  await page.locator(".order-card .order-title").getByText("已取消", { exact: true }).waitFor(); assert.equal(resolutions, 1);
   order.status = "REFUND_REVIEW"; await page.getByRole("button", { name: "刷新列表", exact: true }).click();
-  await page.getByText("退款待核对", { exact: true }).waitFor();
+  await page.locator(".order-card .order-title").getByText("退款待核对", { exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "核对退款入账", exact: true }).count(), 0);
 
   await go("/admin/service-products");

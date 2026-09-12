@@ -211,12 +211,13 @@
 import { ref, onMounted } from "vue";
 import { InfoFilled, Select, Brush } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import axios from "@/utils/request";
-import { resetAllSettings } from "@/api/setting";
+import { getSettings, updateSettings, resetAllSettings } from "@/api/setting";
+import { useAppConfigStore } from "@/stores/appConfig";
 
 const activeTab = ref("basic");
 const saving = ref(false);
 const resetting = ref(false);
+const appConfigStore = useAppConfigStore();
 // Source: AURA-X-KYS 安全加固 - Token配置管理
 const configs = ref({
   site_name: "",
@@ -233,25 +234,13 @@ const configs = ref({
   auto_refresh_token_enabled: "1",
 });
 
-// Source: AURA-X-KYS 安全加固 - 同步Token配置到localStorage
 const loadConfigs = async () => {
   try {
-    const res = await axios.get("/system/config");
+    const res = await getSettings();
     if (res.code === 1 && res.data) {
       // 将配置数组转换为对象
       res.data.forEach((item) => {
         configs.value[item.configKey] = item.configValue;
-
-        // Token相关配置同步到localStorage，供request.js使用
-        if (
-          [
-            "token_expire_minutes",
-            "refresh_token_expire_days",
-            "auto_refresh_token_enabled",
-          ].includes(item.configKey)
-        ) {
-          localStorage.setItem(item.configKey, item.configValue);
-        }
       });
     }
   } catch (error) {
@@ -259,27 +248,13 @@ const loadConfigs = async () => {
   }
 };
 
-// Source: AURA-X-KYS 安全加固 - 保存时同步Token配置
 const handleSave = async () => {
   saving.value = true;
   try {
-    const res = await axios.put("/system/config", configs.value);
+    const res = await updateSettings(configs.value);
     if (res.code === 1) {
-      // Token配置同步到localStorage
-      localStorage.setItem(
-        "token_expire_minutes",
-        configs.value.token_expire_minutes
-      );
-      localStorage.setItem(
-        "refresh_token_expire_days",
-        configs.value.refresh_token_expire_days
-      );
-      localStorage.setItem(
-        "auto_refresh_token_enabled",
-        configs.value.auto_refresh_token_enabled
-      );
-
-      ElMessage.success("保存成功，Token配置已更新");
+      await appConfigStore.reload();
+      ElMessage.success("保存成功");
     }
   } catch (error) {
     console.error("保存失败：", error);
@@ -316,6 +291,7 @@ const handleResetAll = async () => {
         count != null ? `全部配置已重置（${count} 项）` : "全部配置已重置为默认值"
       );
       await loadConfigs();
+      await appConfigStore.reload();
     }
   } catch (error) {
     console.error("重置配置失败：", error);

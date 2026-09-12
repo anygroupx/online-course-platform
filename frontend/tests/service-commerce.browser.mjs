@@ -160,6 +160,7 @@ try {
       return respond({
         records: created ? [order] : [],
         total: created ? 1 : 0,
+        current: 1, size: 20,
       });
     if (endpoint === `/service-orders/${uuid}/quotes`) {
       const data = body();

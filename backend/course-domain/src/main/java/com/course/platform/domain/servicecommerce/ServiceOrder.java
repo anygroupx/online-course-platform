@@ -38,6 +38,30 @@ public class ServiceOrder {
     private BigDecimal refundedAmount;
     private Long version;
 
+    // Maintenance metadata is changed only by explicit status-check SQL, not business writes.
+    @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private LocalDateTime statusCheckedAt;
+
+    @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private LocalDateTime statusCheckAfter;
+
+    @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private LocalDateTime statusCheckAttemptAt;
+
+    @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private Integer statusCheckFailures;
+
+    @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private String statusCheckState;
+
+    @com.fasterxml.jackson.annotation.JsonIgnore @lombok.ToString.Exclude
+    @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private String statusCheckToken;
+
+    @com.fasterxml.jackson.annotation.JsonIgnore @lombok.ToString.Exclude
+    @TableField(insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
+    private LocalDateTime statusCheckUntil;
+
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String pendingOperationId;
 

@@ -291,6 +291,59 @@
           currentOrder.remarks || "-"
         }}</el-descriptions-item>
       </el-descriptions>
+
+      <el-divider content-position="left">执行记录</el-divider>
+      <el-alert
+        v-if="currentOrder && isSelfOperatedOrder(currentOrder)"
+        title="完成进度会按倒计时自动计算"
+        type="info"
+        :closable="false"
+        show-icon
+      />
+      <div v-else v-loading="progressLogsLoading" class="progress-log-panel">
+        <div class="progress-log-header">
+          <span class="progress-log-tip">仅记录进度、状态或备注发生变化的时间点</span>
+          <el-button
+            size="small"
+            :loading="progressLogsLoading"
+            :disabled="!currentOrder"
+            @click="loadProgressLogs"
+          >
+            重新加载
+          </el-button>
+        </div>
+        <el-alert
+          v-if="progressLogsError"
+          :title="progressLogsError"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
+        <el-empty
+          v-else-if="!progressLogsLoading && progressLogs.length === 0"
+          description="暂无执行记录"
+          :image-size="72"
+        />
+        <el-timeline v-else class="progress-log-timeline">
+          <el-timeline-item
+            v-for="log in progressLogs"
+            :key="log.id"
+            :timestamp="log.createTime || ''"
+            placement="top"
+            :type="getProgressLogType(log.orderStatus)"
+          >
+            <div class="progress-log-card">
+              <div class="progress-log-title">
+                <span>完成进度：{{ log.progress || "-" }}</span>
+                <el-tag :type="getStatusType(log.orderStatus)" size="small" effect="plain">
+                  {{ getStatusText(log.orderStatus) }}
+                </el-tag>
+              </div>
+              <div v-if="log.remarks" class="progress-log-remarks">{{ log.remarks }}</div>
+            </div>
+          </el-timeline-item>
+        </el-timeline>
+      </div>
       <template #footer>
         <el-button @click="detailDialogVisible = false">关闭</el-button>
       </template>
@@ -324,6 +377,7 @@ import {
   retryOrder,
   refreshOrder,
   exportOrders,
+  getOrderProgressLogs,
 } from "@/api/order";
 import { getCoursePlatforms } from "@/api/course";
 import { useVariableStore } from "@/stores/variableStore";
@@ -376,6 +430,10 @@ const displayOrderPlatformName = (order) => {
   return platform?.displayName ?? platform?.name ?? order?.displayName ?? order?.platformName;
 };
 const currentOrder = ref(null);
+const progressLogs = ref([]);
+const progressLogsLoading = ref(false);
+const progressLogsError = ref("");
+let progressLogsRequestVersion = 0;
 const exportLoading = ref(false);
 const exportForm = ref({
   format: 1,
@@ -554,9 +612,56 @@ const handleRowAction = async ({ action, row }) => {
   }
 };
 
+const isSelfOperatedOrder = (order) =>
+  order?.isSelfOperated === true || Number(order?.isSelfOperated) === 1;
+
+const getProgressLogType = (orderStatus) => {
+  const type = getStatusType(orderStatus);
+  return ["success", "warning", "danger", "info", "primary"].includes(type)
+    ? type
+    : "primary";
+};
+
+const loadProgressLogs = async () => {
+  const order = currentOrder.value;
+  const requestVersion = ++progressLogsRequestVersion;
+  progressLogs.value = [];
+  progressLogsError.value = "";
+  progressLogsLoading.value = false;
+  if (!order || isSelfOperatedOrder(order)) return;
+
+  const orderNo = order.orderNo;
+  progressLogsLoading.value = true;
+  try {
+    const res = await getOrderProgressLogs(orderNo);
+    if (
+      requestVersion === progressLogsRequestVersion &&
+      currentOrder.value?.orderNo === orderNo
+    ) {
+      progressLogs.value = Array.isArray(res.data) ? res.data : [];
+    }
+  } catch (error) {
+    if (
+      requestVersion === progressLogsRequestVersion &&
+      currentOrder.value?.orderNo === orderNo
+    ) {
+      progressLogsError.value =
+        error?.response?.data?.message || error?.message || "执行记录加载失败";
+      console.error("加载订单执行记录失败：", error);
+    }
+  } finally {
+    if (requestVersion === progressLogsRequestVersion) {
+      progressLogsLoading.value = false;
+    }
+  }
+};
+
 const handleView = (row) => {
   currentOrder.value = row;
+  progressLogs.value = [];
+  progressLogsError.value = "";
   detailDialogVisible.value = true;
+  loadProgressLogs();
 };
 
 const handleRetry = async (row) => {
@@ -772,6 +877,52 @@ onMounted(async () => {
 .header-actions {
   display: flex;
   gap: 10px;
+}
+
+.progress-log-panel {
+  min-height: 90px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 4px 8px 0 2px;
+}
+
+.progress-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.progress-log-tip {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.progress-log-timeline {
+  padding-top: 8px;
+}
+
+.progress-log-card {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+}
+
+.progress-log-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 600;
+}
+
+.progress-log-remarks {
+  margin-top: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-regular);
 }
 
 @media (max-width: 768px) {

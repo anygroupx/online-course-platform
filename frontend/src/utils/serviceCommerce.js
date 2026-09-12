@@ -1,10 +1,14 @@
 import { internshipFields, internshipProjects } from "./internshipServices.js";
+import { jingyuFormFields } from "./jingyuServices.js";
 export const serviceNames = Object.freeze({
   flash: "闪电",
   heisha: "黑鲨",
   jiguang: "极光",
   wuxin: "无心",
   sxdk_tw: "实习服务",
+  appui: "实习打卡",
+  leidian: "雷电",
+  jingyu: "鲸鱼",
   ssbenz_xbd: "公里计划",
 });
 export const actionNames = Object.freeze({
@@ -12,6 +16,8 @@ export const actionNames = Object.freeze({
   SYNC: "更新进度",
   ADD_TIMES: "增加次数",
   REFUND: "取消并退款",
+  CANCEL: "取消订单",
+  SCORE_INFO: "成绩查询信息",
   SETTLE_REFUND: "退款入账",
   PAUSE: "暂停",
   RESUME: "恢复",
@@ -24,6 +30,20 @@ export const actionNames = Object.freeze({
   RUN_NOW: "立即执行",
   REPORT: "补交记录",
 });
+export function serviceActionName(action, context) {
+  if (context?.providerType === "jingyu") {
+    if (action === "REFUND") return "取消并申请退款";
+    if (action === "DELAY") return "延期未完成任务";
+  }
+  if (context?.providerType === "leidian") {
+    if (action === "EDIT_PLAN") return "编辑执行安排";
+    if (action === "SYNC") return "核对次数与状态";
+  }
+  if (action === "ADD_TIMES" && (context?.providerType === "appui" || context?.quantityUnit === "天")) return "增加天数";
+  if (action === "EDIT_PLAN" && (context?.providerType === "appui" || context?.quantityUnit === "天")) return "编辑安排";
+  if (action === "SYNC" && context?.providerType === "appui") return "核对天数与状态";
+  return actionNames[action] || "待核对";
+}
 export const stateNames = Object.freeze({
   READY: "待确认",
   DISPATCHING: "正在确认",
@@ -44,6 +64,19 @@ export const stateNames = Object.freeze({
   SUBMISSION_REVIEW: "提交待核对",
 });
 export const stateName = (state) => stateNames[state] || "待核对";
+// Internship states describe the purchased plan, not attendance completion.
+export function orderStateName(order) {
+  if (order?.providerType === "sxdk_tw") {
+    switch (order.status) {
+      case "ACTIVE": return "计划运行中";
+      case "PAUSED": return "计划已暂停";
+      case "COMPLETED": return "服务期结束";
+    }
+  }
+  if (order?.providerType === "appui" && order.status === "COMPLETED") return "服务已结束";
+  return stateName(order?.status);
+}
+
 export const fieldNames = Object.freeze({
   runType: "服务类型",
   runRuleId: "执行计划",
@@ -104,6 +137,8 @@ export function buildTaskTimes(
 }
 
 const formKeys = Object.freeze({
+  leidian: ["account", "zoneId", "startDate", "startTime", "endTime", "weekdays"],
+  appui: ["account", "password", "schoolName", "address", "startTime", "endTime", "weekdays", "reports"],
   ssbenz_xbd: ["account", "password", "schoolName", "startTime", "endTime", "weekdays"],
   jiguang: ["schoolName", "studentName", "studentAccount", "message"],
   heisha: ["account", "password", "planOptionId", "fenceOptionId", "runTime"],
@@ -130,7 +165,8 @@ const formKeys = Object.freeze({
     "message",
   ],
 });
-export function serviceFormFields(type, fields) {
+export function serviceFormFields(type, fields, project) {
+  if (type === "jingyu") return jingyuFormFields(project, fields);
   if (type === "sxdk_tw") return internshipFields(fields);
   return Object.fromEntries(
     (formKeys[type] || [])
@@ -161,8 +197,11 @@ export function editableWuxinPlan(suggested = {}, distance = "") {
 
 // Catalog rows are not an authorization to sell unknown product IDs.
 export function nativeProductSupported(type, project, id) {
+  if (type === "jingyu") return ["keep", "bdlp"].includes(project) && project === id;
+  if (type === "leidian") return ["1", "2", "3", "4"].includes(project) && project === id;
   if (type === "sxdk_tw")
     return Object.hasOwn(internshipProjects, project) && project === id;
+  if (type === "appui") return typeof project === "string" && project.length === 1 && /^[1-9]$/.test(project) && project === id;
   if (type === "wuxin") return project === "sdxy" && id === "sdxy";
   if (type === "ssbenz_xbd") return project === "xbd" && ["0", "1"].includes(id);
   if (type === "flash")

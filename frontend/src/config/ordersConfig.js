@@ -80,6 +80,13 @@ export const columnsConfig = [
     visible: true,
   },
   {
+    key: "remarks",
+    label: "备注",
+    minWidth: 180,
+    visible: true,
+    formatter: (row) => row.remarks || "-",
+  },
+  {
     key: "amount",
     label: "金额",
     width: 100,
@@ -194,5 +201,6 @@ export const mobileColumns = [
   "studentAccount",
   "platformName",
   "courseName",
+  "remarks",
   "amount",
 ];

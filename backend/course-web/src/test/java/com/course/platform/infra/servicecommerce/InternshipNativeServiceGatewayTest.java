@@ -12,10 +12,12 @@ import com.course.platform.domain.servicecommerce.ServiceCommerceTypes.*;
 import com.course.platform.infra.external.ApiHttpClient;
 import com.course.platform.infra.http.ProviderUrlNormalizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -567,6 +569,192 @@ class InternshipNativeServiceGatewayTest {
                 .thenReturn(json.writeValueAsString(Map.of("code", 0, "data", List.of(row))));
         assertThrows(BusinessException.class, () -> gateway.orderOptions(provider, order));
     }
+    @ParameterizedTest
+    @CsvSource({"1,ACTIVE", "2,PAUSED", "0,ATTENTION", "3,ATTENTION", "-1,ATTENTION"})
+    void syncReadsOnlyTheBoundPlanStateAndNeverAttendanceOrMoney(int code, String expected) throws Exception {
+        for (boolean textual : List.of(false, true)) {
+            ObjectNode row = statusRow();
+            if (textual) row.put("code", Integer.toString(code));
+            else row.put("code", code);
+            stubStatusRows(List.of(row));
+            String calendar = order.getScheduleJson();
+            var result = gateway.sync(provider, order);
+            assertEquals("R-6", result.externalOrderNo());
+            assertEquals(expected, result.status());
+            assertEquals(0, result.completed(), "plan status does not certify any attendance");
+            assertNull(result.refundedUnits());
+            assertNull(result.externalSubOrderNo());
+            assertEquals(calendar, order.getScheduleJson());
+            assertFalse(result.toString().contains("secret-password"));
+        }
+        verify(http, times(2)).getForString(provider, "https://authorized.example/direct/api.php",
+                Map.of("act", "getOrder", "page", 1, "pagesize", 100, "uid", "saved-uid", "key", "saved-key"));
+        verifyNoMoreInteractions(http);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"1,COMPLETED", "2,COMPLETED", "0,ATTENTION", "3,ATTENTION", "-1,ATTENTION"})
+    void expiredPaidPeriodNeverHidesAnUnknownPlanStateOrFabricatesAttendance(int code, String expected) throws Exception {
+        var expired = DailyServicePlan.create(schedule(-1), today().minusDays(3));
+        order.setScheduleJson(json.writeValueAsString(expired));
+        ObjectNode row = statusRow();
+        row.put("end_time", expired.schedule().endDate().toString());
+        row.put("code", code);
+        stubStatusRows(List.of(row));
+        var result = gateway.sync(provider, order);
+        assertEquals(expected, result.status());
+        assertEquals(0, result.completed());
+        assertNull(result.refundedUnits());
+        assertEquals(expired, InternshipNativeServiceGateway.plan(order));
+        verify(http, never()).postForString(any(), anyString(), anyMap());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"1,ACTIVE", "2,PAUSED"})
+    void theEndDateRemainsAnInclusiveBeijingServiceDay(int code, String expected) throws Exception {
+        var lastDay = DailyServicePlan.create(schedule(0), today().minusDays(2));
+        order.setScheduleJson(json.writeValueAsString(lastDay));
+        ObjectNode row = statusRow();
+        row.put("end_time", today().toString());
+        row.put("code", code);
+        stubStatusRows(List.of(row));
+        assertEquals(expected, gateway.sync(provider, order).status());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"null", "true", "false", "1.0", "1e0", "{}", "[]", "\"\"",
+            "\"01\"", "\"1 \"", "\"unknown-secret\"", "10000"})
+    void malformedPlanStatusIsNotAConfirmedCheckEvenAfterTheEndDate(String rawCode) throws Exception {
+        var expired = DailyServicePlan.create(schedule(-1), today().minusDays(3));
+        order.setScheduleJson(json.writeValueAsString(expired));
+        ObjectNode row = statusRow();
+        row.put("end_time", expired.schedule().endDate().toString());
+        row.set("code", json.readTree(rawCode));
+        stubStatusRows(List.of(row));
+        assertThrows(ProviderRequestException.class, () -> gateway.sync(provider, order));
+        row.remove("code");
+        stubStatusRows(List.of(row));
+        assertThrows(ProviderRequestException.class, () -> gateway.sync(provider, order));
+        verify(http, never()).postForString(any(), anyString(), anyMap());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"null", "[]", "true", "{}", "{\"id\":true,\"platform\":\"zxjy\"}",
+            "{\"id\":1.0,\"platform\":\"zxjy\"}", "{\"id\":\"OTHER\",\"platform\":null}",
+            "{\"id\":\"OTHER\",\"platform\":{}}", "{\"id\":\"OTHER\",\"platform\":true}"})
+    void aMalformedRowAfterTheMatchingRowRejectsTheEntireFetchedPage(String rawRow) throws Exception {
+        stubStatusRows(List.of(statusRow(), json.readTree(rawRow)));
+        assertThrows(ProviderRequestException.class, () -> gateway.sync(provider, order));
+    }
+
+    @Test
+    void syncRejectsAmbiguousIdsCalendarConflictsAndNonUniqueJson() throws Exception {
+        ObjectNode row = statusRow();
+        stubStatusRows(List.of(row, row));
+        assertThrows(ProviderRequestException.class, () -> gateway.sync(provider, order));
+        row.put("platform", "gxy");
+        stubStatusRows(List.of(row));
+        assertThrows(ProviderRequestException.class, () -> gateway.sync(provider, order));
+        for (String field : List.of("end_time", "check_week", "runType")) {
+            row = statusRow();
+            switch (field) {
+                case "end_time" -> row.put(field, today().plusDays(20).toString());
+                case "check_week" -> row.put(field, "1,2,3");
+                default -> row.put(field, 3);
+            }
+            stubStatusRows(List.of(row));
+            assertThrows(BusinessException.class, () -> gateway.sync(provider, order));
+        }
+        for (String malformed : List.of(remote() + "{}", remote().replace("\"code\":1", "\"code\":1,\"code\":2"))) {
+            when(http.getForString(any(), anyString(), anyMap())).thenReturn(malformed);
+            assertThrows(ProviderRequestException.class, () -> gateway.sync(provider, order));
+        }
+        verify(http, never()).postForString(any(), anyString(), anyMap());
+    }
+
+    @Test
+    void syncCanFindAnExactIdOnTheNextPageWithoutPhoneOrPasswordMatching() throws Exception {
+        List<Map<String, Object>> other = new ArrayList<>();
+        for (int i = 0; i < 100; i++) other.add(Map.of("id", "OTHER-" + i, "platform", "zxjy",
+                "phone", "13800138000", "password", "secret-password"));
+        when(http.getForString(any(), anyString(), anyMap()))
+                .thenReturn(json.writeValueAsString(Map.of("code", 0, "data", other)), remote());
+        assertEquals("ACTIVE", gateway.sync(provider, order).status());
+        verify(http).getForString(provider, "https://authorized.example/direct/api.php",
+                Map.of("act", "getOrder", "page", 2, "pagesize", 100, "uid", "saved-uid", "key", "saved-key"));
+        verify(http, times(2)).getForString(any(), anyString(), anyMap());
+        verifyNoMoreInteractions(http);
+    }
+
+    @Test
+    void noBoundIdMeansNoRequestAndMissingOrOversizedListsNeverGuessAnOrder() throws Exception {
+        for (String id : Arrays.asList(null, "", " ", "<script>")) {
+            order.setExternalOrderNo(id);
+            assertThrows(ProviderRequestException.class, () -> gateway.sync(provider, order));
+        }
+        verifyNoInteractions(http);
+        order.setExternalOrderNo("R-6");
+        stubStatusRows(List.of());
+        assertThrows(ProviderRequestException.class, () -> gateway.sync(provider, order));
+        stubStatusRows(Collections.nCopies(101, statusRow()));
+        assertThrows(ProviderRequestException.class, () -> gateway.sync(provider, order));
+    }
+
+    @Test
+    void syncStopsAtTenUniqueFullPagesRatherThanSearchingAnUnboundedAccountHistory() throws Exception {
+        var requests = new ArrayList<Integer>();
+        when(http.getForString(any(), anyString(), anyMap())).thenAnswer(call -> {
+            Map<String, Object> params = call.getArgument(2);
+            int page = (Integer) params.get("page");
+            requests.add(page);
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (int i = 0; i < 100; i++) rows.add(Map.of("id", "OTHER-" + page + "-" + i,
+                    "platform", "zxjy", "phone", "13800138000", "password", "secret-password"));
+            return json.writeValueAsString(Map.of("code", 0, "data", rows));
+        });
+        assertThrows(ProviderRequestException.class, () -> gateway.sync(provider, order));
+        assertEquals(java.util.stream.IntStream.rangeClosed(1, 10).boxed().toList(), requests);
+        verify(http, never()).postForString(any(), anyString(), anyMap());
+    }
+
+    @Test
+    void aRepeatedRowOnALaterFetchedPageCannotBeIgnoredEvenIfThatPageContainsTheTarget() throws Exception {
+        List<Map<String, Object>> first = new ArrayList<>();
+        for (int i = 0; i < 100; i++) first.add(Map.of("id", "OTHER-" + i, "platform", "zxjy"));
+        when(http.getForString(any(), anyString(), anyMap())).thenReturn(
+                json.writeValueAsString(Map.of("code", 0, "data", first)),
+                json.writeValueAsString(Map.of("code", 0, "data", List.of(statusRow(), first.get(0)))));
+        assertThrows(ProviderRequestException.class, () -> gateway.sync(provider, order));
+        verify(http, times(2)).getForString(any(), anyString(), anyMap());
+        verifyNoMoreInteractions(http);
+    }
+
+    @Test
+    void corruptLocalCalendarOrInterruptedReaderNeverStartsAnHttpQuery() {
+        String saved = order.getScheduleJson();
+        for (String badPlan : Arrays.asList(null, "{}", "[]", "private-value")) {
+            order.setScheduleJson(badPlan);
+            assertThrows(BusinessException.class, () -> gateway.sync(provider, order));
+        }
+        order.setScheduleJson(saved);
+        Thread.currentThread().interrupt();
+        try {
+            assertThrows(ProviderRequestException.class, () -> gateway.sync(provider, order));
+        } finally {
+            Thread.interrupted();
+        }
+        verifyNoInteractions(http);
+    }
+
+    private ObjectNode statusRow() throws Exception {
+        return (ObjectNode) json.readTree(remote()).path("data").get(0);
+    }
+
+    private void stubStatusRows(List<?> rows) throws Exception {
+        when(http.getForString(any(), anyString(), anyMap()))
+                .thenReturn(json.writeValueAsString(Map.of("code", 0, "data", rows)));
+    }
+
     @Test void qztAdviceKeepsSundayMappingTimesAndDateSeparateFromPaidSchedule() throws Exception {
         product.setProject("qzt");product.setRemoteProductId("qzt");
         when(http.postForString(any(),anyString(),anyMap())).thenReturn(json.writeValueAsString(Map.of("code",0,"data",Map.of("name","本人","checkInTime","09:15","checkOutTime","17:45:30","endTime",today().plusDays(15).toString(),"weekList","1,2,6"))));

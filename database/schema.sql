@@ -222,7 +222,7 @@ CREATE TABLE `course_order` (
   `student_phone` VARCHAR(20) DEFAULT NULL COMMENT '学生手机号',
   
   -- 课程信息
-  `course_id` VARCHAR(100) DEFAULT NULL COMMENT '课程ID',
+  `course_id` VARCHAR(2048) DEFAULT NULL COMMENT '课程ID',
   `course_name` VARCHAR(255) NOT NULL COMMENT '课程名称',
   `course_start_time` DATETIME DEFAULT NULL COMMENT '课程开始时间',
   `course_end_time` DATETIME DEFAULT NULL COMMENT '课程结束时间',

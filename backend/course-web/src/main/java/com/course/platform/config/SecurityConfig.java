@@ -69,8 +69,9 @@ public class SecurityConfig {
             "/swagger-ui/**",
             "/v3/api-docs/**",
             "/webjars/**",
-            // 客户端只读主题配置
+            // 客户端只读公开配置
             "/theme/variables",
+            "/client/bootstrap",
             // 静态资源
             "/favicon.ico",
             "/error"
@@ -109,6 +110,9 @@ public class SecurityConfig {
                         // 管理端路径必须 ADMIN
                         .requestMatchers("/admin/orders/**", "/admin/aqks/**", "/order-batch/**", "/admin/countdown-config/**", "/admin/docking/**").hasAuthority("order:update")
                         .requestMatchers("/payment/config/**", "/payment-config/**").hasAuthority("payment:config")
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/system/config").hasAuthority("system-config:read")
+                        .requestMatchers(org.springframework.http.HttpMethod.PUT, "/system/config").hasAuthority("system-config:update")
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/system/config/reset/**").hasAuthority("system-config:update")
                         .requestMatchers("/system/**", "/system-config/**", "/system-variable/**", "/admin/variables/**").hasAuthority("system-config:update")
                         .requestMatchers("/logs/**").hasAuthority("security:event:read")
                         .requestMatchers("/announcement/create").hasAuthority("announcement:create")

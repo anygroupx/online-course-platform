@@ -15,11 +15,14 @@ import com.course.platform.domain.dto.OrderCreateRequest;
 import com.course.platform.domain.dto.OrderQueryRequest;
 import com.course.platform.domain.entity.CoursePlatform;
 import com.course.platform.domain.entity.CourseOrder;
+import com.course.platform.domain.entity.CourseOrderProgressLog;
 import com.course.platform.domain.entity.User;
+import com.course.platform.domain.vo.CourseOrderProgressLogVO;
 import com.course.platform.infra.persistence.mapper.CoursePlatformMapper;
 import com.course.platform.infra.persistence.mapper.CourseOrderMapper;
 import com.course.platform.infra.persistence.mapper.UserMapper;
 import com.course.platform.application.service.order.CourseOrderService;
+import com.course.platform.application.service.order.CourseOrderProgressLogService;
 import com.course.platform.application.service.support.OperationLogService;
 import com.course.platform.application.service.platform.PlatformDockingService;
 import com.course.platform.domain.dto.DockResult;
@@ -34,6 +37,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * 课程订单服务实现类
@@ -46,6 +50,8 @@ import java.math.BigDecimal;
 @RequiredArgsConstructor
 public class CourseOrderServiceImpl implements CourseOrderService {
 
+    private static final int MAX_COURSE_ID_LENGTH = 2048;
+
     private final CourseOrderMapper courseOrderMapper;
     private final CoursePlatformMapper coursePlatformMapper;
     private final UserMapper userMapper;
@@ -55,6 +61,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final AccountLedgerServiceImpl accountLedgerService;
     private final ResourceAuthorizationService authorizationService;
+    private final CourseOrderProgressLogService progressLogService;
 
     /**
      * 获取订单状态值
@@ -73,6 +80,11 @@ public class CourseOrderServiceImpl implements CourseOrderService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createOrder(OrderCreateRequest request, Long userId) {
+        if (request != null && request.getCourseId() != null
+                && request.getCourseId().length() > MAX_COURSE_ID_LENGTH) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "课程ID长度不能超过2048个字符");
+        }
+
         // 1. 查询用户信息
         User user = userMapper.selectById(userId);
         if (user == null) {
@@ -330,6 +342,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void updateOrderProgress(Long orderId, Long userId) {
         CourseOrder order = getOrderById(orderId, userId);
         authorizationService.requireCanUpdateOrder(order);
@@ -357,6 +370,10 @@ public class CourseOrderServiceImpl implements CourseOrderService {
             throw new ProviderRequestException(ProviderRequestException.Reason.PROVIDER_NOT_ACTIVE);
         }
 
+        String previousProgress = order.getProgress();
+        Integer previousOrderStatus = order.getOrderStatus();
+        String previousRemarks = order.getRemarks();
+
         // 手动刷新失败必须返回失败；批量同步由独立入口逐单隔离，不能在这里吞掉异常。
         OrderProgressResult result = platformDockingService.queryOrderProgress(order, platform, apiProvider);
         if (result == null) {
@@ -373,6 +390,8 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         if (result.getExamEndTime() != null) order.setExamEndTime(result.getExamEndTime());
 
         courseOrderMapper.updateById(order);
+        progressLogService.recordIfChanged(order, previousProgress, previousOrderStatus, previousRemarks,
+                CourseOrderProgressLog.SOURCE_MANUAL_REFRESH);
         log.info("订单进度更新成功：orderId={}, progress={}", orderId, result.getProgress());
     }
 
@@ -477,8 +496,27 @@ public class CourseOrderServiceImpl implements CourseOrderService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void updateOrderProgressByOrderNo(String orderNo, Long userId) {
         CourseOrder order = getOrderByOrderNo(orderNo, userId);
         updateOrderProgress(order.getId(), userId);
+    }
+
+    @Override
+    public List<CourseOrderProgressLogVO> getProgressLogsByOrderNo(String orderNo, Long userId) {
+        CourseOrder order = getOrderByOrderNo(orderNo, userId);
+        if (Integer.valueOf(1).equals(order.getIsSelfOperated())) {
+            return List.of();
+        }
+        return progressLogService.listByOrderId(order.getId()).stream()
+                .map(progressLog -> CourseOrderProgressLogVO.builder()
+                        .id(progressLog.getId())
+                        .progress(progressLog.getProgress())
+                        .orderStatus(progressLog.getOrderStatus())
+                        .remarks(progressLog.getRemarks())
+                        .source(progressLog.getSource())
+                        .createTime(progressLog.getCreateTime())
+                        .build())
+                .toList();
     }
 }

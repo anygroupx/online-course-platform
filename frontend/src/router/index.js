@@ -12,6 +12,7 @@ import {
   clearAuthSession,
   sessionUserInfo,
 } from "@/utils/authSession";
+import { isClientAutoRefreshEnabled } from "@/utils/clientConfigState";
 
 const routes = [
   {
@@ -84,7 +85,7 @@ const routes = [
         path: "price-list",
         name: "PriceList",
         component: () => import("@/views/PriceList.vue"),
-        meta: { title: "价格列表", requiresAuth: true },
+        meta: { title: "项目管理", requiresAuth: true },
       },
       {
         path: "settings",
@@ -246,10 +247,12 @@ router.beforeEach(async (to, _from, next) => {
     return;
   }
 
+  const { useAppConfigStore } = await import("@/stores/appConfig");
+  await useAppConfigStore().ensureLoaded();
+
   let token = getAccessToken();
-  const autoRefresh = localStorage.getItem("auto_refresh_token_enabled") !== "0";
   if (!token || isAccessTokenExpired()) {
-    if (!autoRefresh) {
+    if (!isClientAutoRefreshEnabled()) {
       clearAuthSession();
       next("/login");
       return;

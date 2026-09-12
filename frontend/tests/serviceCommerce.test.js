@@ -11,6 +11,7 @@ import {
   moneyText,
   knownOutcome,
   stateName,
+  orderStateName,
   serviceFormFields,
   editableWuxinPlan,
   nativeProductSupported,
@@ -225,4 +226,16 @@ test("nonbilling and malformed quotes cannot reuse an irrelevant stored price", 
 });
 test("total distance keeps its existing plan summary instead of a misleading per-run breakdown", () => {
   assert.equal(quoteChargeDetails({ ...exactQuote, quantity: 1, quantityUnit: "单", distancePlan: { totalDistance: "120.50" } }), null);
+});
+
+test("internship status labels distinguish plan state and end of service from completed attendance", () => {
+  assert.equal(orderStateName({ providerType: "sxdk_tw", status: "ACTIVE" }), "计划运行中");
+  assert.equal(orderStateName({ providerType: "sxdk_tw", status: "PAUSED" }), "计划已暂停");
+  assert.equal(orderStateName({ providerType: "sxdk_tw", status: "COMPLETED" }), "服务期结束");
+  for (const status of ["CONFIRMING", "REFUND_REVIEW", "REFUNDED", "CANCELLED", "ATTENTION"])
+    assert.equal(orderStateName({ providerType: "sxdk_tw", status }), stateName(status));
+  for (const providerType of [undefined, "flash", "heisha", "jiguang", "wuxin"])
+    assert.equal(orderStateName({ providerType, status: "COMPLETED" }), "已完成");
+  assert.equal(orderStateName({ providerType: "sxdk_tw", status: "unknown-private" }), "待核对");
+  assert.equal(orderStateName(null), "待核对");
 });

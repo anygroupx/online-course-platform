@@ -19,8 +19,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.net.URI;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * Cloudflare Turnstile 服务端验证器。
@@ -31,6 +34,16 @@ import java.util.Map;
 @Component
 @RequiredArgsConstructor
 public class TurnstileVerifier {
+
+    private static final int MAX_VERIFY_ATTEMPTS = 3;
+    private static final long[] RETRY_DELAYS_MILLIS = {100, 300};
+    private static final Set<SafeHttpException.Reason> RETRYABLE_FAILURES = EnumSet.of(
+            SafeHttpException.Reason.DNS_FAILURE,
+            SafeHttpException.Reason.TIMEOUT,
+            SafeHttpException.Reason.NETWORK_FAILURE,
+            SafeHttpException.Reason.TLS_FAILURE,
+            SafeHttpException.Reason.HTTP_ERROR
+    );
 
     private final SafeHttpClient safeHttpClient;
     private final OutboundPolicyRegistry outboundPolicies;
@@ -91,17 +104,12 @@ public class TurnstileVerifier {
 
         TurnstileResponse response;
         try {
-            SafeHttpResponse httpResponse = safeHttpClient.postForm(URI.create(verifyUrl), Map.of(
-                    "secret", secretKey,
-                    "response", token,
-                    "remoteip", ServletUtil.getClientIp()
-            ), Map.of(), outboundPolicies.turnstile());
-            if (!httpResponse.isSuccessful()) {
-                throw new SafeHttpException(SafeHttpException.Reason.INVALID_RESPONSE);
-            }
+            SafeHttpResponse httpResponse = requestVerification(token, expectedAction);
             response = objectMapper.readValue(httpResponse.body(), TurnstileResponse.class);
         } catch (SafeHttpException | IllegalArgumentException | com.fasterxml.jackson.core.JsonProcessingException ex) {
-            log.warn("Cloudflare Turnstile 服务调用失败：{}", ex.getClass().getSimpleName());
+            String reason = ex instanceof SafeHttpException safe ? safe.getReason().name()
+                    : ex.getClass().getSimpleName();
+            log.warn("Cloudflare Turnstile 服务调用失败：action={}, reason={}", expectedAction, reason);
             auditFailure(expectedAction, "provider-unavailable", "CRITICAL");
             throw new BusinessException(ResultCode.HUMAN_VERIFICATION_UNAVAILABLE);
         }
@@ -124,6 +132,49 @@ public class TurnstileVerifier {
                     expectedAction, response.action());
             auditFailure(expectedAction, "action-mismatch", "WARN");
             throw new BusinessException(ResultCode.HUMAN_VERIFICATION_FAILED);
+        }
+    }
+
+    private SafeHttpResponse requestVerification(String token, String expectedAction) {
+        String idempotencyKey = UUID.randomUUID().toString();
+        SafeHttpException lastFailure = null;
+
+        for (int attempt = 1; attempt <= MAX_VERIFY_ATTEMPTS; attempt++) {
+            try {
+                SafeHttpResponse response = safeHttpClient.postForm(URI.create(verifyUrl), Map.of(
+                        "secret", secretKey,
+                        "response", token,
+                        "remoteip", ServletUtil.getClientIp(),
+                        "idempotency_key", idempotencyKey
+                ), Map.of(), outboundPolicies.turnstile());
+                if (!response.isSuccessful()) {
+                    SafeHttpException.Reason reason = response.statusCode() == 429 || response.statusCode() >= 500
+                            ? SafeHttpException.Reason.HTTP_ERROR
+                            : SafeHttpException.Reason.INVALID_RESPONSE;
+                    throw new SafeHttpException(reason);
+                }
+                return response;
+            } catch (SafeHttpException ex) {
+                lastFailure = ex;
+                if (!RETRYABLE_FAILURES.contains(ex.getReason()) || attempt == MAX_VERIFY_ATTEMPTS) {
+                    throw ex;
+                }
+                log.warn("Cloudflare Turnstile 临时调用失败，准备重试：action={}, reason={}, attempt={}/{}",
+                        expectedAction, ex.getReason(), attempt, MAX_VERIFY_ATTEMPTS);
+                pauseBeforeRetry(attempt);
+            }
+        }
+        throw lastFailure == null
+                ? new SafeHttpException(SafeHttpException.Reason.NETWORK_FAILURE)
+                : lastFailure;
+    }
+
+    private void pauseBeforeRetry(int failedAttempt) {
+        try {
+            Thread.sleep(RETRY_DELAYS_MILLIS[Math.min(failedAttempt - 1, RETRY_DELAYS_MILLIS.length - 1)]);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new SafeHttpException(SafeHttpException.Reason.NETWORK_FAILURE);
         }
     }
 

@@ -12,11 +12,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -72,35 +74,45 @@ final class CloudflareDnsResolver implements SsrfGuard.HostResolver {
             return cached.addresses();
         }
 
+        // Query both trusted providers immediately instead of waiting for a failed primary
+        // before starting the fallback. IPv4 is preferred because production containers do
+        // not have a routable IPv6 interface; AAAA remains a fallback for IPv6-only hosts.
+        List<CompletableFuture<List<InetAddress>>> ipv4Queries = new ArrayList<>();
+        List<CompletableFuture<List<InetAddress>>> ipv6Queries = new ArrayList<>();
         for (Endpoint endpoint : endpoints) {
-            Optional<List<InetAddress>> resolved = resolveWith(endpoint, host);
-            if (resolved.isPresent()) {
-                List<InetAddress> addresses = resolved.get();
-                cache.put(host, new CacheEntry(addresses, now + CACHE_TTL.toNanos()));
-                return addresses;
-            }
+            ipv4Queries.add(queryAsync(endpoint, host, 1));
+            ipv6Queries.add(queryAsync(endpoint, host, 28));
+        }
+
+        Optional<List<InetAddress>> resolved = firstSuccessful(ipv4Queries);
+        if (resolved.isEmpty()) {
+            resolved = firstSuccessful(ipv6Queries);
+        }
+        if (resolved.isPresent()) {
+            List<InetAddress> addresses = resolved.get();
+            cache.put(host, new CacheEntry(addresses, now + CACHE_TTL.toNanos()));
+            return addresses;
         }
         throw failed();
     }
 
-    private Optional<List<InetAddress>> resolveWith(Endpoint endpoint, String host) {
-        CompletableFuture<List<InetAddress>> ipv4 = queryAsync(endpoint, host, 1);
-        CompletableFuture<List<InetAddress>> ipv6 = queryAsync(endpoint, host, 28);
-        List<InetAddress> addresses = new ArrayList<>();
-        boolean receivedValidResponse = false;
+    private Optional<List<InetAddress>> firstSuccessful(List<CompletableFuture<List<InetAddress>>> queries) {
+        BlockingQueue<QueryResult> completions = new LinkedBlockingQueue<>();
+        queries.forEach(query -> query.whenComplete((addresses, error) ->
+                completions.offer(new QueryResult(addresses, error))));
 
-        for (CompletableFuture<List<InetAddress>> query : List.of(ipv4, ipv6)) {
+        for (int i = 0; i < queries.size(); i++) {
             try {
-                addresses.addAll(query.join());
-                receivedValidResponse = true;
-            } catch (CompletionException ignored) {
-                // Try the other address family, then the next trusted endpoint.
+                QueryResult result = completions.take();
+                if (result.error() == null && result.addresses() != null && !result.addresses().isEmpty()) {
+                    return Optional.of(List.copyOf(new LinkedHashSet<>(result.addresses())));
+                }
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                return Optional.empty();
             }
         }
-        if (!receivedValidResponse || addresses.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(List.copyOf(new LinkedHashSet<>(addresses)));
+        return Optional.empty();
     }
 
     private CompletableFuture<List<InetAddress>> queryAsync(Endpoint endpoint, String host, int type) {
@@ -168,6 +180,8 @@ final class CloudflareDnsResolver implements SsrfGuard.HostResolver {
     }
 
     private record Endpoint(String host, SafeHttpClient transport) { }
+
+    private record QueryResult(List<InetAddress> addresses, Throwable error) { }
 
     private record CacheEntry(List<InetAddress> addresses, long expiresAtNanos) {
         private CacheEntry {

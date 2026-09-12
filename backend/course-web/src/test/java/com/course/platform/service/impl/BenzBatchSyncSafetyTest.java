@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import com.course.platform.application.service.platform.ApiProviderService;
+import com.course.platform.application.service.order.CourseOrderProgressLogService;
 import com.course.platform.application.service.platform.PlatformDockingService;
 import com.course.platform.application.service.platform.docking.PlatformDockingStrategy;
 import com.course.platform.common.exception.BusinessException;
@@ -33,6 +34,7 @@ class BenzBatchSyncSafetyTest {
     ApiProviderMapper providers;
     CourseOrderMapper orders;
     PlatformDockingStrategy gateway;
+    CourseOrderProgressLogService progressLogs;
     PlatformDockingServiceImpl service;
 
     @BeforeEach
@@ -40,6 +42,7 @@ class BenzBatchSyncSafetyTest {
         providers = mock(ApiProviderMapper.class);
         orders = mock(CourseOrderMapper.class);
         gateway = mock(PlatformDockingStrategy.class);
+        progressLogs = mock(CourseOrderProgressLogService.class);
         var credentials = mock(ApiProviderService.class);
         var registry = mock(PlatformDockingStrategyFactory.class);
         provider = new ApiProvider();
@@ -58,7 +61,8 @@ class BenzBatchSyncSafetyTest {
                         mock(CoursePlatformMapper.class),
                         orders,
                         mock(PlatformCategoryMapper.class),
-                        credentials);
+                        credentials,
+                        progressLogs);
     }
 
     OrderProgressResult row(String id) {
@@ -106,6 +110,15 @@ class BenzBatchSyncSafetyTest {
         when(gateway.batchQueryOrderProgress(provider, 400L, 0))
                 .thenReturn(List.of(row("remote-order-9")));
         saveReturnsOne();
+        com.course.platform.domain.entity.CourseOrder previous = new com.course.platform.domain.entity.CourseOrder();
+        previous.setId(42L);
+        previous.setThirdOrderId("remote-order-9");
+        previous.setApiProviderId(9L);
+        previous.setProgress("25%");
+        previous.setOrderStatus(1);
+        previous.setRemarks("开始执行");
+        when(orders.selectList(any())).thenReturn(List.of(previous));
+
         assertEquals(1, service.batchSyncOrderProgress(9L, null, 0).get("totalUpdated"));
         verify(orders)
                 .updateOrderProgressByFullMatch(
@@ -121,6 +134,12 @@ class BenzBatchSyncSafetyTest {
                         isNull(),
                         isNull(),
                         isNull());
+        verify(progressLogs).recordIfChanged(
+                argThat(current -> current.getId().equals(42L)
+                        && "50%".equals(current.getProgress())
+                        && "正常".equals(current.getRemarks())),
+                eq("25%"), eq(1), eq("开始执行"),
+                eq(com.course.platform.domain.entity.CourseOrderProgressLog.SOURCE_SCHEDULED_SYNC));
         var capture = ArgumentCaptor.forClass(ApiProvider.class);
         verify(providers).updateById(capture.capture());
         assertEquals(9L, capture.getValue().getId());

@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -24,7 +25,7 @@ class CloudflareDnsResolverTest {
     }
 
     @Test
-    void resolvesAddressFamiliesConcurrentlyAndCachesSuccessfulAnswers() throws Exception {
+    void resolvesAddressFamiliesConcurrentlyAndCachesPreferredIpv4Answer() throws Exception {
         SafeHttpClient transport = mock(SafeHttpClient.class);
         when(transport.get(any(), any(), any())).thenAnswer(call -> {
             URI uri = call.getArgument(0);
@@ -39,10 +40,10 @@ class CloudflareDnsResolverTest {
         });
         CloudflareDnsResolver resolver = new CloudflareDnsResolver(transport);
 
-        assertEquals(2, resolver.resolve("api.example").size());
-        assertEquals(2, resolver.resolve("api.example").size());
+        assertEquals(1, resolver.resolve("api.example").size());
+        assertEquals("8.8.8.8", resolver.resolve("api.example").get(0).getHostAddress());
 
-        verify(transport, times(2)).get(any(), any(), any());
+        verify(transport, timeout(1_000).times(2)).get(any(), any(), any());
     }
 
     @Test
@@ -59,9 +60,10 @@ class CloudflareDnsResolverTest {
                     response(type, type == 1 ? "8.8.4.4" : "2001:4860:4860::8844"), Map.of());
         });
 
-        assertEquals(2, new CloudflareDnsResolver(primary, fallback).resolve("api.example").size());
-        verify(primary, times(2)).get(any(), any(), any());
-        verify(fallback, times(2)).get(any(), any(), any());
+        assertEquals("8.8.4.4", new CloudflareDnsResolver(primary, fallback)
+                .resolve("api.example").get(0).getHostAddress());
+        verify(primary, timeout(1_000).times(2)).get(any(), any(), any());
+        verify(fallback, timeout(1_000).times(2)).get(any(), any(), any());
     }
 
     @Test

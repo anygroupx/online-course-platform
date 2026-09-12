@@ -4,3 +4,5 @@ export const previewOrderReceipt = async (orderId, data) => (await request.post(
 export const getOrderReceipt = async (orderId, requestId, signal) => (await request.get(`${root(orderId)}/${encodeURIComponent(requestId)}`, { signal })).data
 export const confirmOrderReceipt = async (orderId, requestId) => (await request.post(`${root(orderId)}/${encodeURIComponent(requestId)}/confirm`, { consent: true }, { __sessionRetry: true })).data
 export const recentOrderReceipts = async (orderId, signal) => (await request.get(root(orderId), { signal })).data
+// A deliberate read must not be replayed automatically after session refresh.
+export const findOrderReceiptCandidates = async (orderId, signal) => (await request.post(`${root(orderId)}/candidates`, null, { timeout: 60000, signal, __sessionRetry: true })).data
