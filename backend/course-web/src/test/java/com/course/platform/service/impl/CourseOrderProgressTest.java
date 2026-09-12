@@ -1,6 +1,7 @@
 package com.course.platform.service.impl;
 
 import com.course.platform.application.service.platform.PlatformDockingService;
+import com.course.platform.application.service.order.CourseOrderProgressLogService;
 import com.course.platform.application.service.support.OperationLogService;
 import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.controller.CourseOrderController;
@@ -10,6 +11,7 @@ import com.course.platform.common.result.ResultCode;
 import com.course.platform.domain.dto.OrderProgressResult;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.entity.CourseOrder;
+import com.course.platform.domain.entity.CourseOrderProgressLog;
 import com.course.platform.domain.entity.CoursePlatform;
 import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
@@ -27,10 +29,12 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -40,9 +44,11 @@ class CourseOrderProgressTest {
     private final ApiProviderMapper providers = mock(ApiProviderMapper.class);
     private final PlatformDockingService docking = mock(PlatformDockingService.class);
     private final ResourceAuthorizationService authorization = mock(ResourceAuthorizationService.class);
+    private final CourseOrderProgressLogService progressLogs = mock(CourseOrderProgressLogService.class);
     private final CourseOrderServiceImpl service = new CourseOrderServiceImpl(orders, platforms,
             mock(UserMapper.class), mock(OperationLogService.class), docking, providers,
-            mock(ApplicationEventPublisher.class), mock(AccountLedgerServiceImpl.class), authorization);
+            mock(ApplicationEventPublisher.class), mock(AccountLedgerServiceImpl.class), authorization,
+            progressLogs);
     private CourseOrder order;
     private CoursePlatform platform;
     private ApiProvider provider;
@@ -123,6 +129,63 @@ class CourseOrderProgressTest {
         assertEquals("进行中", order.getRemarks());
         assertEquals(end, order.getCourseEndTime());
         verify(orders).updateById(order);
+        verify(progressLogs).recordIfChanged(order, "25%", null, null,
+                com.course.platform.domain.entity.CourseOrderProgressLog.SOURCE_MANUAL_REFRESH);
+    }
+
+    @Test
+    void unchangedProgressResponseDoesNotAppendHistory() {
+        order.setOrderStatus(1);
+        order.setRemarks("进行中");
+        when(docking.queryOrderProgress(order, platform, provider)).thenReturn(OrderProgressResult.builder()
+                .progress("25%").orderStatus(1).remarks("进行中").build());
+
+        service.updateOrderProgress(42L, 7L);
+
+        verify(progressLogs).recordIfChanged(order, "25%", 1, "进行中",
+                com.course.platform.domain.entity.CourseOrderProgressLog.SOURCE_MANUAL_REFRESH);
+    }
+
+    @Test
+    void progressLogEndpointReturnsSanitizedLocalTimeline() throws Exception {
+        CourseOrderProgressLog progressLog = new CourseOrderProgressLog();
+        progressLog.setId(8L);
+        progressLog.setOrderId(42L);
+        progressLog.setThirdOrderId("remote-secret");
+        progressLog.setApiProviderId(6L);
+        progressLog.setProgress("75%");
+        progressLog.setOrderStatus(1);
+        progressLog.setRemarks("进行中");
+        progressLog.setSource(CourseOrderProgressLog.SOURCE_SCHEDULED_SYNC);
+        progressLog.setCreateTime(LocalDateTime.of(2026, 9, 10, 12, 30));
+        when(progressLogs.listByOrderId(42L)).thenReturn(List.of(progressLog));
+
+        var mvc = MockMvcBuilders.standaloneSetup(new CourseOrderController(service, mock(UserMapper.class)))
+                .setControllerAdvice(new GlobalExceptionHandler(mock(SecurityAuditService.class))).build();
+
+        mvc.perform(get("/orders/ORD-historical/progress-logs")
+                        .principal(new UsernamePasswordAuthenticationToken(7L, null)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].id").value(8))
+                .andExpect(jsonPath("$.data[0].progress").value("75%"))
+                .andExpect(jsonPath("$.data[0].orderStatus").value(1))
+                .andExpect(jsonPath("$.data[0].remarks").value("进行中"))
+                .andExpect(jsonPath("$.data[0].source").value("scheduled_sync"))
+                .andExpect(jsonPath("$.data[0].createTime").exists())
+                .andExpect(jsonPath("$.data[0].orderId").doesNotExist())
+                .andExpect(jsonPath("$.data[0].thirdOrderId").doesNotExist())
+                .andExpect(jsonPath("$.data[0].apiProviderId").doesNotExist());
+
+        verify(progressLogs).listByOrderId(42L);
+    }
+
+    @Test
+    void selfOperatedOrderReturnsNoProgressLogsWithoutReadingLogTable() {
+        order.setIsSelfOperated(1);
+
+        assertEquals(List.of(), service.getProgressLogsByOrderNo("ORD-historical", 7L));
+
+        verify(progressLogs, never()).listByOrderId(anyLong());
     }
 
     @Test

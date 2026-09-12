@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.course.platform.application.service.servicecommerce.ServiceCommerceService;
 import com.course.platform.common.result.Result;
 import com.course.platform.domain.servicecommerce.ServiceCommerceTypes.*;
+import com.course.platform.domain.servicecommerce.ServiceOrderFilter;
 import com.course.platform.domain.vo.plugin.PluginSchoolPage;
 
 import jakarta.validation.Valid;
@@ -63,8 +64,10 @@ public class ServiceCommerceController {
     @GetMapping("/service-orders")
     public ResponseEntity<Result<IPage<OrderView>>> orders(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int pageSize) {
-        return ok(service.orders(page, pageSize, false));
+            @RequestParam(defaultValue = "20") int pageSize,
+            @Valid @ModelAttribute ServiceOrderFilter filter) {
+        return ok(filter.isEmpty() ? service.orders(page, pageSize, false)
+                : service.orders(page, pageSize, false, filter));
     }
 
     @GetMapping("/service-orders/{id}")
@@ -92,6 +95,11 @@ public class ServiceCommerceController {
     public ResponseEntity<Result<RunLogPage>> logs(
             @PathVariable String id, @RequestParam(defaultValue = "1") int page) {
         return ok(service.logs(id, page));
+    }
+
+    @GetMapping("/service-orders/{id}/score-info")
+    public ResponseEntity<Result<OrderText>> scoreInfo(@PathVariable String id) {
+        return ok(service.scoreInfo(id));
     }
 
     @GetMapping("/service-orders/{id}/events")
@@ -134,8 +142,10 @@ public class ServiceCommerceController {
     @PreAuthorize("hasAuthority('api-provider:update')")
     public ResponseEntity<Result<IPage<OrderView>>> adminOrders(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int pageSize) {
-        return ok(service.orders(page, pageSize, true));
+            @RequestParam(defaultValue = "20") int pageSize,
+            @Valid @ModelAttribute ServiceOrderFilter filter) {
+        return ok(filter.isEmpty() ? service.orders(page, pageSize, true)
+                : service.orders(page, pageSize, true, filter));
     }
 
     @GetMapping("/admin/service-order-operations/{id}")

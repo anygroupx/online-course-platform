@@ -1,6 +1,7 @@
 package com.course.platform.infra.http;
 
 import com.course.platform.application.service.platform.ApiProviderService;
+import com.course.platform.application.service.order.CourseOrderProgressLogService;
 import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.controller.PlatformDockingController;
 import com.course.platform.domain.entity.ApiProvider;
@@ -111,7 +112,8 @@ class ProviderCatalogImportIntegrationTest {
         });
         var service = new PlatformDockingServiceImpl(new PlatformDockingStrategyFactory(List.of(strategy)),
                 mock(ApiProviderMapper.class), platforms, mock(CourseOrderMapper.class),
-                mock(PlatformCategoryMapper.class), providers);
+                mock(PlatformCategoryMapper.class), providers,
+                mock(CourseOrderProgressLogService.class));
         mvc = MockMvcBuilders.standaloneSetup(new PlatformDockingController(service))
                 .setControllerAdvice(new GlobalExceptionHandler(mock(SecurityAuditService.class))).build();
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(7L, null,

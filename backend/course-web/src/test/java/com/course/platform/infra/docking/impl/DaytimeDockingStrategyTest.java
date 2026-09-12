@@ -1,6 +1,7 @@
 package com.course.platform.infra.docking.impl;
 
 import com.course.platform.common.constant.Constants;
+import com.course.platform.common.exception.BusinessException;
 import com.course.platform.domain.dto.DockResult;
 import com.course.platform.domain.dto.OrderProgressResult;
 import com.course.platform.domain.dto.PlatformItem;
@@ -20,6 +21,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
@@ -170,17 +172,20 @@ class DaytimeDockingStrategyTest {
     }
 
     @Test
-    @DisplayName("订单日志应使用第三方订单号并归一化日志字段")
+    @DisplayName("订单日志应复用查单协议并归一化内嵌日志字段")
     @SuppressWarnings({"rawtypes", "unchecked"})
-    void fetchOrderLogs_shouldUseRemoteOrderIdAndNormalizeLogs() {
-        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=getOrderLogs"), anyMap()))
-                .thenReturn("{\"code\":1,\"logs\":[{\"log_id\":\"9\",\"action\":\"同步进度\",\"msg\":\"进度更新为50%\",\"state\":\"成功\",\"admin\":\"system\",\"addtime\":\"2026-09-05 10:00:00\"}]}");
+    void fetchOrderLogs_shouldUseChadanAndNormalizeEmbeddedLogs() {
+        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":[{\"id\":\"third-123\",\"logs\":[{\"log_id\":\"9\",\"action\":\"同步进度\",\"msg\":\"进度更新为50%\",\"state\":\"成功\",\"admin\":\"system\",\"addtime\":\"2026-09-05 10:00:00\"}]}]}");
 
         List<ProviderOrderLog> logs = strategy.fetchOrderLogs(order, provider);
 
         ArgumentCaptor<Map> captor = ArgumentCaptor.forClass(Map.class);
-        verify(apiHttpClient).postForString(eq(provider), eq("https://daytime.example/api.php?act=getOrderLogs"), captor.capture());
-        assertEquals("third-123", captor.getValue().get("oid"));
+        verify(apiHttpClient).postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), captor.capture());
+        assertEquals("third-123", captor.getValue().get("yid"));
+        assertEquals("student-account", captor.getValue().get("username"));
+        assertEquals("测试大学", captor.getValue().get("school"));
+        assertFalse(captor.getValue().containsKey("oid"));
         assertEquals(1, logs.size());
         ProviderOrderLog log = logs.get(0);
         assertEquals("9", log.getId());
@@ -189,6 +194,35 @@ class DaytimeDockingStrategyTest {
         assertEquals("成功", log.getStatus());
         assertEquals("system", log.getOperator());
         assertEquals("2026-09-05 10:00:00", log.getCreateTime());
+    }
+
+    @Test
+    @DisplayName("查单响应没有历史日志时应返回当前执行快照")
+    void fetchOrderLogs_shouldReturnCurrentSnapshotWhenHistoryIsAbsent() {
+        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":[{\"id\":\"third-123\",\"status\":\"进行中\",\"process\":\"50%\",\"remarks\":\"正在学习\",\"update_time\":\"2026-09-11 18:30:00\"}]}");
+
+        List<ProviderOrderLog> logs = strategy.fetchOrderLogs(order, provider);
+
+        assertEquals(1, logs.size());
+        ProviderOrderLog log = logs.get(0);
+        assertEquals("third-123", log.getId());
+        assertEquals("当前执行状态", log.getTitle());
+        assertEquals("当前进度：50%；备注：正在学习", log.getContent());
+        assertEquals("进行中", log.getStatus());
+        assertEquals("2026-09-11 18:30:00", log.getCreateTime());
+    }
+
+    @Test
+    @DisplayName("查单响应没有匹配订单时不得展示其他订单")
+    void fetchOrderLogs_shouldRejectNonMatchingOrder() {
+        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":[{\"id\":\"another-order\",\"status\":\"已完成\"}]}");
+
+        BusinessException error = assertThrows(BusinessException.class,
+                () -> strategy.fetchOrderLogs(order, provider));
+
+        assertTrue(error.getMessage().contains("没有匹配订单数据"));
     }
 
     @Test

@@ -20,9 +20,15 @@ public class NativeServiceGatewayRouter implements NativeServiceGateway {
     private final WuxinNativeServiceGateway wuxin;
     private final InternshipNativeServiceGateway internship;
     private final SsbenzDistanceGateway distance;
+    private final AppuiNativeServiceGateway appui;
+    private final LeidianNativeServiceGateway leidian;
+    private final JingyuNativeServiceGateway jingyu;
 
     private NativeServiceGateway forProvider(ApiProvider p) {
         return switch (p.getProviderType()) {
+            case "appui" -> appui;
+            case "leidian" -> leidian;
+            case "jingyu" -> jingyu;
             case "wuxin" -> wuxin;
             case "sxdk_tw" -> internship;
             case SsbenzDistanceGateway.TYPE -> distance;
@@ -82,6 +88,11 @@ public class NativeServiceGatewayRouter implements NativeServiceGateway {
     @Override
     public RunLogPage logs(ApiProvider p, ServiceOrder order, int page) {
         return forProvider(p).logs(p, order, page);
+    }
+
+    @Override
+    public OrderText scoreInfo(ApiProvider p, ServiceOrder order) {
+        return forProvider(p).scoreInfo(p, order);
     }
 
     @Override

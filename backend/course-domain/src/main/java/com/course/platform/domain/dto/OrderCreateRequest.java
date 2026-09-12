@@ -3,6 +3,7 @@ package com.course.platform.domain.dto;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
@@ -46,6 +47,7 @@ public class OrderCreateRequest {
     /**
      * 课程ID
      */
+    @Size(max = 2048, message = "课程ID长度不能超过2048个字符")
     private String courseId;
 
     /**
@@ -59,4 +61,3 @@ public class OrderCreateRequest {
      */
     private Boolean isFastMode;
 }
-

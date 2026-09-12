@@ -149,14 +149,14 @@
           <span class="panel-icon panel-icon--green">
             <el-icon><DataAnalysis /></el-icon>
           </span>
-          <span>我的费率</span>
+          <span>账户等级</span>
         </div>
         <div class="metric-value metric-value--green">
-          {{ formatRate(userInfo?.rate) }}倍
+          {{ getUserLevelLabel(userInfo?.rate) }}
         </div>
-        <div class="metric-subtext">当前结算倍率</div>
+        <div class="metric-subtext">项目价格按当前等级计算</div>
         <div class="panel-watermark">
-          <span class="watermark-symbol">%</span>
+          <span class="watermark-symbol">LV</span>
         </div>
       </article>
 
@@ -170,7 +170,7 @@
           <span class="panel-icon panel-icon--green panel-icon--large">
             <el-icon><PriceTag /></el-icon>
           </span>
-          <span class="action-panel-text">点击查看价格</span>
+          <span class="action-panel-text">查看项目</span>
         </div>
         <span class="action-arrow action-arrow--green">
           <el-icon><ArrowRight /></el-icon>
@@ -263,6 +263,7 @@ import { useResponsive } from "@/composables/useResponsive";
 import { getUserInfo } from "@/api/user";
 import { getStatistics } from "@/api/statistics";
 import { getLatestAnnouncements } from "@/api/announcement";
+import { getUserLevelLabel } from "@/utils/userLevel";
 import { ElMessage } from "element-plus";
 import {
   Bell,
@@ -305,7 +306,7 @@ const quickActions = computed(() => [
     action: () => router.push("/recharge"),
   },
   {
-    label: "价格查询",
+    label: "项目管理",
     icon: PriceTag,
     tone: "orange",
     action: () => router.push("/price-list"),
@@ -372,17 +373,6 @@ const formatCurrency = (value) => {
         maximumFractionDigits: 2,
       })
     : "0.00";
-};
-
-const formatRate = (value) => {
-  const rate = Number(value || 1);
-  if (!Number.isFinite(rate)) {
-    return "1";
-  }
-
-  return Number.isInteger(rate)
-    ? String(rate)
-    : rate.toFixed(2).replace(/\.?0+$/, "");
 };
 
 const getPriorityTagType = (priority) => {

@@ -12,7 +12,7 @@
   >
     <template v-if="quote">
       <p class="quote-context">
-        {{ actionNames[quote.action] }} · {{ quote.title }}
+        {{ serviceActionName(quote.action, { ...quote, providerType }) }} · {{ quote.title }}
       </p>
       <div class="quote-money">
         <span>{{ quote.amountLabel }}</span
@@ -49,7 +49,7 @@
                   )
                 ? "确认后扣除账户余额；相同确认编号不会重复扣款。"
                 : quote.action === "REFUND"
-                  ? "按已核实的未用服务量和订单单价退回账户余额。"
+                  ? providerType === "jingyu" ? "实际退款次数核实后再入账，不以预估上限直接退款。" : "按已核实的未用服务量和订单单价退回账户余额。"
                   : "此操作不额外扣款。"
         }}
       </p>
@@ -67,6 +67,10 @@
         :title="
           administrative
             ? '请确认已查验退款流水。本操作只记录退款入账，提交后不可在此撤回。'
+            : providerType === 'jingyu' && quote.action === 'REFUND'
+              ? '只提交取消申请，不会按预估次数自动退款。结果待核对时，请检查原编号并联系管理员核实确切退款次数。'
+            : quote.action === 'CANCEL'
+              ? '这里只取消订单，不会退回余额；取消成功后仍需单独核对退款。结果不确定时只检查原编号，不要重复提交。'
             : quote.distancePlan
               ? '这里只确认提交，不代表执行完成；暂不支持在线取消或自动退款。结果不确定时只检查原编号，不要重新下单。'
               : '取消与退款按服务条款及已核实的未用次数 / 服务日结算；结果超时将转入核对，不自动重复提交。'
@@ -92,7 +96,7 @@
           administrative
             ? "退款入账"
             : quote?.action === "REFUND"
-              ? "退款"
+              ? providerType === "jingyu" ? "取消申请" : "退款"
               : quote?.action === "CREATE"
                 ? "并下单"
                 : "操作"
@@ -105,7 +109,8 @@
   </el-dialog>
 </template>
 <script setup>
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, onBeforeUnmount } from "vue";
+import { authSessionScope } from "@/utils/authSession";
 import TotalDistancePlanSummary from "@/components/TotalDistancePlanSummary.vue";
 import {
   confirmServiceOperation,
@@ -114,25 +119,28 @@ import {
   getAdminServiceOperation,
 } from "@/api/serviceCommerce";
 import {
-  actionNames,
+  serviceActionName,
   stateName,
   moneyText,
   knownOutcome,
   quoteChargeDetails,
 } from "@/utils/serviceCommerce";
-const props = defineProps({ quote: Object, administrative: Boolean });
+const props = defineProps({ quote: Object, administrative: Boolean, providerType: { type: String, default: "" } });
 const emit = defineEmits(["close", "result"]);
 const chargeDetails = computed(() => quoteChargeDetails(props.quote));
 const sending = ref(false),
   started = ref(false),
   result = ref(null);
-watch(
-  () => props.quote?.id,
-  () => {
-    started.value = false;
-    result.value = null;
-  },
-);
+let generation = 0;
+function clearContext() {
+  generation++;
+  sending.value = false;
+  started.value = false;
+  result.value = null;
+}
+watch(() => props.quote?.id, clearContext, { flush: "sync" });
+watch(authSessionScope, () => { clearContext(); emit("close"); }, { flush: "sync" });
+onBeforeUnmount(() => { generation++; });
 function receive(value) {
   result.value = value;
   emit("result", value);
@@ -140,39 +148,40 @@ function receive(value) {
 }
 async function confirm() {
   if (started.value || sending.value || !props.quote) return;
+  const current = generation;
   started.value = true;
   sending.value = true;
   try {
-    receive(
-      await (
-        props.administrative
-          ? confirmServiceRefundSettlement
-          : confirmServiceOperation
-      )(props.quote.id),
-    );
+    const value = await (
+      props.administrative
+        ? confirmServiceRefundSettlement
+        : confirmServiceOperation
+    )(props.quote.id);
+    // Dispatch is durable; a stale receipt must never update a different quote or identity.
+    if (current === generation) receive(value);
   } catch {
     /* Keep the ID; only query the result, never resubmit automatically. */
   } finally {
-    sending.value = false;
+    if (current === generation) sending.value = false;
   }
 }
 async function check() {
   if (sending.value || !props.quote) return;
+  const current = generation;
   sending.value = true;
   try {
-    receive(
-      await (
-        props.administrative ? getAdminServiceOperation : getServiceOperation
-      )(props.quote.id),
-    );
+    const value = await (
+      props.administrative ? getAdminServiceOperation : getServiceOperation
+    )(props.quote.id);
+    if (current === generation) receive(value);
   } catch {
     /* The durable confirmation remains available in the order list. */
   } finally {
-    sending.value = false;
+    if (current === generation) sending.value = false;
   }
 }
 function close() {
-  if (!sending.value) emit("close");
+  if (!sending.value) emit("close", started.value && !knownOutcome(result.value?.state) ? { pending: true } : null);
 }
 </script>
 <style scoped>

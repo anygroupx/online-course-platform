@@ -10,6 +10,7 @@ import com.course.platform.domain.entity.CourseOrder;
 import com.course.platform.domain.entity.User;
 import com.course.platform.infra.persistence.mapper.UserMapper;
 import com.course.platform.domain.vo.CourseOrderVO;
+import com.course.platform.domain.vo.CourseOrderProgressLogVO;
 import com.course.platform.security.SensitiveDataMasker;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,6 +20,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -65,6 +67,14 @@ public class CourseOrderController {
         Long userId = (Long) authentication.getPrincipal();
         CourseOrder order = courseOrderService.getOrderByOrderNo(orderNo, userId);
         return Result.success(SensitiveDataMasker.toOrderVO(order, requireCurrentUserUid(userId)));
+    }
+
+    @Operation(summary = "获取订单执行记录", description = "读取本地保存的订单进度变化记录")
+    @GetMapping("/{orderNo}/progress-logs")
+    public Result<List<CourseOrderProgressLogVO>> getProgressLogs(@PathVariable String orderNo,
+                                                                  Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        return Result.success(courseOrderService.getProgressLogsByOrderNo(orderNo, userId));
     }
 
     @Operation(summary = "取消订单", description = "取消待处理的订单")

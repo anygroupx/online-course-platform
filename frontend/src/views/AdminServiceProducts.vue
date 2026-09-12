@@ -108,6 +108,28 @@
               label="校步点"
               value="xbd" /></el-select
         ></el-form-item>
+        <el-form-item v-if="selectedType === 'jingyu'" label="运动项目">
+          <el-select v-model="form.project" aria-label="运动项目" :disabled="!!editing"
+            @change="remoteProducts = []; form.remoteProductId = '';">
+            <el-option v-for="(label, key) in jingyuProjects" :key="key" :label="label" :value="key" />
+          </el-select>
+        </el-form-item>
+        <el-alert v-if="selectedType === 'jingyu'" type="info" :closable="false"
+          title="Keep 按每次距离计费，单次费用先保留两位小数，再计算总额；步道乐跑按次数计费。购买 1–365 次，每次 1–100 公里；退款须核对实际次数后入账。" />
+        <el-form-item v-if="selectedType === 'leidian'" label="运动项目">
+          <el-select v-model="form.project" aria-label="运动项目" :disabled="!!editing"
+            @change="remoteProducts = []; form.remoteProductId = '';">
+            <el-option v-for="(label, key) in leidianProjects" :key="key" :label="label" :value="key" />
+          </el-select>
+        </el-form-item>
+        <el-alert v-if="selectedType === 'leidian'" type="info" :closable="false"
+          title="每次距离为 1–10 公里。步道三个项目每次计费距离最多按 2 公里计算；乐健体育按实际距离计费。订单总额以确认页面为准，取消不代表退款入账。" />
+        <el-form-item v-if="selectedType === 'appui'" label="实习项目">
+          <el-select v-model="form.project" :disabled="!!editing"
+            @change="remoteProducts = []; form.remoteProductId = '';">
+            <el-option v-for="(label, key) in appuiProjects" :key="key" :label="label" :value="key" />
+          </el-select>
+        </el-form-item>
         <el-form-item v-if="selectedType === 'sxdk_tw'" label="实习平台"
           ><el-select
             v-model="form.project"
@@ -160,7 +182,7 @@
             :rows="3"
             maxlength="1000" /></el-form-item
         ><el-form-item
-          :label="`销售单价（${selectedType === 'sxdk_tw' ? '元/服务日' : selectedType === 'wuxin' || (selectedType === 'flash' && form.project === 'sdxy') ? '元/次' : '元/公里'}，最多六位小数）`"
+          :label="`销售单价（${selectedType === 'sxdk_tw' ? '元/服务日' : selectedType === 'appui' ? '元/天' : selectedType === 'jingyu' ? (form.project === 'bdlp' ? '元/次' : '元/次·公里') : selectedType === 'leidian' ? '元/次·公里' : selectedType === 'wuxin' || (selectedType === 'flash' && form.project === 'sdxy') ? '元/次' : '元/公里'}，最多六位小数）`"
           ><el-input
             v-model="form.unitPrice"
             inputmode="decimal"
@@ -227,6 +249,9 @@ import request from "@/utils/request";
 import { listServiceProducts, saveServiceProduct } from "@/api/serviceCommerce";
 import { fetchPluginCatalog } from "@/api/pluginIntegration";
 import { internshipProjects } from "@/utils/internshipServices";
+import { appuiProjects } from "@/utils/appuiServices";
+import { leidianProjects } from "@/utils/leidianServices";
+import { jingyuProjects } from "@/utils/jingyuServices";
 import { serviceNames, nativeProductSupported } from "@/utils/serviceCommerce";
 const items = ref([]),
   page = ref(1),
@@ -358,7 +383,7 @@ function providerChanged() {
   }
   form.value.project = ["flash", "wuxin"].includes(selectedType.value)
     ? "sdxy"
-    : selectedType.value === "ssbenz_xbd" ? "xbd" : "default";
+    : selectedType.value === "jingyu" ? "keep" : ["appui", "leidian"].includes(selectedType.value) ? "1" : selectedType.value === "ssbenz_xbd" ? "xbd" : "default";
   form.value.remoteProductId = "";
   remoteProducts.value = [];
 }
@@ -374,11 +399,11 @@ async function readCatalog() {
     type = selectedType.value;
   try {
     const r = await fetchPluginCatalog(
-      { flash: "P01", heisha: "P03", jiguang: "P04", wuxin: "P10", ssbenz_xbd: "P05" }[type],
+      { flash: "P01", heisha: "P03", jiguang: "P04", wuxin: "P10", ssbenz_xbd: "P05", appui: "P09", leidian: "P12", jingyu: "P08" }[type],
       providerId,
-      ["flash", "ssbenz_xbd"].includes(type) ? project : null,
+      ["flash", "ssbenz_xbd", "appui", "leidian", "jingyu"].includes(type) ? project : null,
     );
-    if (form.value.providerId !== providerId || form.value.project !== project)
+    if (!dialog.value || form.value.providerId !== providerId || form.value.project !== project)
       return;
     remoteProducts.value = r.data.filter((p) =>
       nativeProductSupported(type, project, p.id),

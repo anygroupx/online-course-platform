@@ -198,7 +198,7 @@ try {
         amount: "0.25",
       });
     }
-    if (ep === "/service-orders") return reply({ records: [], total: 0 });
+    if (ep === "/service-orders") return reply({ records: [], total: 0, current: 1, size: 20 });
     unexpected.push(`${method} ${ep}`);
     return route.abort();
   });

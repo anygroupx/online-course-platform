@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.course.platform.application.service.auth.ApiKeyService;
 import com.course.platform.application.service.course.CourseQueryService;
 import com.course.platform.application.service.order.CourseOrderService;
+import com.course.platform.application.service.order.CourseOrderProgressLogService;
 import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
@@ -214,7 +215,8 @@ class ExternalApiHttpIntegrationTest {
         when(docking.retryOrder(owned, platform, provider)).thenReturn(DockResult.success("成功", "upstream-test"));
         ResourceAuthorizationService policy = new ResourceAuthorizationService();
         CourseOrderServiceImpl real = new CourseOrderServiceImpl(orders, platforms, users, mock(OperationLogService.class),
-                docking, providers, mock(ApplicationEventPublisher.class), mock(AccountLedgerServiceImpl.class), policy);
+                docking, providers, mock(ApplicationEventPublisher.class), mock(AccountLedgerServiceImpl.class), policy,
+                mock(CourseOrderProgressLogService.class));
         doAnswer(call -> {
             var auth = SecurityContextHolder.getContext().getAuthentication();
             assertEquals(7L, auth.getPrincipal()); assertNull(auth.getCredentials());

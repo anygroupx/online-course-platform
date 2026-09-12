@@ -1,12 +1,36 @@
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 export const accessToken = ref("");
 export const sessionUserInfo = ref(readStoredUserInfo());
+
+// LoginResponse publishes uid. Retain userId only for older in-memory sessions.
+const sessionIdentity = computed(() => sessionUserInfo.value?.uid || sessionUserInfo.value?.userId || null);
+export const hasAuthenticatedSession = computed(() => !!(accessToken.value && sessionIdentity.value));
+
+// Invalidate private UI state on a real session/permission change, not on token rotation,
+// balance updates or nickname changes. The server remains the authorization authority.
+export const authSessionScope = computed(() => {
+  const info = sessionUserInfo.value;
+  return JSON.stringify([
+    hasAuthenticatedSession.value,
+    sessionIdentity.value,
+    readAccessTokenClaims(accessToken.value)?.sid || null,
+    info?.role ?? null,
+    info?.isAdmin === true,
+    Array.isArray(info?.permissions) ? [...new Set(info.permissions)].sort() : [],
+    info?.mustChangePassword === true,
+    info?.mfaRequired === true,
+    info?.mfaEnabled === true,
+  ]);
+});
 
 let refreshPromise = null;
 
 // Remove credentials left by pre-P0 clients. Access credentials now live only in memory.
 for (const key of ["token", "tokenTime", "refreshToken", "refreshTokenTime", "api_test_key", "api_test_uid"]) {
+  localStorage.removeItem(key);
+}
+for (const key of ["token_expire_minutes", "refresh_token_expire_days", "auto_refresh_token_enabled"]) {
   localStorage.removeItem(key);
 }
 
@@ -42,17 +66,19 @@ export function getAccessToken() {
   return accessToken.value;
 }
 
-export function isAccessTokenExpired(leewaySeconds = 20) {
-  const token = accessToken.value;
-  if (!token) return true;
+function readAccessTokenClaims(token) {
   try {
     const part = token.split(".")[1];
     const normalized = part.replace(/-/g, "+").replace(/_/g, "/");
-    const payload = JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")));
-    return !payload.exp || payload.exp * 1000 <= Date.now() + leewaySeconds * 1000;
+    return JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")));
   } catch {
-    return true;
+    return null;
   }
+}
+
+export function isAccessTokenExpired(leewaySeconds = 20) {
+  const payload = readAccessTokenClaims(accessToken.value);
+  return !Number.isFinite(payload?.exp) || payload.exp * 1000 <= Date.now() + leewaySeconds * 1000;
 }
 
 export function csrfToken() {

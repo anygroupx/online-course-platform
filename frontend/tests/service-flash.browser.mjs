@@ -94,7 +94,7 @@ try {
         body: JSON.stringify({ code: 1, message: "操作成功", data }),
       });
     if (endpoint === "/service-orders")
-      return respond({ records: [order], total: 1 });
+      return respond({ records: [order], total: 1, current: 1, size: 20 });
     if (endpoint === `/service-orders/${order.id}/logs`)
       return respond({
         items: [

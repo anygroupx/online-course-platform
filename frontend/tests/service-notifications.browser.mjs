@@ -113,7 +113,7 @@ try {
     if (method === "GET") reads.push(path);
     else writes.push({ path, method, body: body() });
     if (path === "/service-orders" && method === "GET")
-      return respond({ records: [order], total: 1 });
+      return respond({ records: [order], total: 1, current: 1, size: 20 });
     if (path === `/service-orders/${id}/notifications`) {
       if (method === "GET") return respond(settings);
       const b = body();

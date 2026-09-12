@@ -136,8 +136,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
             values.add(new Limit("project-client:" + (user == null ? "ip" : "user"),
                     user == null ? ip : user, properties.getOrderUser(), "project-client"));
         }
-        if (path.matches("/admin/orders/[0-9]+/receipt-recoveries(?:/[0-9a-f-]+(?:/confirm)?)?")) {
-            boolean preview = "POST".equals(method) && path.endsWith("/receipt-recoveries");
+        if (path.matches("/admin/orders/[0-9]+/receipt-recoveries(?:/candidates|/[0-9a-f-]+(?:/confirm)?)?")) {
+            // Both explicit supplier reads share one budget; switching routes must not double it.
+            boolean preview = "POST".equals(method)
+                    && (path.endsWith("/receipt-recoveries") || path.endsWith("/receipt-recoveries/candidates"));
             values.add(new Limit("order-receipt:" + (preview ? "preview:" : "result:") + (user == null ? "ip" : "user"),
                     user == null ? ip : user, new RateLimitProperties.Rule(preview ? 5 : 30, 60), "order-receipt"));
         }
@@ -152,7 +154,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
         if ("GET".equals(method) && (path.startsWith("/admin/project-reports/") || path.equals("/project-ledger")
                 || path.equals("/project-clients/usage") || path.equals("/project-clients/usage/projects")
-                || path.equals("/external/projects/v1/usage") || path.equals("/external/projects/v1/usage/projects"))) {
+                || path.equals("/external/projects/v1/usage") || path.equals("/external/projects/v1/usage/projects")
+                || path.equals("/external/projects/v1/ledger"))) {
             values.add(new Limit("project-report:" + (user == null ? "ip" : "user"),
                     user == null ? ip : user, new RateLimitProperties.Rule(12, 60), "project-report"));
         }

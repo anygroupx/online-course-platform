@@ -184,6 +184,7 @@ try {
       return respond({
         records: created ? [order] : [],
         total: created ? 1 : 0,
+        current: 1, size: 20,
       });
     if (endpoint === `/service-orders/${order.id}/options`)
       return respond({
@@ -215,7 +216,7 @@ try {
       return respond(quote(data.action, "0.00"));
     }
     if (endpoint === "/admin/service-orders")
-      return respond({ records: [order], total: 1 });
+      return respond({ records: [order], total: 1, current: 1, size: 20 });
     if (endpoint === `/admin/service-orders/${order.id}/audit`)
       return respond({
         order,
@@ -370,7 +371,7 @@ try {
     1,
     "lost local settlement responses must not cause another POST",
   );
-  await page.getByText("已退款", { exact: true }).waitFor();
+  await page.locator(".order-card .order-title").getByText("已退款", { exact: true }).waitFor();
   await page.waitForFunction(
     () => document.querySelectorAll(".el-message").length === 0,
   );

@@ -217,6 +217,7 @@ try {
       return respond({
         records: created ? [order] : [],
         total: created ? 1 : 0,
+        current: 1, size: 20,
       });
     if (endpoint === `/service-orders/${order.id}/options`)
       return respond({
@@ -409,7 +410,7 @@ try {
   );
   await page.getByRole("button", { name: "取消并退款", exact: true }).click();
   await page.getByRole("button", { name: "确认退款", exact: true }).click();
-  await page.getByText("已退款", { exact: true }).waitFor();
+  await page.locator(".order-card .order-title").getByText("已退款", { exact: true }).waitFor();
   await page.goto(`${base}/__internship?page=/admin/service-products`);
   await page.setViewportSize({ width: 1440, height: 1080 });
   await page.getByRole("button", { name: "上架服务商品", exact: true }).click();

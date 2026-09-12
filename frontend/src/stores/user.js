@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 import { computed } from "vue";
 import { login as loginApi, logout as logoutApi, verifyMfa as verifyMfaApi } from "@/api/auth";
 import router from "@/router";
+import { useAppConfigStore } from "@/stores/appConfig";
 import { ElMessage } from "element-plus";
 import {
   accessToken,
@@ -20,18 +21,7 @@ export const useUserStore = defineStore("user", () => {
   const persistSession = async (data) => {
     applyAuthSession(data);
     if (data.mustChangePassword) return;
-    try {
-      const settingsRes = await import("@/api/setting").then((m) => m.getSettings());
-      if (settingsRes.code === 1 && settingsRes.data) {
-        settingsRes.data.forEach((item) => {
-          if (["token_expire_minutes", "refresh_token_expire_days", "auto_refresh_token_enabled"].includes(item.configKey)) {
-            localStorage.setItem(item.configKey, item.configValue);
-          }
-        });
-      }
-    } catch {
-      console.info("加载系统配置失败，使用安全默认值");
-    }
+    await useAppConfigStore().ensureLoaded();
   };
 
   const setMustChangePassword = (required) => {

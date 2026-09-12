@@ -122,8 +122,10 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - APP_CRYPTO_SECRET=${APP_CRYPTO_SECRET:?APP_CRYPTO_SECRET is required}
       - AUTH_COOKIE_SECURE=${AUTH_COOKIE_SECURE:-true}
-      # Requires explicit application of migrations 018-026 before enabling native services.
+      # Migration 030 is a prerequisite for this backend, even when both flags are false.
+      # Review/apply required migrations 018-032 with explicit authorization before deployment.
       - APP_NATIVE_SERVICES_ENABLED=${NATIVE_SERVICES_ENABLED:-false}
+      - APP_NATIVE_SERVICES_STATUS_REFRESH_ENABLED=${NATIVE_SERVICE_STATUS_REFRESH_ENABLED:-false}
       - APP_NATIVE_SERVICES_NOTIFICATIONS_ENABLED=${NATIVE_SERVICE_NOTIFICATIONS_ENABLED:-false}
       - APP_NATIVE_SERVICES_HEISHA_FACE_ALLOWED_ORIGINS=${HEISHA_FACE_ALLOWED_ORIGINS:-}
       - PROVIDER_HEALTH_ENABLED=${PROVIDER_HEALTH_ENABLED:-false}

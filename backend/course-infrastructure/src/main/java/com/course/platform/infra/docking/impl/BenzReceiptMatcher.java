@@ -6,7 +6,8 @@ import com.course.platform.domain.entity.CoursePlatform;
 import com.course.platform.domain.exception.ProviderRequestException;
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.databind.*;
-import java.util.Map;
+import java.util.*;
+import static com.course.platform.domain.orderreceipt.OrderReceiptTypes.MAX_CANDIDATES;
 
 /** Full receipt identity checks; request filters are not evidence of returned ownership. */
 public final class BenzReceiptMatcher {
@@ -21,12 +22,7 @@ public final class BenzReceiptMatcher {
                                     String receiptId, boolean requireFullIdentity) {
         if (receiptId == null || !receiptId.matches("[A-Za-z0-9_-]{1,50}")) throw invalid();
         try {
-            if (response == null || response.length() > 1024 * 1024) throw invalid();
-            JsonNode root = JSON.readTree(response);
-            if (!root.isObject() || !root.path("code").isIntegralNumber() || !root.path("code").canConvertToInt() || root.path("code").intValue() != 1)
-                throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
-            JsonNode data = root.path("data");
-            if (!data.isArray() || data.size() > 1000) throw invalid();
+            JsonNode data = rows(response);
             JsonNode matched = null;
             for (JsonNode row : data) {
                 if (!row.isObject()) throw invalid();
@@ -50,6 +46,52 @@ public final class BenzReceiptMatcher {
             // Never attach raw response/credentials/parser failures to the public exception.
             throw invalid();
         }
+    }
+
+    /** Inspect one response only. Never infer pagination, choose the first row or return private fields. */
+    public static List<String> candidates(String response, CourseOrder order, CoursePlatform platform) {
+        try {
+            Set<String> seen = new HashSet<>();
+            List<String> matches = new ArrayList<>();
+            for (JsonNode row : rows(response)) {
+                if (!row.isObject()) throw invalid();
+                String id = receipt(row);
+                // Duplicate identifiers remain ambiguous even if one of their rows matches the order.
+                if (!seen.add(id)) throw invalid();
+                boolean matchesIdentity = matches(row, "user", order.getStudentAccount(), true, false);
+                matchesIdentity &= matches(row, "pass", order.getStudentPassword(), true, false);
+                matchesIdentity &= matches(row, "kcname", order.getCourseName(), true, false);
+                matchesIdentity &= matches(row, "cid", platform.getDockParam(), true, true);
+                matchesIdentity &= matches(row, "school", order.getSchoolName(), false, false);
+                matchesIdentity &= matches(row, "kcid", order.getCourseId(), false, true);
+                if (matchesIdentity) {
+                    matches.add(id);
+                    if (matches.size() > MAX_CANDIDATES) throw invalid();
+                }
+            }
+            return List.copyOf(matches);
+        } catch (ProviderRequestException e) {
+            throw e;
+        } catch (Exception e) {
+            throw invalid();
+        }
+    }
+
+    private static JsonNode rows(String response) throws java.io.IOException {
+        if (response == null || response.length() > 1024 * 1024) throw invalid();
+        JsonNode root = JSON.readTree(response);
+        if (root == null || !root.isObject()) throw invalid();
+        if (!root.path("code").isIntegralNumber() || !root.path("code").canConvertToInt() || root.path("code").intValue() != 1)
+            throw new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED);
+        JsonNode data = root.path("data");
+        if (!data.isArray() || data.size() > 1000) throw invalid();
+        return data;
+    }
+
+    private static boolean matches(JsonNode row, String field, String expected, boolean required, boolean number) {
+        if (!row.hasNonNull(field)) return !required;
+        String actual = scalar(row.get(field), number);
+        return expected != null && !expected.isBlank() && actual.equals(expected);
     }
 
     public static String createdId(String response) {

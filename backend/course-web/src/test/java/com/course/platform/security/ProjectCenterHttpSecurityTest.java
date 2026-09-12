@@ -20,7 +20,10 @@ import com.course.platform.application.service.projectcenter.ProjectRecordsServi
 import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.application.service.servicecommerce.ServiceCommerceService;
 import com.course.platform.application.service.servicenotification.ServiceNotificationService;
+import com.course.platform.common.exception.BusinessException;
+import com.course.platform.common.result.ResultCode;
 import com.course.platform.config.*;
+import com.course.platform.domain.orderreceipt.OrderReceiptTypes;
 import com.course.platform.controller.*;
 import com.course.platform.infra.persistence.mapper.UserMapper;
 import com.course.platform.shared.exception.GlobalExceptionHandler;
@@ -42,6 +45,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.*;
 
 /**
@@ -219,6 +224,76 @@ class ProjectCenterHttpSecurityTest {
     }
 
     @Test
+    void receiptCandidatesRequireBothPermissionsAndOnlyReturnNoStoreIdentifiers() throws Exception {
+        String path = "/api/admin/orders/1/receipt-recoveries/candidates";
+        mvc.perform(post(path).contextPath("/api")).andExpect(status().isUnauthorized());
+        for (String permission : List.of("ROLE_SUPER_ADMIN", "order:update", "api-provider:update")) {
+            mvc.perform(post(path).contextPath("/api").with(authentication(auth(permission))))
+                    .andExpect(status().isForbidden());
+        }
+        mvc.perform(post(path).contextPath("/api").header("X-Project-Key", "npo_" + "a".repeat(64)))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(receiptRecovery, projectKeys);
+
+        when(receiptRecovery.candidates(1L)).thenReturn(new OrderReceiptTypes.Candidates(
+                1L, List.of("receipt-9", "receipt-10"), LocalDateTime.of(2026, 9, 11, 12, 0), "CURRENT_RESPONSE"));
+        mvc.perform(post(path).contextPath("/api").with(authentication(auth("order:update", "api-provider:update"))))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.data.orderId").value(1))
+                .andExpect(jsonPath("$.data.receiptIds").value(org.hamcrest.Matchers.contains("receipt-9", "receipt-10")))
+                .andExpect(jsonPath("$.data.scope").value("CURRENT_RESPONSE"))
+                .andExpect(jsonPath("$.data.length()").value(4));
+        verify(receiptRecovery).candidates(1L);
+        verifyNoMoreInteractions(receiptRecovery, projectKeys);
+    }
+
+    @Test
+    void receiptCandidatesAndPreviewShareOneFivePerMinuteUserBudget() throws Exception {
+        String path = "/api/admin/orders/1/receipt-recoveries";
+        var auth = authentication(auth("order:update", "api-provider:update"));
+        mvc.perform(post(path + "/candidates").contextPath("/api").with(auth))
+                .andExpect(status().isOk());
+        mvc.perform(post(path).contextPath("/api").with(auth).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"requestId\":\"11111111-1111-4111-8111-111111111111\",\"receiptId\":\"receipt-9\","
+                                + "\"evidence\":\"已核对原始回执并确认该订单归属\",\"ownershipConfirmed\":true}"))
+                .andExpect(status().isOk());
+        verify(limiter, times(2)).check(new RateLimitRequest(
+                "order-receipt:preview:user", "7", 5, Duration.ofSeconds(60), "order-receipt"));
+        verifyNoMoreInteractions(limiter);
+        verify(receiptRecovery).candidates(1L);
+        verify(receiptRecovery).preview(eq(1L), any());
+        verifyNoMoreInteractions(receiptRecovery);
+    }
+
+    @Test
+    void receiptCandidatesStopBeforeBusinessExecutionWhenRateLimited() throws Exception {
+        when(limiter.check(any())).thenReturn(RateLimitDecision.denied(17));
+        mvc.perform(post("/api/admin/orders/1/receipt-recoveries/candidates").contextPath("/api")
+                        .with(authentication(auth("order:update", "api-provider:update"))))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "17"))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.code").value(ResultCode.RATE_LIMITED.getCode()));
+        verify(limiter).check(new RateLimitRequest(
+                "order-receipt:preview:user", "7", 5, Duration.ofSeconds(60), "order-receipt"));
+        verifyNoInteractions(receiptRecovery, projectKeys);
+    }
+
+    @Test
+    void receiptCandidatesFailClosedWhenTheLimiterIsUnavailable() throws Exception {
+        when(limiter.check(any())).thenThrow(new BusinessException(ResultCode.RATE_LIMIT_UNAVAILABLE));
+        mvc.perform(post("/api/admin/orders/1/receipt-recoveries/candidates").contextPath("/api")
+                        .with(authentication(auth("order:update", "api-provider:update"))))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Retry-After", "5"))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.code").value(ResultCode.RATE_LIMIT_UNAVAILABLE.getCode()));
+        verify(limiter).check(new RateLimitRequest(
+                "order-receipt:preview:user", "7", 5, Duration.ofSeconds(60), "order-receipt"));
+        verifyNoInteractions(receiptRecovery, projectKeys);
+    }
+
+    @Test
     void receiptPreviewAndConfirmationAreDistinctScopedNoStoreRequests() throws Exception {
         String path="/api/admin/orders/1/receipt-recoveries", id="11111111-1111-4111-8111-111111111111";
         var auth=authentication(auth("order:update","api-provider:update"));
@@ -231,6 +306,11 @@ class ProjectCenterHttpSecurityTest {
         mvc.perform(post(path+"/"+id+"/confirm").contextPath("/api").with(auth).contentType(MediaType.APPLICATION_JSON).content("{\"consent\":true}"))
                 .andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"));
         verify(receiptRecovery).confirm(eq(1L),eq(id),argThat(f->f.consent()));
+        verify(limiter).check(new RateLimitRequest(
+                "order-receipt:preview:user", "7", 5, Duration.ofSeconds(60), "order-receipt"));
+        verify(limiter, times(2)).check(new RateLimitRequest(
+                "order-receipt:result:user", "7", 30, Duration.ofSeconds(60), "order-receipt"));
+        verifyNoMoreInteractions(limiter);
         mvc.perform(get(path+"/"+id+"/confirm").contextPath("/api").with(auth)).andExpect(status().isMethodNotAllowed());
     }
 
@@ -759,4 +839,24 @@ class ProjectCenterHttpSecurityTest {
                 .andExpect(status().isUnprocessableEntity());
         verifyNoInteractions(projects);
     }
+    @Test
+    void scoreInformationRequiresAUserSessionAndPreservesNoStoreOnOwnershipErrors() throws Exception {
+        String path = "/api/service-orders/order-id/score-info";
+        mvc.perform(get(path).contextPath("/api")).andExpect(status().isUnauthorized());
+        mvc.perform(get(path).contextPath("/api").header("X-Project-Key", "npo_" + "a".repeat(64)))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(commerce);
+        when(commerce.scoreInfo("order-id")).thenReturn(
+                new com.course.platform.domain.servicecommerce.ServiceCommerceTypes.OrderText("成绩信息：等待核对"));
+        mvc.perform(get(path).contextPath("/api").with(authentication(auth("ROLE_USER"))))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.data.text").value("成绩信息：等待核对"));
+        when(commerce.scoreInfo("not-owned")).thenThrow(new BusinessException(ResultCode.NOT_FOUND));
+        mvc.perform(get("/api/service-orders/not-owned/score-info").contextPath("/api")
+                        .with(authentication(auth("ROLE_USER"))))
+                .andExpect(status().isNotFound()).andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")))
+                .andExpect(jsonPath("$.data").doesNotExist());
+        verify(commerce).scoreInfo("order-id"); verify(commerce).scoreInfo("not-owned");
+    }
+
 }

@@ -65,6 +65,9 @@ public class PhpNativeServiceGateway
 
     public static boolean supported(String type, String project, String productId) {
         return switch (type == null ? "" : type) {
+            case "jingyu" -> JingyuNativeServiceGateway.supported(project, productId);
+            case "leidian" -> LeidianNativeServiceGateway.supported(project, productId);
+            case "appui" -> AppuiNativeServiceGateway.supported(project, productId);
             case "sxdk_tw" -> InternshipNativeServiceGateway.supported(project, productId);
             case SsbenzDistanceGateway.TYPE -> SsbenzDistanceGateway.supported(project, productId);
             case "wuxin" -> "sdxy".equals(project) && "sdxy".equals(productId);
@@ -79,6 +82,9 @@ public class PhpNativeServiceGateway
 
     public static List<String> capabilities(String type) {
         return switch (type) {
+            case "jingyu" -> List.of("LOOKUP", "CREATE", "SYNC", "PAUSE", "RESUME", "DELAY", "DELAY_TASK", "CHANGE_TIME", "REFUND");
+            case "leidian" -> List.of("LOOKUP", "CREATE", "SYNC", "CANCEL", "EDIT_PLAN", "CHANGE_TIME", "SCORE_INFO");
+            case "appui" -> List.of("LOOKUP", "CREATE", "SYNC", "REFUND", "ADD_TIMES", "EDIT_PLAN");
             case "sxdk_tw" -> InternshipNativeServiceGateway.capabilities();
             case SsbenzDistanceGateway.TYPE -> List.of("CREATE", "SYNC");
             case "wuxin" ->

@@ -17,6 +17,7 @@ import com.course.platform.domain.vo.plugin.*;
 import com.course.platform.infra.integration.PluginConnectorRegistry;
 import com.course.platform.infra.persistence.mapper.*;
 import com.course.platform.infra.servicecommerce.InternshipNativeServiceGateway;
+import com.course.platform.infra.servicecommerce.JingyuNativeServiceGateway;
 import com.course.platform.infra.servicecommerce.PhpNativeServiceGateway;
 import com.course.platform.infra.servicecommerce.SsbenzDistanceGateway;
 import com.course.platform.security.SecurityUtils;
@@ -34,13 +35,15 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.function.Supplier;
 
 /** Local monetary commits bracket, but NEVER encompass, the non-idempotent remote call. */
 @Service
 @RequiredArgsConstructor
-public class ServiceCommerceServiceImpl implements ServiceCommerceService {
+public class ServiceCommerceServiceImpl implements ServiceCommerceService, ServiceOrderStatusRefresh {
     private final ServiceProductMapper productMapper;
     private final ServiceOrderMapper orderMapper;
     private final ServiceOperationMapper operationMapper;
@@ -57,6 +60,12 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
 
     @Value("${app.native-services.enabled:false}")
     private boolean enabled;
+
+    @Value("${app.native-services.status-refresh.enabled:false}")
+    private boolean statusRefreshEnabled;
+
+    private static final Set<String> PERIODIC_TYPES = Set.of("flash", "heisha", "jiguang", "wuxin", "sxdk_tw", "appui", "leidian", "jingyu");
+    private static final Set<String> PERIODIC_STATES = Set.of("ACTIVE", "PAUSED", "ATTENTION", "REFUND_REVIEW");
 
     private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
     private static final BigDecimal ZERO = new BigDecimal("0.00");
@@ -175,7 +184,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
     public PluginSchoolPage schools(Long productId, int page, String keyword) {
         user();
         ServiceProduct p = forSale(productId);
-        if (daily(p))
+        if (daily(p) || "appui".equals(p.getProviderType()))
             return gateway.schools(
                     active(p.getProviderId(), p.getProviderType(), null), p, page, keyword);
         if (!"jiguang".equals(p.getProviderType())) throw bad("该服务不支持学校查询");
@@ -212,7 +221,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
             if (authorization.expiresAt().isBefore(op.getExpiresAt()))
                 op.setExpiresAt(authorization.expiresAt());
         }
-        if ("flash".equals(p.getProviderType())) limitTaskDeadline(op, form.taskTimes());
+        if (Set.of("flash", "jingyu").contains(p.getProviderType())) limitTaskDeadline(op, form.taskTimes());
         if (daily(p)) {
             if (prepared.plan() == null) throw bad("实习订单缺少计费周期");
             if (!prepared.plan().startDate().equals(ServiceTime.now().toLocalDate()))
@@ -228,12 +237,40 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
                     || !p.getRemoteProductId().equals(plan.typeCode())) throw bad("总公里计划快照不一致");
             op.setScheduleJson(planJson(plan));
         }
+        if ("appui".equals(p.getProviderType())) {
+            if (prepared.accountFingerprint() == null || prepared.plan() != null
+                    || prepared.distancePlan() != null || prepared.distance() != null
+                    || BigDecimal.ONE.compareTo(prepared.billablePerUnit()) != 0)
+                throw bad("天数订单缺少有效的账号绑定");
+            op.setScheduleJson(planJson(prepared.accountFingerprint()));
+        }
+        if ("leidian".equals(p.getProviderType())) {
+            BigDecimal billable = "4".equals(p.getProject()) ? form.distance() : form.distance().min(new BigDecimal("2"));
+            if (prepared.accountFingerprint() == null || prepared.plan() != null || prepared.distancePlan() != null
+                    || prepared.quantity() != form.quantity() || prepared.distance() == null
+                    || prepared.distance().compareTo(form.distance()) != 0
+                    || prepared.billablePerUnit() == null || prepared.billablePerUnit().compareTo(billable) != 0)
+                throw bad("运动订单缺少有效的账号与计费绑定");
+            op.setScheduleJson(planJson(prepared.accountFingerprint()));
+            limitRunCalendarDeadline(op);
+        }
+        if (jingyu(p.getProviderType())) {
+            BigDecimal billable = JingyuNativeServiceGateway.billable(p.getProject(), form.distance());
+            if (prepared.accountFingerprint() == null || !prepared.accountFingerprint().matches(form.fields().get("account"))
+                    || prepared.plan() != null || prepared.distancePlan() != null || prepared.quantity() != form.quantity()
+                    || prepared.distance() == null || prepared.distance().compareTo(form.distance()) != 0
+                    || prepared.billablePerUnit() == null || prepared.billablePerUnit().compareTo(billable) != 0)
+                throw bad("运动订单缺少有效的账号与计费绑定");
+            op.setScheduleJson(planJson(prepared.accountFingerprint()));
+        }
         op.setQuantity(prepared.quantity());
         op.setDistance(prepared.distance());
         op.setAccountLabel(prepared.accountLabel());
-        op.setUnitCharge(exactUnitCharge(p.getUnitPrice(), prepared.billablePerUnit()));
-        // Keep all eight decimal places of price * distance in the immutable snapshot.
-        // New orders, additions and refunds round only their final amount to cents.
+        // Jingyu charges each task to cents before multiplying by its quantity. Other protocols
+        // retain eight-decimal unit charges and round only their final amount.
+        op.setUnitCharge(jingyu(p.getProviderType())
+                ? exactUnitCharge(JingyuNativeServiceGateway.unitCharge(p.getUnitPrice(), p.getProject(), prepared.distance()), BigDecimal.ONE)
+                : exactUnitCharge(p.getUnitPrice(), prepared.billablePerUnit()));
         op.setAmount(money(op.getUnitCharge().multiply(BigDecimal.valueOf(op.getQuantity()))));
         if (op.getAmount().signum() <= 0) throw bad(totalDistance(p.getProviderType())
                 ? "订单金额不足一分，请调整总公里数或联系管理员" : "订单金额不足一分，请调整次数或联系管理员");
@@ -246,6 +283,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
         user();
         ServiceOrder o = owned(id);
         noPending(o);
+        requireReadableRunRecord(o);
         return gateway.orderOptions(forOrder(o), o);
     }
 
@@ -258,7 +296,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
         limitQuotes(uid);
         ServiceOrder o = owned(orderId);
         noPending(o);
-        if (!actions(o).contains(form.action())) throw bad("当前订单不支持此操作");
+        if ("SCORE_INFO".equals(form.action()) || !actions(o).contains(form.action())) throw bad("当前订单不支持此操作");
         ServiceProduct p = product(o.getProductId());
         ApiProvider provider = forOrder(o);
         ServiceOperation op =
@@ -309,7 +347,9 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
             if (!(fields.get("start_time") instanceof String time)) throw bad("任务时间格式错误");
             limitTaskDeadline(op, List.of(time));
         }
-        if ("EDIT_PLAN".equals(form.action()))
+        if ("EDIT_PLAN".equals(form.action()) && "leidian".equals(o.getProviderType()))
+            limitRunCalendarDeadline(op);
+        if ("EDIT_PLAN".equals(form.action()) && "wuxin".equals(o.getProviderType()))
             op.setDistance(new BigDecimal(fields.get("run_meter").toString()));
         if ("REFUND".equals(form.action())) {
             int remaining = gateway.refundRemaining(provider, o);
@@ -471,6 +511,17 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
             return;
         ServiceOrder o = orderMapper.lock(op.getOrderId());
         if (o == null || !id.equals(o.getPendingOperationId())) throw bad("订单操作版本冲突");
+        boolean jingyu = jingyu(o.getProviderType());
+        if (jingyu) {
+            boolean refund = "REFUND".equals(op.getAction());
+            requireJingyuResult(o, result, refund && op.getResolvedBy() != null);
+            if (!"CREATE".equals(op.getAction()) && (!Objects.equals(o.getExternalOrderNo(), result.externalOrderNo())
+                    || !Objects.equals(o.getExternalSubOrderNo(), result.externalSubOrderNo()))) throw bad("订单编号不一致");
+            if (refund && (op.getResolvedBy() == null || result.refundedUnits() == null
+                    || !"REFUND_REVIEW".equals(result.status()) || result.refundedUnits() > op.getQuantity()))
+                throw bad("退款数量须人工核对后入账");
+            o.setCompleted(result.completed());
+        }
         if ("CREATE".equals(op.getAction())) {
             if (result.externalOrderNo() == null
                     || !result.externalOrderNo().matches("[A-Za-z0-9_-]{1,64}"))
@@ -480,9 +531,22 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
                             || !"SUBMITTED".equals(result.status()) || result.completed() != null
                             || result.refundedUnits() != null || result.externalSubOrderNo() != null))
                 throw bad("总公里订单仅可确认提交记录，不能确认执行或退款");
+            if ("leidian".equals(o.getProviderType())) {
+                requireLeidianResult(o, result, false);
+                o.setCompleted(result.completed());
+            }
             o.setExternalOrderNo(result.externalOrderNo());
             o.setExternalSubOrderNo(result.externalSubOrderNo());
-            o.setStatus(totalDistance(o.getProviderType()) ? "SUBMITTED" : "ACTIVE");
+            o.setStatus(totalDistance(o.getProviderType()) ? "SUBMITTED" : jingyu || "leidian".equals(o.getProviderType()) ? result.status() : "ACTIVE");
+        } else if ("CANCEL".equals(op.getAction())) {
+            if (!"leidian".equals(o.getProviderType()) || op.getAmount().signum() != 0 || op.getQuantity() != 0)
+                throw bad("取消订单回执无法核实");
+            requireLeidianResult(o, result, true);
+            if (!o.getExternalOrderNo().equals(result.externalOrderNo())
+                    || !o.getExternalSubOrderNo().equals(result.externalSubOrderNo())) throw bad("订单编号不一致");
+            o.setCompleted(result.completed());
+            // Cancellation proves neither returned units nor money. Settlement is a separate, audited operation.
+            o.setStatus("REFUND_REVIEW");
         } else if ("ADD_TIMES".equals(op.getAction())) {
             o.setQuantity(o.getQuantity() + op.getQuantity());
             o.setPaidAmount(o.getPaidAmount().add(op.getAmount()));
@@ -496,12 +560,58 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
         } else if ("RUN_NOW".equals(op.getAction())) {
             o.setPaidAmount(o.getPaidAmount().add(op.getAmount()));
         } else if ("REFUND".equals(op.getAction())) {
+            if ("appui".equals(o.getProviderType()) && result.refundedUnits() != null
+                    && result.refundedUnits() > op.getQuantity())
+                throw bad("退款天数超过已确认上限，请人工核对");
             applyRefund(op, o, result.refundedUnits());
         } else if ("EDIT_PLAN".equals(op.getAction())) {
             o.setDistance(op.getDistance());
+        } else if (jingyu) {
+            o.setStatus(result.status());
         } else if (!Set.of("CHANGE_TIME", "DELAY_TASK", "REPORT").contains(op.getAction()))
             o.setStatus("PAUSE".equals(op.getAction()) ? "PAUSED" : "ACTIVE");
         completeOperation(op, o);
+    }
+
+    private static void requireLeidianResult(ServiceOrder order, RemoteResult result, boolean cancellation) {
+        if (result == null || result.externalOrderNo() == null || !result.externalOrderNo().matches("[A-Za-z0-9_-]{1,64}")
+                || result.externalSubOrderNo() == null || !result.externalSubOrderNo().matches("[1-9][0-9]{0,18}")
+                || result.completed() == null || result.completed() < order.getCompleted()
+                || result.completed() > order.getQuantity() || result.refundedUnits() != null || result.status() == null
+                || !(cancellation ? Set.of("REFUND_REVIEW") : Set.of("ACTIVE", "ATTENTION")).contains(result.status()))
+            throw bad("订单编号、已用次数或取消结果无法核实");
+    }
+
+    private static boolean jingyu(String type) { return JingyuNativeServiceGateway.TYPE.equals(type); }
+
+    private static boolean identityRecovery(ServiceOrder order, ServiceOperation operation) {
+        return jingyu(order.getProviderType()) || "leidian".equals(order.getProviderType()) && "CREATE".equals(operation.getAction());
+    }
+
+    private static void requireJingyuResult(ServiceOrder order, RemoteResult result, boolean reconciledRefund) {
+        if (result == null || result.externalOrderNo() == null || !result.externalOrderNo().matches("[A-Za-z0-9_-]{1,64}")
+                || result.externalSubOrderNo() == null || !result.externalSubOrderNo().matches("[1-9][0-9]{0,18}")
+                || result.completed() == null || result.completed() < order.getCompleted() || result.completed() > order.getQuantity()
+                || result.status() == null || !Set.of("ACTIVE", "PAUSED", "COMPLETED", "ATTENTION", "REFUND_REVIEW").contains(result.status())
+                || "COMPLETED".equals(result.status()) && result.completed() != order.getQuantity().intValue()
+                || !reconciledRefund && result.refundedUnits() != null
+                || reconciledRefund && (result.refundedUnits() == null || result.refundedUnits() < 0
+                        || result.refundedUnits() > order.getQuantity() - result.completed()))
+            throw bad("订单编号、完成次数或处理结果无法核实");
+    }
+
+    private static boolean cancellationReview(ServiceOrder order) {
+        return "leidian".equals(order.getProviderType()) && "REFUND_REVIEW".equals(order.getStatus());
+    }
+
+    private static boolean leidianRecordRemoved(ServiceOrder order) {
+        return "leidian".equals(order.getProviderType())
+                && ("REFUND_REVIEW".equals(order.getStatus()) || FINAL.contains(order.getStatus()));
+    }
+
+    private static void requireReadableRunRecord(ServiceOrder order) {
+        // A successful cancellation deletes this protocol's remote row; settlement cannot restore it.
+        if (leidianRecordRemoved(order)) throw bad("订单已取消，无法读取执行记录或安排，请查看订单操作记录");
     }
 
     private void applyRefund(ServiceOperation op, ServiceOrder o, Integer units) {
@@ -582,16 +692,75 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
 
     @Override
     public IPage<OrderView> orders(int page, int size, boolean admin) {
+        return orders(page, size, admin, ServiceOrderFilter.empty());
+    }
+
+    @Override
+    public IPage<OrderView> orders(int page, int size, boolean admin, ServiceOrderFilter filter) {
         Long uid = user();
         if (admin) admin();
         bounds(page, size);
-        IPage<ServiceOrder> found =
-                orderMapper.selectPage(
-                        new Page<>(page, size),
-                        new LambdaQueryWrapper<ServiceOrder>()
-                                .eq(!admin, ServiceOrder::getUserId, uid)
-                                .orderByDesc(ServiceOrder::getCreateTime));
+        ServiceOrderFilter f = filter == null ? ServiceOrderFilter.empty() : filter;
+        if (f.ownerId() != null && (!admin || f.ownerId() < 1))
+            throw bad("所属用户筛选不可用");
+        String keyword = orderSearchText(f.keyword(), 100).strip();
+        String type = orderSearchText(f.providerType(), 20);
+        String status = orderSearchText(f.status(), 24);
+        String orderId = orderSearchText(f.orderId(), 36);
+        if (!type.isEmpty() && !Set.of("flash", "heisha", "jiguang", "wuxin", "sxdk_tw", "appui", "leidian", "jingyu", "ssbenz_xbd").contains(type))
+            throw bad("服务类型筛选不正确");
+        if (!status.isEmpty() && !Set.of("ACTIVE", "PAUSED", "COMPLETED", "REFUNDED", "CANCELLED",
+                "CONFIRMING", "REFUND_REVIEW", "ATTENTION", "SUBMITTING", "SUBMITTED", "SUBMISSION_REVIEW").contains(status))
+            throw bad("订单状态筛选不正确");
+        if (!orderId.isEmpty()) uuid(orderId);
+        LocalDate from = orderSearchDate(f.createdFrom());
+        LocalDate to = orderSearchDate(f.createdTo());
+        if (from != null && to != null && from.isAfter(to)) throw bad("开始日期不能晚于结束日期");
+
+        var query = new LambdaQueryWrapper<ServiceOrder>()
+                .eq(!admin, ServiceOrder::getUserId, uid)
+                .eq(admin && f.ownerId() != null, ServiceOrder::getUserId, f.ownerId())
+                .eq(!type.isEmpty(), ServiceOrder::getProviderType, type)
+                .eq(!orderId.isEmpty(), ServiceOrder::getId, orderId);
+        // Filter the state shown to the user, not a pre-operation status hidden by a pending write.
+        if ("CONFIRMING".equals(status)) {
+            query.and(q -> q.isNotNull(ServiceOrder::getPendingOperationId).or().eq(ServiceOrder::getStatus, status));
+        } else if (!status.isEmpty()) {
+            query.isNull(ServiceOrder::getPendingOperationId).eq(ServiceOrder::getStatus, status);
+        }
+        if (from != null) query.ge(ServiceOrder::getCreateTime, from.atStartOfDay());
+        if (to != null) query.lt(ServiceOrder::getCreateTime, to.plusDays(1).atStartOfDay());
+        if (!keyword.isEmpty()) {
+            // Fixed SQL and bound parameters; %, _ and ! are literal search characters.
+            // Only the already-visible label is searched, never encrypted account/password material.
+            String literal = "%" + keyword.replace("!", "!!").replace("%", "!%")
+                    .replace("_", "!_") + "%";
+            query.and(q -> q.apply("id LIKE {0} ESCAPE '!' OR title LIKE {0} ESCAPE '!' "
+                    + "OR account_label LIKE {0} ESCAPE '!'", literal));
+        }
+        query.orderByDesc(ServiceOrder::getCreateTime).orderByDesc(ServiceOrder::getId);
+        IPage<ServiceOrder> found = orderMapper.selectPage(new Page<>(page, size), query);
         return convert(found, found.getRecords().stream().map(this::orderView).toList());
+    }
+
+    private static String orderSearchText(String value, int max) {
+        if (value == null) return "";
+        if (value.length() > max || value.codePoints().anyMatch(Character::isISOControl))
+            throw bad("订单筛选条件不正确");
+        return value;
+    }
+
+    private static LocalDate orderSearchDate(String value) {
+        String raw = orderSearchText(value, 10);
+        if (raw.isEmpty()) return null;
+        try {
+            if (!raw.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) throw new DateTimeParseException("date", raw, 0);
+            LocalDate date = LocalDate.parse(raw);
+            if (date.getYear() < 1000 || date.getYear() > 9998) throw bad("创建日期超出支持范围");
+            return date;
+        } catch (DateTimeParseException ex) {
+            throw bad("创建日期不正确");
+        }
     }
 
     @Override
@@ -602,40 +771,172 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
 
     @Override
     public OrderView sync(String id) {
-        user();
-        ServiceOrder o = owned(id);
-        noPending(o);
-        if (FINAL.contains(o.getStatus())) return orderView(o);
-        if (o.getExternalOrderNo() == null) throw bad("订单尚未取得可核实的编号，请联系管理员核对");
-        RemoteResult remote = gateway.sync(forOrder(o), o);
-        boolean distanceOrder = totalDistance(o.getProviderType());
+        Long uid = user();
+        uuid(id);
+        String token = UUID.randomUUID().toString();
+        ServiceOrder order = tx(() -> {
+            ServiceOrder current = orderMapper.lock(id);
+            if (current == null || !uid.equals(current.getUserId())) throw missing();
+            noPending(current);
+            if (FINAL.contains(current.getStatus()) || cancellationReview(current)) return current;
+            if (current.getExternalOrderNo() == null || current.getExternalOrderNo().isBlank())
+                throw bad("订单尚未取得可核实的编号，请联系管理员核对");
+            if (!enabled || orderMapper.activeStatusOwner(uid) != 1) throw bad("进度更新已暂停");
+            var now = ServiceTime.now();
+            // Manual reads share the same lease as scheduled reads. A later, stale response
+            // must not overwrite progress just because the first read left the version unchanged.
+            if (orderMapper.claimStatusCheck(id, token, now, now.plusMinutes(5), now.plusMinutes(5)) != 1)
+                throw bad("正在更新进度，请稍后刷新订单");
+            return current;
+        });
+        if (FINAL.contains(order.getStatus()) || cancellationReview(order)) return orderView(order);
+        try {
+            return readStatus(order, token, false);
+        } catch (RuntimeException ex) {
+            failedStatusCheck(order, token, false);
+            throw ex;
+        }
+    }
+
+    @Override
+    public boolean statusRefreshActive() {
+        return enabled && statusRefreshEnabled;
+    }
+
+    @Override
+    public int refreshDueStatuses() {
+        if (!statusRefreshActive()) return 0;
+        // A due-time queue is persisted per order. Failed first rows cannot starve later orders.
+        List<String> ids = orderMapper.dueStatusChecks(ServiceTime.now(), 10);
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MINUTES.toNanos(1);
+        int attempted = 0;
+        for (String id : ids) {
+            if (!statusRefreshActive() || Thread.currentThread().isInterrupted()
+                    || System.nanoTime() >= deadline) break;
+            String token = UUID.randomUUID().toString();
+            ServiceOrder order = tx(() -> {
+                ServiceOrder current = orderMapper.lock(id);
+                var now = ServiceTime.now();
+                if (!statusRefreshActive() || !periodicEligible(current)
+                        || (current.getStatusCheckAfter() != null && current.getStatusCheckAfter().isAfter(now))
+                        || (current.getStatusCheckUntil() != null && current.getStatusCheckUntil().isAfter(now))
+                        || orderMapper.activeStatusOwner(current.getUserId()) != 1) return null;
+                // Readers are bounded to five seconds between pages plus a <=120s HTTP call.
+                // A five-minute lease survives that budget; expired tokens can never commit.
+                if (orderMapper.claimStatusCheck(id, token, now, now.plusMinutes(5), now.plusMinutes(5)) != 1)
+                    return null;
+                return current;
+            });
+            if (order == null) continue;
+            attempted++;
+            try {
+                readStatus(order, token, true);
+            } catch (RuntimeException ex) {
+                // Never save or log remote bodies, credentials, exception text, or account labels.
+                failedStatusCheck(order, token, true);
+            }
+        }
+        return attempted;
+    }
+
+    private OrderView readStatus(ServiceOrder order, String leaseToken, boolean automatic) {
+        ApiProvider provider = forOrder(order);
+        Long configuration = provider.getConfigVersion();
+        if (!enabled || (automatic && !statusRefreshActive())
+                || orderMapper.activeStatusOwner(order.getUserId()) != 1) throw bad("进度更新已暂停");
+        RemoteResult remote = gateway.sync(provider, order);
+        if ("leidian".equals(order.getProviderType())) {
+            requireLeidianResult(order, remote, false);
+            if (!Objects.equals(order.getExternalSubOrderNo(), remote.externalSubOrderNo())) throw bad("订单编号不一致");
+        }
+        if (jingyu(order.getProviderType())) {
+            requireJingyuResult(order, remote, false);
+            if (!Objects.equals(order.getExternalSubOrderNo(), remote.externalSubOrderNo())) throw bad("订单编号不一致");
+        }
+        boolean distanceOrder = totalDistance(order.getProviderType());
+        boolean internshipOrder = "sxdk_tw".equals(order.getProviderType());
         Set<String> allowedStates = distanceOrder ? Set.of("SUBMITTED", "SUBMISSION_REVIEW")
                 : Set.of("ACTIVE", "PAUSED", "COMPLETED", "REFUND_REVIEW", "ATTENTION");
-        if (remote == null
-                || !o.getExternalOrderNo().equals(remote.externalOrderNo())
+        if (remote == null || !order.getExternalOrderNo().equals(remote.externalOrderNo())
                 || remote.status() == null || !allowedStates.contains(remote.status())
-                || (distanceOrder && (remote.completed() != null || remote.refundedUnits() != null
-                        || remote.externalSubOrderNo() != null))) throw bad("订单回执无法核实");
-        return tx(
-                () -> {
-                    ServiceOrder current = orderMapper.lock(id);
-                    if (!Objects.equals(current.getVersion(), o.getVersion())
-                            || current.getPendingOperationId() != null) throw bad("订单正在更新，请刷新");
-                    if (!distanceOrder && (remote.completed() == null
-                            || remote.completed() < 0
-                            || remote.completed() > current.getQuantity())) throw bad("完成次数异常");
-                    // Keep refund review sticky, as in the original Heisha lifecycle; only a ledger
-                    // settlement closes it.
-                    if (!"REFUND_REVIEW".equals(current.getStatus()))
-                        current.setStatus(remote.status());
-                    if (remote.externalSubOrderNo() != null)
-                        current.setExternalSubOrderNo(remote.externalSubOrderNo());
-                    if (!distanceOrder) current.setCompleted(remote.completed());
-                    current.setVersion(current.getVersion() + 1);
-                    current.setUpdateTime(ServiceTime.now());
-                    requireWrite(orderMapper.updateById(current));
-                    return orderView(current);
-                });
+                || remote.refundedUnits() != null
+                || (remote.externalSubOrderNo() != null && !remote.externalSubOrderNo().matches("[A-Za-z0-9_-]{1,64}"))
+                || (distanceOrder && (remote.completed() != null || remote.externalSubOrderNo() != null))
+                || (internshipOrder && (!Integer.valueOf(0).equals(remote.completed())
+                        || remote.externalSubOrderNo() != null)))
+            throw bad("订单回执无法核实");
+        return tx(() -> {
+            ServiceOrder current = orderMapper.lock(order.getId());
+            var now = ServiceTime.now();
+            if (!enabled || !sameStatusTarget(order, current) || current.getPendingOperationId() != null)
+                throw bad("订单正在更新，请刷新");
+            if ((automatic && (!statusRefreshActive() || !periodicEligible(current)))
+                    || !leaseToken.equals(current.getStatusCheckToken())
+                    || current.getStatusCheckUntil() == null || !current.getStatusCheckUntil().isAfter(now)
+                    || orderMapper.activeStatusOwner(current.getUserId()) != 1) throw bad("进度更新已暂停");
+            // A credential/configuration change during the HTTP read invalidates that response.
+            if (!Objects.equals(configuration, forOrder(current).getConfigVersion()))
+                throw bad("服务配置已变更，请重新核对进度");
+            if (!distanceOrder && (remote.completed() == null || remote.completed() < 0
+                    || remote.completed() > current.getQuantity())) throw bad("完成次数异常");
+            String status = "REFUND_REVIEW".equals(current.getStatus()) ? current.getStatus() : remote.status();
+            String subOrder = remote.externalSubOrderNo() == null ? current.getExternalSubOrderNo() : remote.externalSubOrderNo();
+            // Internship status is a plan state, never evidence of completed attendance days.
+            Integer completed = distanceOrder || internshipOrder ? current.getCompleted() : remote.completed();
+            boolean changed = !Objects.equals(status, current.getStatus())
+                    || !Objects.equals(subOrder, current.getExternalSubOrderNo())
+                    || !Objects.equals(completed, current.getCompleted());
+            if (changed) {
+                current.setStatus(status);
+                current.setExternalSubOrderNo(subOrder);
+                current.setCompleted(completed);
+                current.setVersion(current.getVersion() + 1);
+                current.setUpdateTime(now);
+                requireWrite(orderMapper.updateById(current));
+            }
+            // Successful reads without a business change do not invalidate a frozen action quote.
+            requireWrite(orderMapper.statusCheckSucceeded(current.getId(), leaseToken, now, now.plusMinutes(5)));
+            current.setStatusCheckedAt(now);
+            current.setStatusCheckState("OK");
+            return orderView(current);
+        });
+    }
+
+    private void failedStatusCheck(ServiceOrder snapshot, String leaseToken, boolean automatic) {
+        tx(() -> {
+            ServiceOrder current = orderMapper.lock(snapshot.getId());
+            if (current == null || !leaseToken.equals(current.getStatusCheckToken())) return null;
+            var now = ServiceTime.now();
+            if (!enabled || (automatic && (!statusRefreshActive() || !periodicEligible(current)))
+                    || orderMapper.activeStatusOwner(current.getUserId()) != 1
+                    || current.getPendingOperationId() != null || FINAL.contains(current.getStatus())
+                    || !sameStatusTarget(snapshot, current)
+                    || current.getStatusCheckUntil() == null || !current.getStatusCheckUntil().isAfter(now)) {
+                orderMapper.releaseStatusCheck(current.getId(), leaseToken, now.plusMinutes(5));
+                return null;
+            }
+            int failures = Math.min(8, (current.getStatusCheckFailures() == null ? 0 : current.getStatusCheckFailures()) + 1);
+            long minutes = Math.min(60, 5L << (failures - 1));
+            requireWrite(orderMapper.statusCheckFailed(current.getId(), leaseToken, now, now.plusMinutes(minutes), failures));
+            return null;
+        });
+    }
+
+    private static boolean sameStatusTarget(ServiceOrder snapshot, ServiceOrder current) {
+        return current != null && Objects.equals(current.getVersion(), snapshot.getVersion())
+                && Objects.equals(current.getExternalOrderNo(), snapshot.getExternalOrderNo())
+                && Objects.equals(current.getExternalSubOrderNo(), snapshot.getExternalSubOrderNo())
+                && Objects.equals(current.getUserId(), snapshot.getUserId())
+                && Objects.equals(current.getProviderId(), snapshot.getProviderId())
+                && Objects.equals(current.getProviderType(), snapshot.getProviderType())
+                && Objects.equals(current.getProviderIdentity(), snapshot.getProviderIdentity())
+                && Objects.equals(current.getProject(), snapshot.getProject());
+    }
+
+    private static boolean periodicEligible(ServiceOrder order) {
+        return order != null && !cancellationReview(order) && PERIODIC_TYPES.contains(order.getProviderType())
+                && PERIODIC_STATES.contains(order.getStatus()) && order.getPendingOperationId() == null
+                && order.getExternalOrderNo() != null && !order.getExternalOrderNo().isBlank();
     }
 
     @Override
@@ -643,8 +944,18 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
         user();
         ServiceOrder o = owned(id);
         noPending(o);
+        requireReadableRunRecord(o);
         if (o.getExternalOrderNo() == null) throw bad("订单尚无可核实的编号");
         return gateway.logs(forOrder(o), o, page);
+    }
+
+    @Override
+    public OrderText scoreInfo(String id) {
+        user();
+        ServiceOrder order = owned(id);
+        noPending(order);
+        if (!actions(order).contains("SCORE_INFO")) throw bad("该订单暂不能查询成绩信息");
+        return gateway.scoreInfo(forOrder(order), order);
     }
 
     @Override
@@ -803,12 +1114,13 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
         admin();
         SecurityUtils.requireAuthority("payment:reconcile");
         uuid(operationId);
-        if (!form.upstreamChecked()
+        if (form == null || !form.upstreamChecked()
                 || form.evidence() == null
                 || form.evidence().trim().length() < 10
                 || form.evidence().length() > 1000
                 || form.evidence().codePoints().anyMatch(Character::isISOControl))
             throw bad("请先核实实际处理结果和资金记录，并填写不含密码的核对依据");
+        IdentityRecovery recovery = prepareIdentityRecovery(operationId, form);
         return tx(
                 () -> {
                     ServiceOperation op = operationMapper.lock(operationId);
@@ -822,21 +1134,35 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
                         throw bad("操作已被处理");
                     if (totalDistance(o.getProviderType()) && form.refundedUnits() != null)
                         throw bad("总公里提交核对不接受退款次数");
+                    if ("leidian".equals(o.getProviderType()) && form.refundedUnits() != null)
+                        throw bad("取消或下单核对不接受退款次数；退款须单独核对入账");
+                    if (jingyu(o.getProviderType()) && form.refundedUnits() != null
+                            && !("REFUND".equals(op.getAction()) && "ACCEPTED".equals(form.outcome())))
+                        throw bad("只有退款已受理核对可填写退款次数");
+                    if (identityRecovery(o, op) && "ACCEPTED".equals(form.outcome())) {
+                        if (recovery == null || !sameStatusTarget(recovery.order(), o)
+                                || !Objects.equals(recovery.operation().getUpdateTime(), op.getUpdateTime())
+                                || !Objects.equals(recovery.order().getScheduleJson(), o.getScheduleJson())
+                                || !Objects.equals(recovery.order().getQuantity(), o.getQuantity()))
+                            throw bad("订单在核对期间已变化，请重新读取编号");
+                        ApiProvider current = active(o.getProviderId(), o.getProviderType(), recovery.providerVersion());
+                        if (!identity(current).equals(o.getProviderIdentity())) throw bad("服务配置已变化，请重新核对");
+                    }
                     op.setResolvedBy(actor);
                     op.setResolutionNote(form.evidence().trim());
                     requireWrite(operationMapper.updateById(op));
                     if ("ACCEPTED".equals(form.outcome())) {
                         // Explicit privileged upstream attestation, audited; never infer acceptance
                         // from a timeout.
-                        finish(
-                                operationId,
-                                new RemoteResult(
-                                        "CREATE".equals(op.getAction())
-                                                ? form.externalOrderNo()
-                                                : o.getExternalOrderNo(),
-                                        totalDistance(o.getProviderType()) ? "SUBMITTED" : "ACTIVE",
-                                        null,
-                                        form.refundedUnits()));
+                        RemoteResult accepted;
+                        if (identityRecovery(o, op)) accepted = recovery.result();
+                        else if ("leidian".equals(o.getProviderType()) && "CANCEL".equals(op.getAction()))
+                            accepted = new RemoteResult(o.getExternalOrderNo(), "REFUND_REVIEW", o.getCompleted(),
+                                    null, o.getExternalSubOrderNo());
+                        else accepted = new RemoteResult(
+                                "CREATE".equals(op.getAction()) ? form.externalOrderNo() : o.getExternalOrderNo(),
+                                totalDistance(o.getProviderType()) ? "SUBMITTED" : "ACTIVE", null, form.refundedUnits());
+                        finish(operationId, accepted);
                     } else if ("NOT_ACCEPTED".equals(form.outcome())) {
                         if (isDebit(op) && op.getAmount().signum() > 0)
                             ledger.credit(
@@ -861,6 +1187,56 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
                     } else throw bad("核对结论不合法");
                     return quoteView(operationMapper.selectById(operationId));
                 });
+    }
+
+    private record IdentityRecovery(ServiceOperation operation, ServiceOrder order, Long providerVersion, RemoteResult result) {}
+
+    /** Identity-bound reads stay outside ledger/order locks and never repeat a business write. */
+    private IdentityRecovery prepareIdentityRecovery(String operationId, ResolveForm form) {
+        if (!"ACCEPTED".equals(form.outcome())) return null;
+        ServiceOperation operation = operationMapper.selectById(operationId);
+        if (operation == null) throw missing();
+        ServiceOrder order = orderMapper.selectById(operation.getOrderId());
+        if (order == null || !operationId.equals(order.getPendingOperationId())) throw bad("操作已被处理");
+        if (!identityRecovery(order, operation)) {
+            if (form.externalSubOrderNo() != null && !form.externalSubOrderNo().isBlank())
+                throw bad("此操作不接受额外的记录编号");
+            return null;
+        }
+        if (!("UNKNOWN".equals(operation.getState()) || "DISPATCHING".equals(operation.getState())
+                && operation.getUpdateTime().isBefore(ServiceTime.now().minusMinutes(5))))
+            throw bad("仅可核对结果不确定的操作；处理中至少等待五分钟");
+        boolean create = "CREATE".equals(operation.getAction());
+        boolean refund = jingyu(order.getProviderType()) && "REFUND".equals(operation.getAction());
+        if (refund ? form.refundedUnits() == null || form.refundedUnits() < 0 || form.refundedUnits() > operation.getQuantity()
+                : form.refundedUnits() != null) throw bad("请按实际处理结果核对退款次数，不可超过预览上限");
+        ServiceOrder candidate = new ServiceOrder();
+        org.springframework.beans.BeanUtils.copyProperties(order, candidate);
+        if (create) {
+            if (form.externalOrderNo() == null || !form.externalOrderNo().matches("[A-Za-z0-9_-]{1,64}")
+                    || form.externalSubOrderNo() == null || !form.externalSubOrderNo().matches("[1-9][0-9]{0,18}"))
+                throw bad("请填写并核实订单编号和记录编号");
+            candidate.setExternalOrderNo(form.externalOrderNo());
+            candidate.setExternalSubOrderNo(form.externalSubOrderNo());
+        } else if (form.externalOrderNo() != null && !form.externalOrderNo().isBlank()
+                || form.externalSubOrderNo() != null && !form.externalSubOrderNo().isBlank()) {
+            throw bad("请使用订单已保存的编号核对，不可另填编号");
+        }
+        ApiProvider provider = forOrder(order);
+        Long version = provider.getConfigVersion();
+        RemoteResult result = gateway.sync(provider, candidate);
+        if (jingyu(order.getProviderType())) requireJingyuResult(candidate, result, false);
+        else requireLeidianResult(candidate, result, false);
+        if (!candidate.getExternalOrderNo().equals(result.externalOrderNo())
+                || !candidate.getExternalSubOrderNo().equals(result.externalSubOrderNo())) throw bad("核对编号不一致");
+        if (refund) {
+            if (!"REFUND_REVIEW".equals(result.status()) || form.refundedUnits() > order.getQuantity() - result.completed())
+                throw bad("退款状态或次数无法核实，请重新核对实际结果");
+            // Only the privileged, audited attestation supplies refund units; a status read supplies none.
+            result = new RemoteResult(result.externalOrderNo(), result.status(), result.completed(),
+                    form.refundedUnits(), result.externalSubOrderNo());
+        }
+        return new IdentityRecovery(operation, order, version, result);
     }
 
     /** Local-only expiry/recovery; never dispatches or repeats an upstream operation. */
@@ -982,6 +1358,12 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
         }
     }
 
+    private static void limitRunCalendarDeadline(ServiceOperation op) {
+        var midnight = op.getCreateTime().toLocalDate().plusDays(1).atStartOfDay();
+        if (!midnight.isAfter(ServiceTime.now())) throw bad("已跨过北京时间零点，请重新预览执行安排");
+        if (midnight.isBefore(op.getExpiresAt())) op.setExpiresAt(midnight);
+    }
+
     private static void limitCalendarDeadline(ServiceOperation op) {
         var midnight = op.getCreateTime().toLocalDate().plusDays(1).atStartOfDay();
         if (!midnight.isAfter(ServiceTime.now())) throw bad("已跨过北京时间零点，请重新预览服务天数");
@@ -996,7 +1378,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
         var connector = catalogs.getConnector(p.getProviderType());
         if (connector == null) throw bad("不支持的服务类型");
         return connector
-                .fetchCatalog(provider, "flash".equals(p.getProviderType()) ? p.getProject() : null)
+                .fetchCatalog(provider, Set.of("flash", "leidian", "jingyu").contains(p.getProviderType()) ? p.getProject() : null)
                 .stream()
                 .filter(item -> p.getRemoteProductId().equals(item.id()))
                 .map(PluginProduct::unitPrice)
@@ -1024,7 +1406,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
                 p.getTitle(),
                 p.getDescription(),
                 plain(p.getUnitPrice()),
-                daily(p)
+                jingyu(p.getProviderType()) ? ("bdlp".equals(p.getProject()) ? "元/次" : "元/次·公里") : "leidian".equals(p.getProviderType()) ? "元/次·公里" : "appui".equals(p.getProviderType()) ? "元/天" : daily(p)
                         ? "元/服务日"
                         : ("wuxin".equals(p.getProviderType())
                                         || ("flash".equals(p.getProviderType())
@@ -1069,8 +1451,10 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
                 "sxdk_tw".equals(o.getProviderType())
                         ? InternshipNativeServiceGateway.plan(o).schedule()
                         : null,
-                "sxdk_tw".equals(o.getProviderType()) ? "天" : totalDistance(o.getProviderType()) ? "单" : "次",
-                totalDistance(o.getProviderType()) ? distancePlan(o.getScheduleJson()) : null);
+                Set.of("sxdk_tw", "appui").contains(o.getProviderType()) ? "天" : totalDistance(o.getProviderType()) ? "单" : "次",
+                totalDistance(o.getProviderType()) ? distancePlan(o.getScheduleJson()) : null,
+                PERIODIC_TYPES.contains(o.getProviderType()) && !leidianRecordRemoved(o)
+                        ? new StatusCheckView(o.getStatusCheckedAt(), "RETRY".equals(o.getStatusCheckState())) : null);
     }
 
     private List<String> actions(ServiceOrder o) {
@@ -1082,7 +1466,9 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
                 new ArrayList<>(PhpNativeServiceGateway.capabilities(o.getProviderType()));
         actions.removeAll(List.of("CREATE", "LOOKUP", "SYNC"));
         if ("PAUSED".equals(o.getStatus())) actions.remove("PAUSE");
-        else actions.remove("RESUME");
+        // ATTENTION may coexist with a paused task list. Do not strand a paused Jingyu order;
+        // the adapter rechecks the actual pause flag before either action, with no blind toggle.
+        else if (!(jingyu(o.getProviderType()) && "ATTENTION".equals(o.getStatus()))) actions.remove("RESUME");
         if ("COMPLETED".equals(o.getStatus()))
             actions.removeAll(
                     List.of(
@@ -1094,7 +1480,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
                             "CHANGE_TIME",
                             "EDIT_PLAN",
                             "REASSIGN"));
-        if ("sxdk_tw".equals(o.getProviderType()) && "COMPLETED".equals(o.getStatus())) {
+        if (Set.of("sxdk_tw", "appui").contains(o.getProviderType()) && "COMPLETED".equals(o.getStatus())) {
             actions.remove("RUN_NOW");
             if (!actions.contains("REFUND")) actions.add("REFUND");
         }
@@ -1118,11 +1504,12 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
                 op.getQuantity(),
                 plain(op.getAmount()),
                 Set.of("REFUND", "SETTLE_REFUND").contains(op.getAction())
-                        ? ("SUCCEEDED".equals(op.getState()) ? "已退回账户余额" : "预计退款上限（按实际核实次数结算）")
+                        ? ("SUCCEEDED".equals(op.getState()) ? "已退回账户余额" : "预计退款上限（按实际核实数量结算）")
                         : isDebit(op) && op.getAmount().signum() > 0 ? "本次余额扣款" : "无需额外扣款",
                 op.getExpiresAt(),
                 op.getErrorCategory(),
-                daily(p) && !Set.of("RUN_NOW", "REPORT").contains(op.getAction()) ? "天"
+                (daily(p) && !Set.of("RUN_NOW", "REPORT").contains(op.getAction()))
+                        || "appui".equals(p.getProviderType()) ? "天"
                         : totalDistance(p.getProviderType()) ? "单" : "次",
                 totalDistance(p.getProviderType()) ? distancePlan(op.getScheduleJson()) : null,
                 op.getQuantity() > 0 && Set.of("CREATE", "ADD_TIMES", "EDIT_SCHEDULE", "RUN_NOW",
@@ -1257,6 +1644,8 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
     private static void validateOrderForm(OrderForm form, ServiceProduct product) {
         boolean daily = daily(product);
         boolean distanceOrder = totalDistance(product.getProviderType());
+        boolean dayQuota = "appui".equals(product.getProviderType());
+        boolean jingyu = jingyu(product.getProviderType());
         if (form == null || !form.authorizedAccount()) throw bad("请确认授权使用该账号");
         if (distanceOrder) {
             TotalDistancePlan.distance(form.distance());
@@ -1264,7 +1653,21 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService {
                     || (form.taskTimes() != null && !form.taskTimes().isEmpty()))
                 throw bad("总公里计划每次仅提交一单，不接受次数或任务列表");
         }
-        if ((!daily && !distanceOrder
+        if ("leidian".equals(product.getProviderType()) && (form.quantity() < 1 || form.quantity() > 100
+                || form.distance() == null || form.distance().compareTo(BigDecimal.ONE) < 0
+                || form.distance().compareTo(BigDecimal.TEN) > 0 || form.distance().stripTrailingZeros().scale() > 1
+                || form.schedule() != null || form.accountSessionId() != null
+                || form.taskTimes() != null && !form.taskTimes().isEmpty())) throw bad("请选择 1–100 次，每次 1–10 公里，最多一位小数");
+        if (jingyu && (form.quantity() < 1 || form.quantity() > 365
+                || form.distance() == null || form.distance().compareTo(BigDecimal.ONE) < 0
+                || form.distance().compareTo(new BigDecimal("100")) > 0 || form.distance().stripTrailingZeros().scale() > 1
+                || form.schedule() != null || form.accountSessionId() != null || form.taskTimes() == null
+                || form.taskTimes().size() != form.quantity())) throw bad("请选择 1–365 次，每次 1–100 公里，并安排每次任务时间");
+        if (dayQuota && (form.quantity() < 1 || form.quantity() > 365 || form.distance() != null
+                || form.schedule() != null || form.accountSessionId() != null
+                || form.taskTimes() != null && !form.taskTimes().isEmpty()))
+            throw bad("天数订单参数不正确");
+        if ((!daily && !distanceOrder && !dayQuota && !jingyu
                         && (form.quantity() < 1
                                 || form.quantity() > 365
                                 || form.distance() == null

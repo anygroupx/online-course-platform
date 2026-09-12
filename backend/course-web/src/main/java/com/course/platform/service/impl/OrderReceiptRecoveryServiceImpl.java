@@ -48,6 +48,54 @@ public class OrderReceiptRecoveryServiceImpl implements OrderReceiptRecoveryServ
     private static final Set<String> PERMISSIONS = Set.of("order:update", "api-provider:update");
     private record Context(CourseOrder order, CoursePlatform platform, ApiProvider provider, List<Long> aliases) {}
     private record Started(OrderReceiptRecovery recovery, Context context, boolean read) {}
+    private record CandidateRead(Context context, String snapshot) {}
+
+    @Override
+    public Candidates candidates(long orderId) {
+        long actor = actor();
+        if (orderId < 1) throw bad("订单编号格式不正确");
+        CandidateRead start = transaction(() -> {
+            if (actor() != actor) throw new BusinessException(ResultCode.FORBIDDEN);
+            Context context = context(orderId);
+            eligible(context);
+            return new CandidateRead(context, candidateSnapshot(context));
+        });
+        final List<String> ids;
+        try {
+            // This explicit read creates no recovery request or claim. No transaction spans HTTP.
+            Context context = start.context();
+            var found = gateway.findCandidates(runtime(context.provider()), context.platform(), context.order());
+            if (found == null || found.size() > com.course.platform.domain.orderreceipt.OrderReceiptTypes.MAX_CANDIDATES)
+                throw bad("编号查询数据不完整");
+            var unique = new LinkedHashSet<String>();
+            for (Verified candidate : found) {
+                if (candidate == null || candidate.receiptId() == null || !candidate.receiptId().matches("[A-Za-z0-9_-]{1,50}")
+                        || !unique.add(candidate.receiptId())) throw bad("编号查询数据不完整");
+            }
+            ids = List.copyOf(unique);
+        } catch (Exception e) {
+            throw bad("编号查找未完成或返回数据不完整，请重试；未关联编号，也未重新下单");
+        }
+        return transaction(() -> {
+            if (actor() != actor) throw new BusinessException(ResultCode.FORBIDDEN);
+            Context current;
+            try {
+                current = context(orderId);
+                eligible(current);
+            } catch (BusinessException e) {
+                throw conflict("订单或执行配置已变化，请重新查找编号");
+            }
+            if (!start.snapshot().equals(candidateSnapshot(current)))
+                throw conflict("订单或执行配置已变化，请重新查找编号");
+            // Only return currently unclaimed candidates; preview and confirm both recheck independently.
+            var available = ids.stream().filter(id -> available(current, id)).toList();
+            return new Candidates(orderId, available, ServiceTime.now(), "CURRENT_RESPONSE");
+        });
+    }
+
+    private String candidateSnapshot(Context c) {
+        return hash(orderHash(c.order()), platformHash(c.platform()), providerHash(c.provider()), source(c.provider()), c.aliases());
+    }
 
     @Override
     public List<View> recent(long orderId) {
@@ -206,10 +254,12 @@ public class OrderReceiptRecoveryServiceImpl implements OrderReceiptRecoveryServ
                 order.getCourseName(), c.platform().getDockParam());
         if (!matching.equals(List.of(order.getId()))) throw bad("存在多笔身份相同的订单，无法确认编号归属");
     }
+    private boolean available(Context c, String receipt) {
+        return recoveries.boundOrders(c.aliases(), receipt).isEmpty()
+                && recoveries.claimed(source(c.provider()), receipt, c.order().getId()) == 0;
+    }
     private void unclaimed(Context c, String receipt) {
-        if (!recoveries.boundOrders(c.aliases(), receipt).isEmpty()
-                || recoveries.claimed(source(c.provider()), receipt, c.order().getId()) != 0)
-            throw conflict("该执行编号或订单已有核对记录，不能重复关联");
+        if (!available(c, receipt)) throw conflict("该执行编号或订单已有核对记录，不能重复关联");
     }
     private boolean same(OrderReceiptRecovery row, Context c) {
         return row.getOrderHash().equals(orderHash(c.order())) && row.getPlatformHash().equals(platformHash(c.platform()))

@@ -16,7 +16,7 @@ export const externalEndpoints = [
     description: '查询密钥所属账户的余额。金额字段为 data.money。', fields: [],
     example: { money: 300.00 } },
   { id: 'getPlatforms', path: 'get-platforms', title: '获取平台列表', scope: 'platforms:read',
-    description: '返回已启用的平台。id 用于后续查课和下单；price 是基础价格，实际扣费按账户费率与定价规则计算。', fields: [],
+    description: '返回已启用的平台。id 用于后续查课和下单；price 是基础价格，实际扣费按账户等级与项目定价计算。', fields: [],
     example: [{ id: '1', name: '示例平台', description: '示例课程', price: 1.5 }] },
   { id: 'queryCourses', path: 'query-courses', title: '查课', scope: 'platforms:read',
     description: '查询学生课程；服务配置必须已验证并启用。安全校验不通过时会返回明确错误。',

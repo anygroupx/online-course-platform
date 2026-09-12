@@ -52,7 +52,7 @@
               (x) => !['CREATE', 'LOOKUP'].includes(x),
             )"
             :key="action"
-            >{{ isTotalDistanceService(item) && action === "SYNC" ? "核对提交状态" : actionNames[action] }}</span
+            >{{ isTotalDistanceService(item) && action === "SYNC" ? "核对提交状态" : serviceActionName(action, item) }}</span
           >
         </div>
         <footer>
@@ -91,7 +91,7 @@
 
     <el-drawer
       v-model="checkout"
-      :class="{ 'distance-checkout': isTotalDistanceService(selected) }"
+      :class="{ 'distance-checkout': isTotalDistanceService(selected), 'appui-checkout': selected?.providerType === 'appui', 'leidian-checkout': isLeidianService(selected), 'jingyu-checkout': isJingyuService(selected) }"
       destroy-on-close
       :title="selected ? (selected.displayName ?? selected.title) : '服务下单'"
       size="min(700px, 100vw)"
@@ -115,34 +115,28 @@
               :project="selected.project"
               :product-id="selected.id"
               :authorized="consent"
+              :active="checkout"
             />
             <div
               v-else-if="selected.providerType === 'jiguang'"
               class="form-grid"
             >
-              <el-form-item label="学校名称" class="full"
-                ><el-input
+              <el-form-item label="学校名称" class="full">
+                <el-input
                   v-model="fields.schoolName"
+                  aria-label="学校名称"
+                  class="school-name-input"
                   placeholder="填写学校全称"
                   maxlength="120"
-                /><el-button
-                  text
-                  @click="searchSchools"
-                  :disabled="!fields.schoolName"
-                  >查询学校</el-button
-                >
-                <div v-if="schoolResults.length" class="school-options">
-                  <el-button
-                    v-for="school in schoolResults"
-                    :key="school.id"
-                    text
-                    @click="
-                      fields.schoolName = school.name;
-                      schoolResults = [];
-                    "
-                    >{{ school.name }}</el-button
-                  >
-                </div>
+                />
+                <p class="school-note">可直接填写学校全称，也可在下方查询并选择。</p>
+                <ServiceSchoolSearch
+                  :key="selected.id"
+                  :product-id="selected.id"
+                  :active="checkout"
+                  :selected-name="fields.schoolName"
+                  @select="fields.schoolName = $event.name"
+                />
               </el-form-item>
               <el-form-item label="姓名"
                 ><el-input
@@ -156,6 +150,31 @@
                   placeholder="填写学号"
               /></el-form-item>
             </div>
+            <JingyuAccountFields v-else-if="isJingyuService(selected)" v-model="fields" :project="selected.project"
+              :lookup="lookupResult" :authorized="consent" :disabled="busy" :loading="lookupLoading"
+              @lookup="lookup" @invalidate="clearLookup" />
+            <template v-else-if="isLeidianService(selected)">
+              <el-form-item :label="selected.project === '4' ? '手机号' : '账号 UID'">
+                <el-input v-model="fields.account" :aria-label="selected.project === '4' ? '手机号' : '账号 UID'"
+                  autocomplete="off" :maxlength="selected.project === '4' ? 15 : 64"
+                  :inputmode="selected.project === '4' ? 'numeric' : 'text'" @input="clearLookup" />
+              </el-form-item>
+              <p class="school-note">{{ selected.project === "4"
+                ? "使用已授权的数字手机号，不需要查询跑区或填写密码。"
+                : "填写已授权账号的 UID，查询学校、跑区和可选时间里程；查询不会下单。" }}</p>
+              <template v-if="leidianNeedsRules(selected.project)">
+                <el-button type="primary" plain :loading="lookupLoading"
+                  :disabled="!consent || !!leidianAccountError(selected.project, fields.account)" @click="lookup">查询跑区与规则</el-button>
+                <div v-if="lookupResult" class="lookup-result">
+                  <p>学校：<strong>{{ lookupResult.suggested.schoolName }}</strong></p>
+                  <el-form-item label="跑区">
+                    <el-select v-model="fields.zoneId" aria-label="跑区" placeholder="请选择跑区，不会自动选择">
+                      <el-option v-for="choice in lookupResult.choices" :key="choice.value" :label="choice.label" :value="choice.value" />
+                    </el-select>
+                  </el-form-item>
+                </div>
+              </template>
+            </template>
             <template v-else>
               <FlashAccountFields
                 v-if="selected.providerType === 'flash'"
@@ -201,7 +220,7 @@
                     type="password"
                     show-password
                     autocomplete="new-password"
-                    maxlength="200"
+                    :maxlength="selected.providerType === 'appui' ? 128 : 200"
                     @input="clearLookup"
                 /></el-form-item>
                 <el-form-item
@@ -213,6 +232,10 @@
                     maxlength="120"
                     @input="clearLookup"
                 /></el-form-item>
+                <el-form-item v-if="selected.providerType === 'appui' && appuiNeedsSchool(selected.project)" label="学校" class="full">
+                  <ServiceSchoolSearch :key="selected.id" :product-id="selected.id"
+                    :active="checkout && consent" :max-page="150" id-mode="name" :selected-name="fields.schoolName" @select="selectAppuiSchool" />
+                </el-form-item>
               </div>
               <el-button
                 v-if="!usesServiceAccountSession(selected) && selected.capabilities.includes('LOOKUP')"
@@ -222,13 +245,15 @@
                   !consent ||
                   (selected.providerType === 'wuxin'
                     ? !fields.authCode
-                    : !fields.account || !fields.password)
+                    : !fields.account || !fields.password) ||
+                  (selected.providerType === 'appui' && appuiNeedsSchool(selected.project) && !fields.schoolName)
                 "
                 :loading="lookupLoading"
                 @click="lookup"
-                >查询账号与可用计划</el-button
+                >{{ selected.providerType === "appui" ? "查询账号" : "查询账号与可用计划" }}</el-button
               >
               <div v-if="lookupResult" class="lookup-result">
+                <p v-if="selected.providerType === 'appui'">姓名：<strong>{{ lookupResult.suggested?.studentName || "待核对" }}</strong></p>
                 <p v-if="!isHeishaFaceService(selected)">
                   {{ lookupResult?.notice }}
                 </p>
@@ -254,13 +279,14 @@
             <h3>{{ isTotalDistanceService(selected) ? "总公里计划" : "购买计划" }}</h3>
             <TotalDistancePlanFields v-if="isTotalDistanceService(selected)" v-model="fields" v-model:distance="distance" />
             <div v-else class="form-grid">
-              <el-form-item label="购买次数"
+              <el-form-item :label="selected.providerType === 'appui' ? '购买天数' : '购买次数'"
                 ><el-input-number
                   v-model="quantity"
                   :min="1"
-                  :max="365"
+                  :max="isLeidianService(selected) ? 100 : 365"
+                  :aria-label="selected.providerType === 'appui' ? '购买天数' : '购买次数'"
                   :precision="0" /></el-form-item
-              ><el-form-item label="每次距离（公里）"
+              ><el-form-item v-if="selected.providerType !== 'appui'" label="每次距离（公里）"
                 ><el-select
                   v-if="selected.providerType === 'jiguang'"
                   v-model="distance"
@@ -281,6 +307,7 @@
                 ><el-input
                   v-else
                   v-model="distance"
+                  aria-label="每次距离（公里）"
                   inputmode="decimal"
                   placeholder="按计划限制填写"
               /></el-form-item>
@@ -294,6 +321,24 @@
                   step="00:05"
               /></el-form-item>
             </div>
+            <template v-if="isJingyuService(selected)">
+              <p class="school-note">购买 1–365 次，每次 1–100 公里，最多一位小数。{{ selected.project === "keep"
+                ? "每次按距离计费，单次费用先保留两位小数，再计算总额。" : "每次费用与距离无关。" }}具体金额以确认页面为准。</p>
+              <JingyuTaskPlanFields :key="selected.id" v-model="jingyuTasks" :quantity="quantity" :disabled="busy" />
+              <p v-if="jingyuValidation" class="school-note" role="status">{{ jingyuValidation }}</p>
+              <el-alert v-if="checkoutPending" type="warning" :closable="false"
+                title="这笔提交仍待核对，请前往服务订单检查原编号，不要重新下单。" />
+            </template>
+            <template v-if="isLeidianService(selected)">
+              <p class="school-note">购买 1–100 次，每次 1–10 公里，最多一位小数。{{ selected.project === "4"
+                ? "按每次实际距离计费。" : "每次计费距离最多按 2 公里计算。" }}总额以确认页面的金额为准。</p>
+              <LeidianPlanFields v-model="fields" :disabled="busy" :rules="lookupResult?.runRules || []" @distance="distance = $event" />
+              <p v-if="leidianValidation" class="school-note" role="status">{{ leidianValidation }}</p>
+              <el-alert v-if="checkoutPending" type="warning" :closable="false"
+                title="这笔提交仍待核对，请前往服务订单检查原编号，不要重新下单。" />
+            </template>
+            <AppuiPlanFields v-if="selected.providerType === 'appui'" v-model="fields" />
+            <p v-if="selected.providerType === 'appui' && lookupResult && appuiPlanError(fields)" class="schedule-preview">{{ appuiPlanError(fields) }}</p>
             <WuxinPlanFields
               v-if="selected.providerType === 'wuxin'"
               v-model="fields"
@@ -370,7 +415,8 @@
     </el-drawer>
     <ServiceQuoteConfirm
       :quote="quote"
-      @close="quote = null"
+      :provider-type="selected?.providerType"
+      @close="closeQuote"
       @result="onResult"
     />
   </div>
@@ -383,24 +429,33 @@ import { ArrowRight } from "@element-plus/icons-vue";
 import {
   listServiceProducts,
   lookupServiceAccount,
-  findServiceSchools,
   previewServiceOrder,
 } from "@/api/serviceCommerce";
 import {
   serviceNames,
-  actionNames,
+  serviceActionName,
   fieldNames,
   moneyText,
   buildTaskTimes,
   serviceFormFields,
   isHeishaFaceService,
   usesServiceAccountSession,
+  knownOutcome,
 } from "@/utils/serviceCommerce";
+import ServiceSchoolSearch from "@/components/ServiceSchoolSearch.vue";
 import InternshipPlanFields from "@/components/InternshipPlanFields.vue";
 import FlashAccountFields from "@/components/FlashAccountFields.vue";
 import HeishaFaceFields from "@/components/HeishaFaceFields.vue";
 import { newInternshipSchedule } from "@/utils/internshipServices";
 import WuxinPlanFields from "@/components/WuxinPlanFields.vue";
+import AppuiPlanFields from "@/components/AppuiPlanFields.vue";
+import LeidianPlanFields from "@/components/LeidianPlanFields.vue";
+import JingyuAccountFields from "@/components/JingyuAccountFields.vue";
+import JingyuTaskPlanFields from "@/components/JingyuTaskPlanFields.vue";
+import { isJingyuService, jingyuAccountError, jingyuLookupFields, jingyuLookupValid, jingyuOrderError } from "@/utils/jingyuServices";
+import { isLeidianService, leidianNeedsRules, leidianAccountError, leidianLookupValid, leidianOrderError } from "@/utils/leidianServices";
+import { authSessionScope } from "@/utils/authSession";
+import { appuiNeedsSchool, appuiPlanError } from "@/utils/appuiServices";
 import ServiceQuoteConfirm from "@/components/ServiceQuoteConfirm.vue";
 import TotalDistancePlanFields from "@/components/TotalDistancePlanFields.vue";
 import { isTotalDistanceService, distanceOrderValid } from "@/utils/totalDistanceServices";
@@ -419,18 +474,21 @@ const checkout = ref(false),
   quantity = ref(10),
   distance = ref("2"),
   consent = ref(false);
-const accountSessionId = ref(null);
+const accountSessionId = ref(null), checkoutPending = ref(false);
+const jingyuTasks = ref([]);
+const jingyuValidation = computed(() => isJingyuService(selected.value)
+  ? jingyuOrderError(selected.value, fields.value, quantity.value, distance.value, lookupResult.value, jingyuTasks.value) : "");
+const leidianValidation = computed(() => isLeidianService(selected.value)
+  ? leidianOrderError(selected.value, fields.value, quantity.value, distance.value, lookupResult.value) : "");
 const lookupResult = ref(null),
   lookupLoading = ref(false),
   busy = ref(false),
-  quote = ref(null),
-  schoolResults = ref([]);
+  quote = ref(null);
 const startDate = ref(""),
   runTime = ref("08:00"),
   weekdays = ref([0, 1, 2, 3, 4, 5, 6]),
   repair = ref(false);
 let selectionVersion = 0;
-const schoolRequest = latestRequest();
 const catalogRequest = latestRequest();
 const visibleProducts = computed(() =>
   products.value.filter(
@@ -451,21 +509,30 @@ const taskTimes = computed(() =>
 const canPreview = computed(
   () =>
     consent.value &&
+    !checkoutPending.value &&
     !lookupLoading.value &&
     selected.value &&
-    (isTotalDistanceService(selected.value)
+    (isJingyuService(selected.value)
+      ? !jingyuValidation.value
+      : isLeidianService(selected.value)
+      ? !leidianValidation.value
+      : isTotalDistanceService(selected.value)
       ? distanceOrderValid(distance.value, fields.value)
+      : selected.value.providerType === "appui"
+      ? !!lookupResult.value && !appuiPlanError(fields.value) &&
+        Number.isInteger(quantity.value) && quantity.value >= 1 && quantity.value <= 365
       : selected.value.providerType === "sxdk_tw"
       ? fields.value.account &&
         fields.value.password &&
         fields.value.name &&
         fields.value.address &&
+        (!["xxy", "hzj"].includes(selected.value.project) || fields.value.schoolId) &&
         internshipSchedule.value.endDate &&
         internshipSchedule.value.weekdays.length
       : selected.value.providerType === "jiguang"
-        ? fields.value.schoolName &&
-          fields.value.studentName &&
-          fields.value.studentAccount
+        ? fields.value.schoolName?.trim() &&
+          fields.value.studentName?.trim() &&
+          fields.value.studentAccount?.trim()
         : !!lookupResult.value) &&
     (!usesServiceAccountSession(selected.value) || !!accountSessionId.value) &&
     (selected.value.providerType !== "flash" ||
@@ -511,9 +578,10 @@ function accountVerified(value) {
 }
 function open(item) {
   accountSessionId.value = null;
+  checkoutPending.value = false;
+  jingyuTasks.value = [];
   internshipSchedule.value = newInternshipSchedule();
   selectionVersion++;
-  schoolRequest.invalidate();
   lookupLoading.value = false;
   startDate.value = "";
   runTime.value = "08:00";
@@ -537,73 +605,91 @@ function open(item) {
   consent.value = false;
   quantity.value = isTotalDistanceService(item) ? 1 : 10;
   distance.value = isTotalDistanceService(item) ? "" : "2";
+  if (isJingyuService(item)) {
+    fields.value = item.project === "keep" ? { account: "", password: "", zoneId: "", minMinute: "", maxMinute: "" }
+      : { account: "", zoneId: "", runType: "" };
+  }
+  if (isLeidianService(item)) {
+    fields.value = { account: "", startDate: "", startTime: "", endTime: "", weekdays: "1,2,3,4,5" };
+  }
+  if (item.providerType === "appui") {
+    Object.assign(fields.value, { address: "", startTime: "07:30", endTime: "18:10", reports: "1" });
+    distance.value = "";
+  }
   if (isTotalDistanceService(item)) {
     fields.value.startTime = "09:00";
     fields.value.endTime = "21:00";
   }
   quote.value = null;
-  schoolResults.value = [];
   repair.value = false;
   checkout.value = true;
+}
+function selectAppuiSchool(school) {
+  fields.value.schoolName = school.name;
+  clearLookup();
 }
 function clearLookup() {
   selectionVersion++;
   lookupLoading.value = false;
   lookupResult.value = null;
+  if (isLeidianService(selected.value) || isJingyuService(selected.value)) delete fields.value.zoneId;
 }
 function beforeClose(done) {
   if (busy.value || lookupLoading.value || quote.value) return;
   selectionVersion++;
   fields.value.password = "";
   fields.value.authCode = "";
+  if (isLeidianService(selected.value) || isJingyuService(selected.value)) fields.value = {};
+  jingyuTasks.value = [];
   accountSessionId.value = null;
   lookupResult.value = null;
   done();
 }
 async function lookup() {
-  if (lookupLoading.value || !selected.value) return;
-  const version = ++selectionVersion;
+  if (lookupLoading.value || busy.value || !checkout.value || !consent.value || !selected.value) return;
+  const item = selected.value, leidian = isLeidianService(item), jingyu = isJingyuService(item);
+  if (jingyu && jingyuAccountError(item.project, fields.value)) return;
+  if (leidian && (!leidianNeedsRules(item.project) || leidianAccountError(item.project, fields.value.account))) return;
+  clearLookup();
+  const version = selectionVersion;
   lookupLoading.value = true;
   try {
-    const r = await lookupServiceAccount(
-      selected.value.id,
-      serviceFormFields(selected.value.providerType, fields.value),
-    );
-    if (version !== selectionVersion) return;
+    const r = await lookupServiceAccount(item.id, jingyu ? jingyuLookupFields(item.project, fields.value) : leidian
+      ? { account: fields.value.account } : serviceFormFields(item.providerType, fields.value));
+    if (version !== selectionVersion || !checkout.value || !consent.value) return;
+    if (leidian && !leidianLookupValid(r)) {
+      ElMessage.warning("跑区与规则信息不完整，请重新查询。");
+      return;
+    }
+    if (jingyu && !jingyuLookupValid(item.project, r)) {
+      ElMessage.warning("账号或跑区信息不完整，请重新查询。");
+      return;
+    }
     lookupResult.value = r;
-    Object.assign(fields.value, r.suggested);
+    if (!leidian && !jingyu) Object.assign(fields.value, r.suggested);
   } catch {
     if (version === selectionVersion) lookupResult.value = null;
   } finally {
     if (version === selectionVersion) lookupLoading.value = false;
   }
 }
-async function searchSchools() {
-  const version = selectionVersion;
-  const request = schoolRequest.begin();
-  try {
-    const r = await findServiceSchools(
-      selected.value.id,
-      {
-        page: 1,
-        keyword: fields.value.schoolName,
-      },
-      request.signal,
-    );
-    if (version === selectionVersion && request.current())
-      schoolResults.value = r.items;
-  } catch {
-    if (request.current()) schoolResults.value = [];
-  }
-}
 async function preview() {
-  if (!canPreview.value || busy.value) return;
+  if (!canPreview.value || busy.value || quote.value) return;
+  if (isJingyuService(selected.value)) {
+    const error = jingyuOrderError(selected.value, fields.value, quantity.value, distance.value, lookupResult.value, jingyuTasks.value);
+    if (error) { ElMessage.warning(error); return; }
+  }
+  if (isLeidianService(selected.value)) {
+    const error = leidianOrderError(selected.value, fields.value, quantity.value, distance.value, lookupResult.value);
+    if (error) { ElMessage.warning(error); return; }
+  }
+  const version = selectionVersion;
   busy.value = true;
   try {
-    quote.value = await previewServiceOrder(selected.value.id, {
+    const result = await previewServiceOrder(selected.value.id, {
       quantity: isTotalDistanceService(selected.value) ? 1 : selected.value.providerType === "sxdk_tw" ? 0 : quantity.value,
       distance:
-        selected.value.providerType === "sxdk_tw" ? null : distance.value,
+        ["sxdk_tw", "appui"].includes(selected.value.providerType) ? null : distance.value,
       schedule:
         selected.value.providerType === "sxdk_tw"
           ? internshipSchedule.value
@@ -611,20 +697,26 @@ async function preview() {
       fields: serviceFormFields(selected.value.providerType, {
         ...fields.value,
         repair: String(repair.value),
-      }),
-      taskTimes: selected.value.providerType === "flash" ? taskTimes.value : [],
+      }, selected.value.project),
+      taskTimes: isJingyuService(selected.value) ? [...jingyuTasks.value] : selected.value.providerType === "flash" ? taskTimes.value : [],
       authorizedAccount: consent.value,
       accountSessionId: usesServiceAccountSession(selected.value)
         ? accountSessionId.value
         : null,
     });
+    if (version === selectionVersion && checkout.value && consent.value) quote.value = result;
   } catch {
     /* Request layer displays safe server validation errors. */
   } finally {
     busy.value = false;
   }
 }
+function closeQuote(context) {
+  if ((isLeidianService(selected.value) || isJingyuService(selected.value)) && context?.pending) checkoutPending.value = true;
+  quote.value = null;
+}
 function onResult(result) {
+  if (isLeidianService(selected.value) || isJingyuService(selected.value)) checkoutPending.value = !knownOutcome(result.state);
   if (result.state === "SUCCEEDED") {
     fields.value.password = "";
     fields.value.authCode = "";
@@ -637,20 +729,42 @@ function onResult(result) {
       "订单已保存，结果待核对。请勿重复下单，可在服务订单中继续查看。",
     );
 }
+watch(consent, (value) => { if (!value && (isLeidianService(selected.value) || isJingyuService(selected.value))) clearLookup(); }, { flush: "sync" });
+watch(authSessionScope, () => {
+  selectionVersion++; checkout.value = false; selected.value = null; jingyuTasks.value = [];
+  fields.value = {}; lookupResult.value = null; accountSessionId.value = null; quote.value = null;
+  lookupLoading.value = false; busy.value = false;
+}, { flush: "sync" });
 watch(filter, () => {
   page.value = 1;
   load();
 });
 onBeforeUnmount(() => {
   selectionVersion++;
-  schoolRequest.invalidate();
   catalogRequest.invalidate();
-  fields.value.password = "";
-  fields.value.authCode = "";
+  jingyuTasks.value = [];
+  fields.value = {};
+  lookupResult.value = null;
+  accountSessionId.value = null;
 });
 load();
 </script>
 <style scoped>
+:global(.jingyu-checkout .el-input__wrapper), :global(.jingyu-checkout .el-select__wrapper),
+:global(.jingyu-checkout .el-button), :global(.jingyu-checkout .el-checkbox), :global(.jingyu-checkout .el-radio) { min-height: 44px; box-sizing: border-box; }
+:global(.jingyu-checkout .el-checkbox__label) { white-space: normal; line-height: 1.7; }
+:global(.jingyu-checkout .el-input-number) { min-height: 44px; width: 100%; }
+:global(.jingyu-checkout .el-input-number__decrease), :global(.jingyu-checkout .el-input-number__increase) { min-width: 44px; }
+:global(.jingyu-checkout .el-input__inner) { min-width: 0; }
+:global(.leidian-checkout .el-input__wrapper), :global(.leidian-checkout .el-select__wrapper),
+:global(.leidian-checkout .el-button), :global(.leidian-checkout .el-checkbox) { min-height: 44px; box-sizing: border-box; }
+:global(.leidian-checkout .el-checkbox__label) { white-space: normal; line-height: 1.6; }
+:global(.leidian-checkout .el-input-number) { min-height: 44px; width: 100%; }
+:global(.leidian-checkout .el-input-number__decrease), :global(.leidian-checkout .el-input-number__increase) { min-width: 44px; }
+:global(.appui-checkout .el-input__wrapper),
+:global(.appui-checkout .el-button),
+:global(.appui-checkout .el-checkbox) { min-height: 44px; box-sizing: border-box; }
+:global(.appui-checkout .el-checkbox__label) { white-space: normal; line-height: 1.6; }
 :global(.distance-checkout .el-input__wrapper),
 :global(.distance-checkout .el-button),
 :global(.distance-checkout .el-checkbox) { min-height: 44px; box-sizing: border-box; }
@@ -820,9 +934,12 @@ load();
   line-height: 1.8;
   color: var(--el-text-color-secondary);
 }
-.school-options {
-  display: grid;
-  width: 100%;
+.school-name-input :deep(.el-input__wrapper) { min-height: 44px; box-sizing: border-box; }
+.school-note {
+  margin: 8px 0 12px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--el-text-color-secondary);
 }
 .checkout-footer {
   display: flex;

@@ -2,6 +2,7 @@ package com.course.platform.application.service.servicecommerce;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.course.platform.domain.servicecommerce.ServiceCommerceTypes.*;
+import com.course.platform.domain.servicecommerce.ServiceOrderFilter;
 import com.course.platform.domain.vo.plugin.PluginSchoolPage;
 
 import java.util.List;
@@ -32,6 +33,8 @@ public interface ServiceCommerceService {
 
     IPage<OrderView> orders(int page, int size, boolean admin);
 
+    IPage<OrderView> orders(int page, int size, boolean admin, ServiceOrderFilter filter);
+
     OrderView order(String id);
 
     OrderView sync(String id);
@@ -39,6 +42,8 @@ public interface ServiceCommerceService {
     List<EventView> events(String id);
 
     RunLogPage logs(String id, int page);
+
+    OrderText scoreInfo(String id);
 
     OrderAuditView audit(String orderId);
 

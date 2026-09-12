@@ -39,6 +39,16 @@ export function getOrderDetail(orderNo) {
 }
 
 /**
+ * 获取订单执行记录
+ */
+export function getOrderProgressLogs(orderNo) {
+  return request({
+    url: `/orders/${orderNo}/progress-logs`,
+    method: "get",
+  });
+}
+
+/**
  * 取消订单
  */
 export function cancelOrder(orderNo) {

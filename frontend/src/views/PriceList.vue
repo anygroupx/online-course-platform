@@ -1,139 +1,172 @@
 <template>
-  <div class="price-list-page">
-    <el-card class="price-explanation-card">
-      <div class="price-info">
-        <el-icon class="info-icon"><InfoFilled /></el-icon>
-        <div class="info-text">
-          <h3>价格计算说明</h3>
-          <p>我的实际价格 = 平台基础价格 × 我的费率（{{ userRate }}）</p>
+  <div class="project-management-page">
+    <el-card class="overview-card">
+      <div class="overview-content">
+        <div>
+          <div class="overview-title">项目管理</div>
+          <p>查看当前账户可用的项目、实际价格和项目说明。</p>
         </div>
+        <el-tag :type="userLevelType" size="large" effect="dark">
+          当前等级：{{ userLevelLabel }}
+        </el-tag>
       </div>
     </el-card>
 
     <el-card class="table-card">
       <template #header>
         <div class="card-header">
-          <span>价格列表</span>
-          <el-tag type="success">我的费率：{{ userRate }}</el-tag>
+          <div>
+            <div class="card-title">可用项目</div>
+            <div class="result-count">共 {{ filteredTableData.length }} 个项目</div>
+          </div>
+          <el-input
+            v-model="searchKeyword"
+            class="project-search"
+            clearable
+            :prefix-icon="Search"
+            placeholder="搜索项目名称、分类或说明"
+            aria-label="搜索项目"
+          />
         </div>
       </template>
 
-      <el-table :data="tableData" style="width: 100%" stripe>
-        <el-table-column prop="id" label="ID" width="80" align="center" />
-        <el-table-column prop="name" label="平台名称" width="150">
+      <el-table
+        v-loading="loading"
+        :data="filteredTableData"
+        style="width: 100%"
+        stripe
+      >
+        <el-table-column label="项目名称" min-width="190">
           <template #default="scope">
-            <div class="platform-name">
+            <div class="project-name">
               <el-icon><Reading /></el-icon>
-              <span>{{ scope.row.displayName ?? scope.row.name }}</span>
+              <span>{{ projectName(scope.row) }}</span>
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="basePrice" label="基础价格" width="100" align="center">
+        <el-table-column label="分类" min-width="130">
           <template #default="scope">
-            <el-tag type="warning">{{ scope.row.basePrice }}元</el-tag>
+            {{ scope.row.categoryName || "未分类" }}
           </template>
         </el-table-column>
-        <el-table-column label="不同费率价格对比" min-width="400">
+        <el-table-column label="我的价格" width="150" align="center">
           <template #default="scope">
-            <div class="price-compare">
-              <div class="price-item" v-for="rate in [0.2, 0.3, 0.4, 0.5, 0.6]" :key="rate">
-                <span class="rate-label">{{ rate }}倍</span>
-                <span class="rate-price">{{ calculatePrice(scope.row.basePrice, rate) }}元</span>
-              </div>
-            </div>
+            <span class="my-price">¥{{ calculateUserPrice(scope.row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="我的价格" width="120" align="center" fixed="right">
+        <el-table-column label="项目说明" min-width="280" show-overflow-tooltip>
           <template #default="scope">
-            <div class="my-price">
-              <el-tag type="danger" size="large" effect="dark">
-                {{ calculatePrice(scope.row.basePrice, userRate) }}元
-              </el-tag>
-            </div>
+            <span class="description-text">{{ scope.row.description || "暂无说明" }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100" align="center">
+        <el-table-column label="状态" width="100" align="center">
           <template #default="scope">
             <el-tag :type="scope.row.status === 1 ? 'success' : 'info'">
-              {{ scope.row.status === 1 ? '上架' : '下架' }}
+              {{ scope.row.status === 1 ? "可用" : "停用" }}
             </el-tag>
           </template>
         </el-table-column>
+        <template #empty>
+          <el-empty
+            :description="searchKeyword.trim() ? '没有找到匹配的项目' : '暂无可用项目'"
+          />
+        </template>
       </el-table>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { InfoFilled, Reading } from '@element-plus/icons-vue'
-import { getCoursePlatforms } from '@/api/course'
-import { getUserInfo } from '@/api/user'
+import { computed, onMounted, ref } from "vue";
+import { Reading, Search } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import { getCoursePlatforms } from "@/api/course";
+import { getUserInfo } from "@/api/user";
+import {
+  getUserLevelLabel,
+  getUserLevelTagType,
+} from "@/utils/userLevel";
+import {
+  formatUserProjectPrice,
+  getProjectDisplayName,
+  matchesProjectSearch,
+} from "@/utils/projectPricing";
 
-const tableData = ref([])
-const userRate = ref(1.0)
+const tableData = ref([]);
+const userRate = ref(1);
+const searchKeyword = ref("");
+const loading = ref(false);
+
+const userLevelLabel = computed(() => getUserLevelLabel(userRate.value));
+const userLevelType = computed(() => getUserLevelTagType(userRate.value));
+
+const projectName = getProjectDisplayName;
+
+const filteredTableData = computed(() =>
+  tableData.value.filter((platform) =>
+    matchesProjectSearch(platform, searchKeyword.value)
+  )
+);
+
+const calculateUserPrice = (platform) =>
+  formatUserProjectPrice(platform, userRate.value);
 
 const loadData = async () => {
+  loading.value = true;
   try {
-    // 获取用户费率
-    const userRes = await getUserInfo()
-    if (userRes.code === 1) {
-      userRate.value = userRes.data.rate
-    }
+    const [userRes, platformRes] = await Promise.all([
+      getUserInfo(),
+      getCoursePlatforms(),
+    ]);
 
-    // 获取课程平台列表
-    const platformRes = await getCoursePlatforms()
+    if (userRes.code === 1) {
+      userRate.value = Number(userRes.data?.rate || 1);
+    }
     if (platformRes.code === 1) {
-      tableData.value = platformRes.data
+      tableData.value = Array.isArray(platformRes.data) ? platformRes.data : [];
     }
   } catch (error) {
-    console.error('加载数据失败：', error)
+    console.error("加载项目失败：", error);
+    ElMessage.error("加载项目失败，请稍后重试");
+  } finally {
+    loading.value = false;
   }
-}
+};
 
-const calculatePrice = (basePrice, rate) => {
-  return (basePrice * rate).toFixed(2)
-}
-
-onMounted(() => {
-  loadData()
-})
+onMounted(loadData);
 </script>
 
 <style scoped>
-.price-list-page {
+.project-management-page {
   padding: 20px;
 }
 
-.price-explanation-card {
+.overview-card {
   margin-bottom: 20px;
   border: none;
   color: var(--text-on-brand);
   background: var(--primary-gradient) !important;
 }
 
-.price-explanation-card :deep(.el-card__body) {
+.overview-card :deep(.el-card__body) {
   color: inherit;
 }
 
-.price-info {
+.overview-content {
   display: flex;
   align-items: center;
-  padding: 10px;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 8px;
 }
 
-.info-icon {
-  color: inherit;
-  font-size: 40px;
-  margin-right: 20px;
+.overview-title {
+  margin-bottom: 8px;
+  font-size: 22px;
+  font-weight: 700;
 }
 
-.info-text h3 {
-  margin: 0 0 8px 0;
-  font-size: 18px;
-}
-
-.info-text p {
+.overview-content p {
   margin: 0;
   font-size: 14px;
   opacity: 0.9;
@@ -145,70 +178,65 @@ onMounted(() => {
 
 .card-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  font-size: 16px;
-  font-weight: bold;
+  justify-content: space-between;
+  gap: 20px;
 }
 
-.platform-name {
+.card-title {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.result-count {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.project-search {
+  width: min(380px, 100%);
+}
+
+.project-name {
   display: flex;
   align-items: center;
   gap: 8px;
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
-.price-compare {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.price-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 8px 12px;
-  background: var(--bg-body);
-  border-radius: 6px;
-  transition: all 0.3s;
-}
-
-.price-item:hover {
-  background: var(--bg-card-hover);
-  transform: translateY(-2px);
-}
-
-.rate-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 4px;
-}
-
-.rate-price {
-  font-size: 14px;
-  font-weight: bold;
+.project-name .el-icon {
   color: var(--brand-primary);
 }
 
 .my-price {
-  animation: pulse 2s infinite;
+  color: var(--color-danger);
+  font-size: 16px;
+  font-weight: 700;
 }
 
-@keyframes pulse {
-  0%, 100% {
-    transform: scale(1);
+.description-text {
+  color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+  .project-management-page {
+    padding: 12px;
   }
-  50% {
-    transform: scale(1.05);
+
+  .overview-content,
+  .card-header {
+    align-items: stretch;
+    flex-direction: column;
   }
-}
 
-/* Dark Mode Overrides */
-html.dark .price-item {
-  background: rgba(255, 255, 255, 0.05);
-}
+  .overview-content .el-tag {
+    align-self: flex-start;
+  }
 
-html.dark .price-item:hover {
-  background: rgba(255, 255, 255, 0.1);
+  .project-search {
+    width: 100%;
+  }
 }
 </style>

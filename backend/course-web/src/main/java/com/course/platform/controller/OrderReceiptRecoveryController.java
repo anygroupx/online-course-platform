@@ -14,6 +14,10 @@ import org.springframework.web.bind.annotation.*;
 @PreAuthorize("hasAuthority('order:update') and hasAuthority('api-provider:update')")
 public class OrderReceiptRecoveryController {
     private final OrderReceiptRecoveryService recovery;
+    @PostMapping("/candidates")
+    public ResponseEntity<?> candidates(@PathVariable long orderId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Result.success(recovery.candidates(orderId)));
+    }
     @GetMapping
     public ResponseEntity<?> recent(@PathVariable long orderId) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(Result.success(recovery.recent(orderId)));

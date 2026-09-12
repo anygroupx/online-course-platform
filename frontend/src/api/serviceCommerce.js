@@ -26,8 +26,8 @@ export const confirmServiceOperation = (operationId) =>
   write(`/service-order-operations/${id(operationId)}/confirm`, {});
 export const getServiceOperation = (operationId) =>
   read(`/service-order-operations/${id(operationId)}`);
-export const listServiceOrders = (params, admin = false) =>
-  read(admin ? "/admin/service-orders" : "/service-orders", params);
+export const listServiceOrders = (params, admin = false, signal) =>
+  read(admin ? "/admin/service-orders" : "/service-orders", params, signal);
 export const syncServiceOrder = (orderId) =>
   write(`/service-orders/${id(orderId)}/sync`, {});
 export const getServiceOrderEvents = (orderId) =>
@@ -38,8 +38,11 @@ export const resolveServiceOperation = (operationId, data) =>
 export const getAdminServiceOperation = (operationId) =>
   read(`/admin/service-order-operations/${id(operationId)}`);
 
-export const getServiceRunLogs = (orderId, page) =>
-  read(`/service-orders/${id(orderId)}/logs`, { page });
+export const getServiceRunLogs = (orderId, page, signal) =>
+  read(`/service-orders/${id(orderId)}/logs`, { page }, signal);
+
+export const getServiceScoreInfo = (orderId, signal) =>
+  read(`/service-orders/${id(orderId)}/score-info`, undefined, signal);
 
 export const getServiceOrderOptions = (orderId) =>
   read(`/service-orders/${id(orderId)}/options`);

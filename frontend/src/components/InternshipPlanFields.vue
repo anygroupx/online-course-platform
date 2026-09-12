@@ -26,50 +26,23 @@
           maxlength="512"
           @update:model-value="set('password', $event)"
       /></el-form-item>
-      <el-form-item v-if="hasSchools && !editing" label="所属学校" class="full"
-        ><div class="school-search">
-          <el-input
-            v-model="schoolKeyword"
-            placeholder="输入学校名称后查询"
-            maxlength="80"
-            @keyup.enter="searchSchools"
-          /><el-button
-            :disabled="!authorized"
-            :loading="schoolLoading"
-            @click="searchSchools"
-            >查询学校</el-button
-          >
+      <el-form-item v-if="hasSchools && !editing" label="所属学校" class="full">
+        <div class="selected-school" role="status" aria-label="已选学校">
+          <span>{{ modelValue.schoolId ? (modelValue.school || modelValue.schoolName) : (project === 'xxt' ? '手机号登录可不选学校' : '请查询并选择学校') }}</span>
+          <el-button v-if="modelValue.schoolId" text :disabled="!authorized" @click="selectSchool(null)">清除学校</el-button>
         </div>
-        <el-select
-          :model-value="modelValue.schoolId"
-          :placeholder="
-            project === 'xxt' ? '手机号登录可不选学校' : '请查询并选择学校'
-          "
-          clearable
-          @update:model-value="selectSchool"
-          ><el-option
-            v-for="school in schoolItems"
-            :key="school.id"
-            :value="school.id"
-            :label="school.name"
-        /></el-select>
-        <div v-if="schoolPage > 1 || schoolHasMore" class="school-page">
-          <el-button
-            text
-            :disabled="schoolLoading || schoolPage <= 1"
-            @click="searchSchools(-1)"
-            >上一页</el-button
-          ><el-button
-            text
-            :disabled="schoolLoading || !schoolHasMore"
-            @click="searchSchools(1)"
-            >下一页</el-button
-          >
-        </div>
+        <ServiceSchoolSearch
+          :key="`${productId}:${project}`"
+          :product-id="productId"
+          :active="active && authorized"
+          :selected-id="modelValue.schoolId || ''"
+          :max-page="100"
+          @select="selectSchool"
+        />
       </el-form-item>
       <el-form-item v-if="!editing" class="full"
         ><el-button
-          :disabled="!authorized || !modelValue.account || !modelValue.password"
+          :disabled="!authorized || !modelValue.account || !modelValue.password || (schoolRequired && !modelValue.schoolId)"
           :loading="lookupLoading"
           @click="lookup"
           >读取本人实习资料</el-button
@@ -296,17 +269,14 @@
 </template>
 <script setup>
 import { computed, ref, watch, onBeforeUnmount } from "vue";
-import {
-  findServiceSchools,
-  lookupServiceAccount,
-} from "@/api/serviceCommerce";
+import { lookupServiceAccount } from "@/api/serviceCommerce";
+import ServiceSchoolSearch from "@/components/ServiceSchoolSearch.vue";
 import {
   internshipProjects,
   internshipAdviceItems,
   applyInternshipAdvice,
   internshipFields,
 } from "@/utils/internshipServices";
-import { latestRequest } from "@/utils/pluginIntegrations";
 import { internshipEndDateDisabled } from "@/utils/internshipServices";
 const props = defineProps({
   modelValue: { type: Object, required: true },
@@ -314,12 +284,14 @@ const props = defineProps({
   project: { type: String, required: true },
   productId: [Number, String],
   authorized: Boolean,
+  active: { type: Boolean, default: true },
   editing: Boolean,
 });
 const emit = defineEmits(["update:modelValue", "update:schedule"]);
 const hasSchools = computed(() =>
   ["xxy", "xxt", "hzj"].includes(props.project),
 );
+const schoolRequired = computed(() => ["xxy", "hzj"].includes(props.project));
 const companyAddressField = computed(() =>
   props.project === "qzt"
     ? "officialAddress"
@@ -337,12 +309,7 @@ const extraFields = {
   reason: "申请原因",
   desctext: "说明",
 };
-const schoolKeyword = ref(""),
-  schoolItems = ref([]),
-  schoolLoading = ref(false),
-  schoolPage = ref(1),
-  schoolHasMore = ref(false),
-  lookupLoading = ref(false),
+const lookupLoading = ref(false),
   lookupNotice = ref("");
 const advice = ref(null);
 const adviceItems = computed(() => internshipAdviceItems(advice.value));
@@ -352,7 +319,6 @@ function applyAdvice() {
   advice.value = null;
   lookupNotice.value = "已采用有效建议；请检查计划并重新预览费用，不代表已下单。";
 }
-const schoolRequest = latestRequest();
 let lookupVersion = 0;
 function set(key, value) {
   lookupVersion++;
@@ -375,31 +341,10 @@ function wordLimit(type, key, value) {
     },
   });
 }
-async function searchSchools(delta = 0) {
-  if (!props.authorized || !props.productId) return;
-  const ticket = schoolRequest.begin(),
-    page =
-      typeof delta === "number" && delta !== 0 ? schoolPage.value + delta : 1;
-  schoolLoading.value = true;
-  try {
-    const r = await findServiceSchools(
-      props.productId,
-      { page, keyword: schoolKeyword.value },
-      ticket.signal,
-    );
-    if (!ticket.current()) return;
-    schoolItems.value = r.items;
-    schoolPage.value = r.page;
-    schoolHasMore.value = r.hasMore;
-  } catch {
-    if (ticket.current()) schoolItems.value = [];
-  } finally {
-    if (ticket.current()) schoolLoading.value = false;
-  }
-}
-function selectSchool(id) {
+function selectSchool(school) {
+  if (!props.authorized || !props.active) return;
   lookupLoading.value = false;
-  const school = schoolItems.value.find((s) => s.id === id);
+  lookupNotice.value = "";
   lookupVersion++;
   advice.value = null;
   emit("update:modelValue", {
@@ -410,7 +355,7 @@ function selectSchool(id) {
   });
 }
 async function lookup() {
-  if (lookupLoading.value || !props.authorized) return;
+  if (lookupLoading.value || !props.authorized || !props.active || (schoolRequired.value && !props.modelValue.schoolId)) return;
   const version = ++lookupVersion;
   lookupLoading.value = true;
   try {
@@ -431,15 +376,12 @@ watch(
   () => [props.project, props.productId],
   () => {
     lookupVersion++;
-    schoolRequest.invalidate();
-    schoolItems.value = [];
-    schoolKeyword.value = "";
     lookupNotice.value = "";
   advice.value = null;
   },
 );
 watch(
-  () => [props.schedule.runMode, props.authorized],
+  () => [props.schedule.runMode, props.authorized, props.active],
   () => {
     lookupVersion++;
     lookupLoading.value = false;
@@ -449,7 +391,6 @@ watch(
 );
 onBeforeUnmount(() => {
   lookupVersion++;
-  schoolRequest.invalidate();
 });
 </script>
 <style scoped>
@@ -487,12 +428,20 @@ onBeforeUnmount(() => {
 .internship-grid :deep(.el-date-editor) {
   width: 100%;
 }
-.school-search {
+.selected-school {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   width: 100%;
-  gap: 8px;
+  min-width: 0;
   margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
 }
+.selected-school span { overflow-wrap: anywhere; min-width: 0; }
+.selected-school :deep(.el-button) { min-height: 44px; }
 .lookup-note {
   margin-left: 10px;
 }
@@ -536,13 +485,6 @@ onBeforeUnmount(() => {
   }
   .internship-heading {
     flex-wrap: wrap;
-  }
-  .school-search {
-    flex-wrap: wrap;
-  }
-  .school-search .el-input {
-    min-width: 0;
-    flex: 1;
   }
 }
 </style>

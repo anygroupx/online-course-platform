@@ -17,8 +17,9 @@ const server = await createTestServer({ logLevel: 'error', plugins: [{ name: 'or
 const note = '已核实原始回执和原执行账户，确认完整订单归属'
 const receipt = 'receipt-9'
 const order = { id: 1, orderNo: 'ORD-RECEIPT-1', platformName: '示例课程服务', studentAccount: 'student', courseName: '示例课程 <img src=x>', amount: '2.50', progress: '20%', orderStatus: 4, dockStatus: 2, retryCount: 0, isSelfOperated: 0, createTime: '2026-09-10T10:00:00' }
-const records = new Map(), reads = [], writes = [], unexpected = [], errors = []
+const records = new Map(), reads = [], candidateReads = [], writes = [], unexpected = [], errors = []
 let browser, mode = '', historyMode = '', held = false, entered, release
+let candidateMode = '', candidateHeld = false, candidateEntered, candidateRelease, candidateFinished
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r }); return { promise, resolve } }
 const basePath = '/admin/orders/1/receipt-recoveries'
 const output = new URL('../../.cache/native-service-ui/', import.meta.url).pathname
@@ -35,9 +36,29 @@ try {
     // Actual AdminOrders initialization is explicitly allowlisted; query-all POST is read-only.
     if (path === '/admin/orders/query-all' && method === 'POST') return ok({ records: [order], total: 1, current: 1, size: 10 })
     if (method === 'GET' && path.startsWith('/admin/variables/type/')) return ok([])
-    if (method === 'GET' && ['/admin/orders/agent-accounts', '/courses', '/admin/orders/1/provider-logs'].includes(path)) return ok([])
+    if (method === 'GET' && ['/admin/orders/agent-accounts', '/courses', '/orders/ORD-RECEIPT-1/progress-logs'].includes(path)) return ok([])
     if (method === 'GET' && path === '/admin/countdown-config/all') return ok({})
     if (method === 'GET' && path === '/admin/orders/statistics') return ok({ totalOrders: 1, completedOrders: 0, totalRevenue: '2.50', todayOrders: 1 })
+    const candidateMatch = path.match(/^\/admin\/orders\/(\d+)\/receipt-recoveries\/candidates$/)
+    if (candidateMatch && method === 'POST') {
+      assert.match(req.headers().authorization || '', /^Bearer /)
+      assert.ok([null, '', 'null'].includes(req.postData()))
+      candidateReads.push(path)
+      if (candidateHeld) { candidateEntered.resolve(); await candidateRelease.promise }
+      try {
+        if (['failure', 'deny', 'conflict', 'unauthorized'].includes(candidateMode)) return await route.fulfill({ status: candidateMode === 'deny' ? 403 : candidateMode === 'conflict' ? 400 : candidateMode === 'unauthorized' ? 401 : 502, json: { code: candidateMode === 'conflict' ? -110 : -1, message: '模拟查询失败' } })
+        const result = { orderId: Number(candidateMatch[1]), receiptIds: [receipt, 'receipt-10'], checkedAt: '2026-09-11T12:00:00', scope: 'CURRENT_RESPONSE' }
+        if (candidateMode === 'empty') result.receiptIds = []
+        if (candidateMode === 'partial') delete result.checkedAt
+        if (candidateMode === 'duplicate') result.receiptIds = [receipt, receipt]
+        if (candidateMode === 'wrong-order') result.orderId = 999
+        if (candidateMode === 'unbounded') result.receiptIds = Array.from({ length: 21 }, (_, i) => `receipt-${i}`)
+        if (candidateMode === 'wrong-scope') result.scope = 'ALL'
+        if (candidateMode === 'invalid-id') result.receiptIds = ['<img src=x>']
+        if (candidateMode === 'extra-secret') result.password = 'must-not-render-private-proof'
+        return await ok(result)
+      } finally { candidateFinished?.resolve() }
+    }
     const match = path.match(/^\/admin\/orders\/(\d+)\/receipt-recoveries(?:\/([0-9a-f-]+)(\/confirm)?)?$/)
     if (!match) { unexpected.push(method + ' ' + path); return route.abort() }
     assert.match(req.headers().authorization || '', /^Bearer /)
@@ -98,6 +119,45 @@ try {
   const dialog = page.getByRole('dialog', { name: '恢复订单执行编号', exact: true })
   await dialog.getByRole('heading', { name: '找回编号，不重复下单。', exact: true }).waitFor()
   assert.equal(reads.length, 0); assert.equal(writes.length, 0)
+  assert.equal(candidateReads.length, 0)
+  await dialog.getByRole('button', { name: '查找执行编号', exact: true }).click()
+  await dialog.getByText('本次找到 2 个可核对编号', { exact: true }).waitFor()
+  assert.equal(candidateReads.length, 1); assert.equal(writes.length, 0)
+  assert.equal(await dialog.getByRole('textbox', { name: '执行编号', exact: true }).inputValue(), '')
+  assert.equal(await dialog.getByRole('button', { name: '核对执行编号', exact: true }).isDisabled(), true)
+  await dialog.getByRole('region', { name: '查找执行编号', exact: true }).scrollIntoViewIfNeeded()
+  await screenshot('benz-receipt-candidates-desktop')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.evaluate(() => { document.documentElement.classList.add('dark'); document.documentElement.setAttribute('data-theme', 'dark') })
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false)
+  await dialog.getByRole('region', { name: '查找执行编号', exact: true }).scrollIntoViewIfNeeded()
+  await screenshot('benz-receipt-candidates-mobile-dark')
+  await page.setViewportSize({ width: 1440, height: 1100 })
+  await page.evaluate(() => { document.documentElement.classList.remove('dark'); document.documentElement.removeAttribute('data-theme') })
+  for (const state of ['empty', 'failure', 'deny', 'conflict', 'partial', 'duplicate', 'wrong-order', 'unbounded', 'wrong-scope', 'invalid-id', 'extra-secret']) {
+    candidateMode = state
+    const before = candidateReads.length
+    await dialog.getByRole('button', { name: '查找执行编号', exact: true }).click()
+    const message = state === 'empty' ? '本次未找到可核实编号' : state === 'deny' ? '需要订单管理与接口管理双权限，未获得查找权限。'
+      : state === 'conflict' ? '订单或编号记录已变化，请重新查找；未关联编号。' : '编号查找未完成或返回数据不完整，请重试；未关联编号，也未重新下单。'
+    await dialog.getByText(message, { exact: true }).waitFor()
+    assert.equal(candidateReads.length, before + 1); assert.equal(writes.length, 0)
+    assert.equal(await dialog.getByRole('list', { name: '可核对的执行编号', exact: true }).count(), 0)
+    if (state !== 'empty') assert.equal(await dialog.getByText('本次未找到可核实编号', { exact: true }).count(), 0)
+    assert.equal(await dialog.getByText('must-not-render-private-proof', { exact: true }).count(), 0)
+  }
+  candidateMode = ''
+  await dialog.getByRole('button', { name: '查找执行编号', exact: true }).click()
+  await dialog.getByRole('button', { name: '填入执行编号 receipt-9', exact: true }).click()
+  assert.equal(await dialog.getByRole('textbox', { name: '执行编号', exact: true }).inputValue(), receipt)
+  assert.equal(await dialog.getByRole('textbox', { name: '核对依据', exact: true }).inputValue(), '')
+  await dialog.getByRole('textbox', { name: '核对依据', exact: true }).fill(note)
+  await dialog.getByText('我已核实原始回执及执行账户，确认与此订单属于同一笔业务', { exact: true }).click()
+  await dialog.getByRole('button', { name: '填入执行编号 receipt-10', exact: true }).click()
+  assert.equal(await dialog.getByRole('textbox', { name: '核对依据', exact: true }).inputValue(), '')
+  assert.equal(await dialog.getByRole('button', { name: '核对执行编号', exact: true }).isDisabled(), true)
+  await dialog.getByRole('button', { name: '填入执行编号 receipt-9', exact: true }).click()
+  assert.equal(writes.length, 0)
   await fill(dialog); mode = 'lose-preview'
   await dialog.getByRole('button', { name: '核对执行编号', exact: true }).click()
   await dialog.getByText('核对结果未确认，请检查原请求；不要重复提交。', { exact: true }).waitFor()
@@ -152,6 +212,31 @@ try {
   assert.equal(await dialog.getByRole('button', { name: '确认恢复编号', exact: true }).count(), 0)
   assert.equal(writes.filter((r) => r.path.endsWith('/confirm')).length, confirmCount)
 
+  // Candidate reads are explicit, disabled while pending, and discarded after an order change or unmount.
+  await page.goto(base + '/__order_receipts?entry=scope')
+  const candidateScope = page.getByRole('region', { name: '订单执行编号恢复', exact: true })
+  candidateHeld = true; candidateEntered = deferred(); candidateRelease = deferred(); candidateFinished = deferred()
+  const beforeLookup = candidateReads.length, beforeWrites = writes.length
+  await candidateScope.getByRole('button', { name: '查找执行编号', exact: true }).click(); await candidateEntered.promise
+  assert.equal(await candidateScope.getByRole('button', { name: '查找执行编号', exact: true }).isDisabled(), true)
+  assert.equal(await candidateScope.getByRole('button', { name: '核对执行编号', exact: true }).isDisabled(), true)
+  await page.getByRole('button', { name: '切换订单二', exact: true }).click()
+  candidateHeld = false; candidateRelease.resolve(); await candidateFinished.promise
+  await page.waitForTimeout(120)
+  assert.equal(await candidateScope.getByRole('list', { name: '可核对的执行编号', exact: true }).count(), 0)
+  assert.equal(await candidateScope.getByRole('textbox', { name: '执行编号', exact: true }).inputValue(), '')
+  assert.equal(candidateReads.length, beforeLookup + 1); assert.equal(writes.length, beforeWrites)
+  await candidateScope.getByRole('button', { name: '查找执行编号', exact: true }).click()
+  await candidateScope.getByText('本次找到 2 个可核对编号', { exact: true }).waitFor()
+  assert.equal(candidateReads.at(-1), '/admin/orders/2/receipt-recoveries/candidates')
+  await candidateScope.getByRole('button', { name: '填入执行编号 receipt-10', exact: true }).click()
+  assert.equal(writes.length, beforeWrites)
+  candidateHeld = true; candidateEntered = deferred(); candidateRelease = deferred(); candidateFinished = deferred()
+  await candidateScope.getByRole('button', { name: '查找执行编号', exact: true }).click(); await candidateEntered.promise
+  await page.getByRole('button', { name: '关闭核对', exact: true }).click()
+  candidateHeld = false; candidateRelease.resolve(); await candidateFinished.promise
+  assert.equal(await candidateScope.count(), 0); assert.equal(writes.length, beforeWrites)
+
   // A read or preview resolving after order change cannot populate the next order.
   mode = ''; await page.goto(base + '/__order_receipts?entry=scope')
   const scope = page.getByRole('region', { name: '订单执行编号恢复', exact: true })
@@ -165,8 +250,15 @@ try {
   await page.getByRole('button', { name: '关闭核对', exact: true }).click()
   assert.equal(await scope.count(), 0)
   const storage = await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }))
-  for (const sensitive of [note, receipt, originalId, order.orderNo]) assert.equal(storage.includes(sensitive), false)
+  for (const sensitive of [note, receipt, 'receipt-10', originalId, order.orderNo]) assert.equal(storage.includes(sensitive), false)
+  // Response-time authentication failure cannot replay a deliberately triggered discovery request.
+  candidateMode = 'unauthorized'; await page.goto(base + '/__order_receipts?entry=scope')
+  const beforeAuthFailure = candidateReads.length
+  await page.getByRole('button', { name: '查找执行编号', exact: true }).click()
+  await page.getByText('编号查找未完成或返回数据不完整，请重试；未关联编号，也未重新下单。', { exact: true }).waitFor()
+  await page.waitForTimeout(150)
+  assert.equal(candidateReads.length, beforeAuthFailure + 1)
   assert.deepEqual(unexpected, []); assert.deepEqual(errors, [])
   assert.ok(writes.every((r) => r.method === 'POST' && (r.path.endsWith('/receipt-recoveries') || r.path.endsWith('/confirm'))))
-  console.log('PASS Benz receipt recovery: actual admin order entry, explicit full-identity preview/consent, lost preview/confirm GET-only recovery and persisted history, no-proof/403/conflict/malformed states, stale order isolation, mobile dark and no stored credentials; all supplier requests simulated')
-} finally { release?.resolve(); await browser?.close(); await server.close() }
+  console.log('PASS Benz receipt recovery: bounded explicit candidate discovery/selection, no auto-read/first-choice, empty/error/malformed/permission/claim-change states and pending/unmount isolation; actual admin order entry, explicit full-identity preview/consent, lost preview/confirm GET-only recovery and persisted history, no-proof/403/conflict/malformed states, stale order isolation, mobile dark and no stored credentials; all supplier requests simulated')
+} finally { candidateRelease?.resolve(); release?.resolve(); await browser?.close(); await server.close() }

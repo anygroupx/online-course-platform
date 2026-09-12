@@ -71,9 +71,9 @@ export const columnsConfig = [
     formatter: (row) => `¥${row.balance}`,
   },
   {
-    key: "rate",
-    label: "费率",
-    width: 80,
+    key: "level",
+    label: "账户等级",
+    width: 110,
     visible: true,
   },
   {
@@ -98,11 +98,11 @@ export const columnsConfig = [
     // 使用插槽渲染，在视图文件中实现
   },
   {
-    key: "inviteRate",
-    label: "邀请费率",
-    width: 100,
+    key: "inviteLevel",
+    label: "邀请等级",
+    width: 110,
     visible: true,
-    formatter: (row) => row.inviteRate || "未设置",
+    formatter: (row) => row.inviteLevel || "未设置",
   },
   {
     key: "status",
@@ -159,4 +159,4 @@ export const rowActionsConfig = [
 /**
  * 移动端卡片显示列
  */
-export const mobileColumns = ["username", "balance", "rate", "status"];
+export const mobileColumns = ["username", "balance", "level", "status"];
