@@ -3,18 +3,18 @@ import { providerCheckLabel } from "./providerStatus.js";
 export const readOnlyProviderTypes = Object.freeze(["flash", "heisha", "jiguang", "wuxin", "sxdk_tw", "syyv5", "ssbenz_xbd", "appui", "leidian", "jingyu"]);
 export const isReadOnlyProviderType = (type) => readOnlyProviderTypes.includes(type);
 export const integrationStatuses = Object.freeze({
-  NATIVE_PARTIAL: { label: "服务能力（部分）", tone: "warning" },
-  READ_ONLY: { label: "只读接入", tone: "success" },
-  EXISTING: { label: "已有能力", tone: "primary" },
-  PLANNED: { label: "待独立重写", tone: "warning" },
-  NEEDS_PROTOCOL: { label: "待补协议", tone: "danger" },
-  DUPLICATE: { label: "重复家族", tone: "info" },
+  NATIVE_PARTIAL: { label: "已实现部分功能", tone: "warning" },
+  READ_ONLY: { label: "目录查询", tone: "success" },
+  EXISTING: { label: "课程管理", tone: "primary" },
+  PLANNED: { label: "暂未开放", tone: "warning" },
+  NEEDS_PROTOCOL: { label: "暂未开放", tone: "danger" },
+  DUPLICATE: { label: "共用配置", tone: "info" },
 });
 export const evidenceLabels = Object.freeze({
   PLAINTEXT: "明文可审阅", MIXED: "部分核心不透明", OPAQUE: "核心不透明", DUPLICATE: "重复包变体",
 });
 export const capabilityLabels = Object.freeze({
-  PROJECT_CENTER: "项目账户与子钱包",
+  PROJECT_CENTER: "项目与账户",
   CATALOG: "商品 / 报价", SCHOOLS: "学校检索", COURSE_CATALOG: "课程与分类", BATCH_PROGRESS: "批量进度",
 });
 export const statusInfo = (status) => integrationStatuses[status] || { label: "未评估", tone: "info" };

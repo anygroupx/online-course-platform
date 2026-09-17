@@ -72,10 +72,20 @@ class PluginRegistriesTest {
             assertTrue(flash.availableCapabilities().contains("CATALOG"));
             assertEquals("P08", catalog.stream().filter(c -> "P11".equals(c.id())).findFirst().orElseThrow().duplicateOf());
             var jingyu = catalog.stream().filter(c -> "P08".equals(c.id())).findFirst().orElseThrow();
+            for (String pluginId : List.of("P01", "P03", "P04", "P05", "P06", "P08", "P09", "P10", "P12")) {
+                var plugin = catalog.stream().filter(c -> pluginId.equals(c.id())).findFirst().orElseThrow();
+                assertEquals(PhpNativeServiceGateway.capabilities(plugin.providerType()), plugin.serviceCapabilities());
+                assertTrue(plugin.serviceCapabilities().containsAll(List.of("CREATE", "SYNC")));
+                assertThrows(UnsupportedOperationException.class, () -> plugin.serviceCapabilities().add("FAKE"));
+            }
+            assertTrue(catalog.stream().filter(c -> "P06".equals(c.id())).findFirst().orElseThrow().availableCapabilities().isEmpty());
+            for (String pluginId : List.of("P02", "P07", "P11")) {
+                assertTrue(catalog.stream().filter(c -> pluginId.equals(c.id())).findFirst().orElseThrow().serviceCapabilities().isEmpty());
+            }
             assertEquals("jingyu", jingyu.providerType()); assertEquals("NATIVE_PARTIAL", jingyu.integrationStatus());
             assertEquals("MIXED", jingyu.evidenceLevel()); assertEquals(List.of("CATALOG"), jingyu.availableCapabilities());
             assertSame(context.getBean(JingyuNativeServiceGateway.class), context.getBean(PluginConnectorRegistry.class).getConnector("jingyu"));
-            assertEquals(List.of("keep", "bdlp"), context.getBean(JingyuNativeServiceGateway.class).projects().stream().map(p -> p.id()).toList());
+            assertEquals(List.of("keep", "bdlp", "yyd"), context.getBean(JingyuNativeServiceGateway.class).projects().stream().map(p -> p.id()).toList());
             var leidian = catalog.stream().filter(c -> "P12".equals(c.id())).findFirst().orElseThrow();
             assertEquals("leidian", leidian.providerType());
             assertEquals("NATIVE_PARTIAL", leidian.integrationStatus());
@@ -124,11 +134,20 @@ class PluginRegistriesTest {
     }
 
     @Test void missingConnectorsCannotBeAdvertisedAsImplemented() {
-        var catalog = new PluginResearchCatalog(new PluginConnectorRegistry(List.of()));
+        var catalog = new PluginResearchCatalog(new PluginConnectorRegistry(List.of()), mock(NativeServiceGatewayRouter.class));
         assertTrue(catalog.list().stream().noneMatch(c -> "READ_ONLY".equals(c.integrationStatus())));
         assertTrue(catalog.find("P04").availableCapabilities().isEmpty());
+        assertTrue(catalog.find("P04").serviceCapabilities().isEmpty());
         assertNull(catalog.find("../../source"));
     }
+    @Test void readOnlyDirectoryDoesNotInventNativeOrderingCapabilities() {
+        var connector = mock(PluginReadOnlyConnector.class);
+        when(connector.getProviderType()).thenReturn("jiguang");
+        var catalog = new PluginResearchCatalog(new PluginConnectorRegistry(List.of(connector)), mock(NativeServiceGatewayRouter.class));
+        assertEquals(List.of("CATALOG"), catalog.find("P04").availableCapabilities());
+        assertTrue(catalog.find("P04").serviceCapabilities().isEmpty());
+    }
+
     @Test void leidianOrderAndScoreRequestsUseOnlyTheirDedicatedGateway() {
         var templates = mock(PhpNativeServiceGateway.class);
         var wuxin = mock(WuxinNativeServiceGateway.class);

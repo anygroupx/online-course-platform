@@ -29,7 +29,7 @@
         <el-table-column prop="usernameMasked" label="账号" width="120" />
         <el-table-column prop="balance" label="余额" width="170">
           <template #default="scope">
-            <el-tag v-if="isReadOnlyProviderType(scope.row.providerType)" type="info">仅目录，不查余额</el-tag>
+            <el-tag v-if="isReadOnlyProviderType(scope.row.providerType)" type="info">不提供余额查询</el-tag>
             <div v-else class="balance-cell">
               <el-tag type="success">¥{{ formatBalance(scope.row.balance) }}</el-tag>
               <el-button
@@ -156,15 +156,15 @@
             <el-option label="无心闪动（服务接口）" value="wuxin" />
             <el-option label="AppUI 实习打卡（按天计费）" value="appui" />
             <el-option label="雷电（四种运动项目）" value="leidian" />
-            <el-option label="鲸鱼（Keep / 步道乐跑）" value="jingyu" />
-            <el-option label="总公里计划（P05 明文接口）" value="ssbenz_xbd" />
-            <el-option label="sxdk_tw 实习（直接 API）" value="sxdk_tw" />
-            <el-option label="syyv5 多项目与子钱包" value="syyv5" />
+            <el-option label="鲸鱼运动服务" value="jingyu" />
+            <el-option label="总公里计划" value="ssbenz_xbd" />
+            <el-option label="实习计划（按服务日计费）" value="sxdk_tw" />
+            <el-option label="多项目与账户" value="syyv5" />
           </el-select>
         </el-form-item>
         <el-alert v-if="isReadOnlyProviderType(form.providerType)" type="info" :closable="false" class="provider-notice"
           :title="form.providerType === 'ssbenz_xbd' ? '总公里计划：只需 API 目录与访问密钥，无需 UID。' : '服务接口：账号填写 UID，API Key 填写访问密钥。'"
-          :description="form.providerType === 'jingyu' ? '填写已授权的 HTTPS 安装根目录，不要添加 jingyu 或 api.php。账号填写 UID，访问密钥仅通过表单正文发送。连接检查只读取 Keep 与步道乐跑报价，不下单；核实计费规则后在服务商品页上架。退款须核对实际次数后入账。' : form.providerType === 'leidian' ? '填写已授权的 HTTPS 安装根目录，不要添加 ldrun 或 api.php。账号填写 UID，API Key 填写访问密钥。连接检查只读取四种项目报价，不下单。核实计费规则后，在服务商品页上架；取消订单与退款入账需要分别核对。' : form.providerType === 'appui' ? '填写已授权的 HTTPS 安装根目录，不要添加 appui 或 api.php。账号填写 UID，访问密钥只通过表单正文发送。连接检查只读取实时报价；核实商品与退款规则后，在服务商品页上架。天数按账户记录核对，不代表签到成功。' : form.providerType === 'ssbenz_xbd' ? '填写已授权的 HTTPS API 目录，例如 https://service.example/xbd/ydapi；不要填写单个动作或 PHP 文件地址。访问密钥仅以表单 token 发送。连接检查只读取两种方案报价，不下单；商品需在服务商品页另行上架。更换密钥后，旧订单须人工核对，不能自动迁移。' : form.providerType === 'syyv5' ? '填写已授权的 HTTPS API 完整地址及主访问密钥。连接测试只读取项目目录，不开户、不兑换；项目中心需另外核实成本并发布。主密钥变更不能自动迁移既有用户子钱包。' : form.providerType === 'sxdk_tw' ? '填写已获授权的 HTTPS API 完整地址，不是旧 sxdk_tw PHP 页面。GET 使用已保存的 UID / key 查询，POST 业务字段按表单发送；连接检查不读取或猜测价格。上架时必须核实合同单价。' : '地址填写服务根目录，不要添加插件目录或 API 文件名。无心协议须通过 HTTPS 查询参数验证，系统不记录该查询串。连接测试只读。用户下单请在服务商品中上架；不要绑定普通课程。'" />
+          :description="form.providerType === 'jingyu' ? '填写已授权的 HTTPS 服务根地址，不要添加 /jingyu 或 /api.php。账号填写 UID，API Key 填写访问密钥。测试连接只读取 Keep 与步道乐跑报价，不会下单。核实计费规则后再上架商品；退款须核对实际次数后入账。' : form.providerType === 'leidian' ? '填写已授权的 HTTPS 服务根地址，不要添加 /ldrun 或 /api.php。账号填写 UID，API Key 填写访问密钥。测试连接只读取四种项目报价，不会下单。核实计费规则后再上架商品；取消订单与退款入账需要分别核对。' : form.providerType === 'appui' ? '填写已授权的 HTTPS 服务根地址，不要添加 /appui 或 /api.php。账号填写 UID，API Key 填写访问密钥。测试连接只读取报价，不会下单。核实商品和退款规则后再上架；已用天数不代表签到成功。' : form.providerType === 'ssbenz_xbd' ? '填写已授权的 HTTPS API 基础目录，例如 https://service.example/xbd/ydapi，不要填写单个操作或文件地址。测试连接只读取两种方案报价，不会下单。核实方案说明和售价后再上架商品；更换访问密钥后，旧订单需要人工核对。' : form.providerType === 'syyv5' ? '填写已授权的 HTTPS API 完整地址及主访问密钥。测试连接只读取项目目录，不会开户或兑换额度。请在项目中心核实成本后发布项目；更换主访问密钥前，需要核对现有项目账户的使用安排。' : form.providerType === 'sxdk_tw' ? '填写已获授权的 HTTPS 服务 API 完整地址，不能使用旧版网页地址。账号填写 UID，API Key 填写访问密钥。测试连接不会核验价格；上架前必须核实合同单价、计费规则和有效期。' : '填写已授权的 HTTPS 服务根地址，不要添加功能目录或文件名。账号填写 UID，API Key 填写访问密钥。测试连接仅查询，不会下单。配置启用后，请在服务商品页设置售价并上架，不用于普通课程。'" />
         <el-form-item label="API地址" prop="apiUrl">
           <el-input v-model="form.apiUrl" placeholder="https://provider.example.com 或 /openapi 基础目录" maxlength="2048" />
           <div class="field-help">默认仅允许 HTTPS 公网域名，不接受 IP、查询参数或片段。Daytime / 29 兼容以 /api.php 结尾的地址。</div>
@@ -254,6 +254,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import axios from "@/utils/request";
 import router from "@/router";
 import { isReadOnlyProviderType } from "@/utils/pluginIntegrations";
+import { providerConfigurationType } from "@/utils/pluginWorkflows";
 import { useResponsive } from "@/composables/useResponsive";
 import dayjs from "dayjs";
 import { refreshApiProviderBalance, testApiProviderConnection, updateApiProviderStatus } from "@/api/apiProvider";
@@ -319,7 +320,7 @@ const handleCreate = () => {
   dialogTitle.value = "添加接口";
   form.value = emptyForm();
   const requestedType = router.currentRoute.value.query.type;
-  if (isReadOnlyProviderType(requestedType)) form.value.providerType = requestedType;
+  if (providerConfigurationType(requestedType)) form.value.providerType = requestedType;
   originalStatus.value = 2;
   formRef.value?.clearValidate();
   dialogVisible.value = true;
@@ -503,12 +504,12 @@ const formatTime = (timestamp) => {
 
 watch([currentPage, pageSize], loadData);
 watch(() => router.currentRoute.value.query.type, (type) => {
-  if (router.currentRoute.value.path === "/admin/api-providers" && isReadOnlyProviderType(type) && !dialogVisible.value) handleCreate();
+  if (router.currentRoute.value.path === "/admin/api-providers" && providerConfigurationType(type) && !dialogVisible.value) handleCreate();
 });
 
 onMounted(() => {
   loadData();
-  if (isReadOnlyProviderType(router.currentRoute.value.query.type)) handleCreate();
+  if (providerConfigurationType(router.currentRoute.value.query.type)) handleCreate();
 });
 </script>
 

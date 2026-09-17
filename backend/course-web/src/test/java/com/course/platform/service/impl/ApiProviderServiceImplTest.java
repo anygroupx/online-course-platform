@@ -1,6 +1,10 @@
 package com.course.platform.service.impl;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.course.platform.application.service.platform.docking.PlatformDockingStrategy;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.security.SecretCrypto;
@@ -9,6 +13,7 @@ import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.infra.integration.ProviderConnectionProbeRegistry;
 import com.course.platform.infra.http.*;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -17,6 +22,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -31,6 +37,7 @@ class ApiProviderServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), "provider-list-test"), ApiProvider.class);
         mapper = mock(ApiProviderMapper.class);
         guard = mock(SsrfGuard.class);
         strategy = mock(PlatformDockingStrategy.class);
@@ -86,6 +93,43 @@ class ApiProviderServiceImplTest {
         var matcher = Pattern.compile(column + "=#\\{ew.paramNameValuePairs.(\\w+)\\}").matcher(wrapper.getSqlSet());
         assertTrue(matcher.find(), "missing SET " + column + " in " + wrapper.getSqlSet());
         return wrapper.getParamNameValuePairs().get(matcher.group(1));
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void providerTypesAndStatusConstrainTheDatabasePageWithGroupedKeywordSearch() {
+        Page<ApiProvider> rows = new Page<>(2, 50, 51);
+        when(mapper.selectPage(any(Page.class), any())).thenReturn(rows);
+
+        assertSame(rows, service.queryApiProviders("运动", 1, 2, 50, List.of("jiguang", "jingyu")));
+
+        ArgumentCaptor<Page<ApiProvider>> page = ArgumentCaptor.forClass(Page.class);
+        ArgumentCaptor<LambdaQueryWrapper<ApiProvider>> query = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(mapper).selectPage(page.capture(), query.capture());
+        assertEquals(2, page.getValue().getCurrent());
+        assertEquals(50, page.getValue().getSize());
+        String sql = query.getValue().getSqlSegment();
+        assertTrue(sql.contains("provider_type IN"), sql);
+        assertTrue(sql.matches("(?s).*\\(name LIKE .* OR provider_type LIKE .*\\) AND status = .* AND provider_type IN.*"), sql);
+        assertTrue(sql.endsWith("ORDER BY create_time DESC"), sql);
+        var params = query.getValue().getParamNameValuePairs().values();
+        assertTrue(params.containsAll(List.of("%运动%", 1, "jiguang", "jingyu")));
+        verifyNoInteractions(strategy, guard);
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void omittedAndEmptyTypeFiltersPreserveUnfilteredProviderLists() {
+        when(mapper.selectPage(any(Page.class), any())).thenReturn(new Page<ApiProvider>(1, 10, 0));
+        service.queryApiProviders(null, null, 1, 10, null);
+        service.queryApiProviders(null, null, 1, 10, List.of());
+        ArgumentCaptor<LambdaQueryWrapper<ApiProvider>> query = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(mapper, times(2)).selectPage(any(Page.class), query.capture());
+        for (var filter : query.getAllValues()) {
+            assertEquals("ORDER BY create_time DESC", filter.getSqlSegment().trim());
+            assertTrue(filter.getParamNameValuePairs().isEmpty());
+        }
+        verifyNoInteractions(strategy, guard);
     }
 
     @Test
@@ -369,6 +413,24 @@ class ApiProviderServiceImplTest {
         assertThrows(BusinessException.class, () -> service.updateApiProvider(update));
         verify(mapper, never()).update(any(), any());
         verifyNoInteractions(internship);
+    }
+
+    @Test
+    void savedMetadataLookupNeverDecryptsOrCallsTheConfiguredService() {
+        ApiProvider row = stored(ApiProvider.STATUS_ACTIVE);
+        row.setApiKey("unreadable-encrypted-fixture");
+        when(mapper.selectById(9L)).thenReturn(row);
+        assertSame(row, service.getApiProvider(9L));
+        verify(mapper).selectById(9L);
+        verifyNoMoreInteractions(mapper);
+        verifyNoInteractions(guard, strategy);
+    }
+
+    @Test
+    void missingSavedMetadataDoesNotInventAProvider() {
+        assertThrows(BusinessException.class, () -> service.getApiProvider(null));
+        assertThrows(BusinessException.class, () -> service.getApiProvider(999L));
+        verifyNoInteractions(guard, strategy);
     }
 
 }

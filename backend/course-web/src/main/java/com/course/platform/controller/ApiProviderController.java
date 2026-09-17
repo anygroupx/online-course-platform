@@ -22,6 +22,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * 第三方API接口管理控制器
@@ -114,16 +115,24 @@ public class ApiProviderController {
         return Result.success("余额查询成功", balance);
     }
 
+    @Operation(summary = "查询已保存的接口配置", description = "只返回脱敏配置，不执行连接测试")
+    @GetMapping("/{id}")
+    public Result<ApiProviderVO> getApiProvider(@PathVariable Long id, Authentication authentication) {
+        checkAdmin((Long) authentication.getPrincipal());
+        return Result.success(SensitiveDataMasker.toApiProviderVO(apiProviderService.getApiProvider(id)));
+    }
+
     @Operation(summary = "查询API接口列表", description = "分页查询API接口")
     @GetMapping
     public Result<IPage<ApiProviderVO>> queryApiProviders(@RequestParam(required = false) String keyword,
                                                           @RequestParam(required = false) Integer status,
                                                           @RequestParam(defaultValue = "1") Integer page,
                                                           @RequestParam(defaultValue = "10") Integer pageSize,
+                                                          @RequestParam(required = false) List<String> providerTypes,
                                                           Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         checkAdmin(userId);
-        IPage<ApiProvider> result = apiProviderService.queryApiProviders(keyword, status, page, pageSize);
+        IPage<ApiProvider> result = apiProviderService.queryApiProviders(keyword, status, page, pageSize, providerTypes);
         Page<ApiProviderVO> voPage = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
         voPage.setRecords(result.getRecords().stream().map(SensitiveDataMasker::toApiProviderVO).toList());
         return Result.success(voPage);

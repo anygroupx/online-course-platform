@@ -6,7 +6,7 @@
         <h1>选好服务，安排接下来的计划。</h1>
         <p>下单后可管理进度和售后。</p>
       </div>
-      <el-button @click="router.push('/service-orders')"
+      <el-button @click="router.push({ path: '/service-orders', query: filter ? { providerType: filter } : {} })"
         >我的服务订单 <el-icon><ArrowRight /></el-icon
       ></el-button>
     </header>
@@ -150,9 +150,9 @@
                   placeholder="填写学号"
               /></el-form-item>
             </div>
-            <JingyuAccountFields v-else-if="isJingyuService(selected)" v-model="fields" :project="selected.project"
+            <JingyuAccountFields v-else-if="isJingyuService(selected)" v-model="fields" :project="selected.project" :product-id="selected.id"
               :lookup="lookupResult" :authorized="consent" :disabled="busy" :loading="lookupLoading"
-              @lookup="lookup" @invalidate="clearLookup" />
+              @lookup="lookup" @invalidate="clearLookup" @distance="distance = $event" />
             <template v-else-if="isLeidianService(selected)">
               <el-form-item :label="selected.project === '4' ? '手机号' : '账号 UID'">
                 <el-input v-model="fields.account" :aria-label="selected.project === '4' ? '手机号' : '账号 UID'"
@@ -322,7 +322,7 @@
               /></el-form-item>
             </div>
             <template v-if="isJingyuService(selected)">
-              <p class="school-note">购买 1–365 次，每次 1–100 公里，最多一位小数。{{ selected.project === "keep"
+              <p class="school-note">购买 1–365 次，每次 1–100 公里，最多一位小数。{{ selected.project !== "bdlp"
                 ? "每次按距离计费，单次费用先保留两位小数，再计算总额。" : "每次费用与距离无关。" }}具体金额以确认页面为准。</p>
               <JingyuTaskPlanFields :key="selected.id" v-model="jingyuTasks" :quantity="quantity" :disabled="busy" />
               <p v-if="jingyuValidation" class="school-note" role="status">{{ jingyuValidation }}</p>
@@ -460,14 +460,16 @@ import ServiceQuoteConfirm from "@/components/ServiceQuoteConfirm.vue";
 import TotalDistancePlanFields from "@/components/TotalDistancePlanFields.vue";
 import { isTotalDistanceService, distanceOrderValid } from "@/utils/totalDistanceServices";
 import { latestRequest } from "@/utils/pluginIntegrations";
+import { serviceTypeFromQuery } from "@/utils/pluginWorkflows";
 const router = useRouter();
+const viewPath = router?.currentRoute?.value.path;
 const internshipSchedule = ref(newInternshipSchedule());
 const products = ref([]),
   total = ref(0),
   page = ref(1),
   loading = ref(false),
   error = ref(""),
-  filter = ref("");
+  filter = ref(serviceTypeFromQuery(router?.currentRoute?.value.query.providerType));
 const checkout = ref(false),
   selected = ref(null),
   fields = ref({}),
@@ -633,6 +635,7 @@ function clearLookup() {
   lookupLoading.value = false;
   lookupResult.value = null;
   if (isLeidianService(selected.value) || isJingyuService(selected.value)) delete fields.value.zoneId;
+  if (isJingyuService(selected.value)) delete fields.value.runRuleId;
 }
 function beforeClose(done) {
   if (busy.value || lookupLoading.value || quote.value) return;
@@ -661,8 +664,8 @@ async function lookup() {
       ElMessage.warning("跑区与规则信息不完整，请重新查询。");
       return;
     }
-    if (jingyu && !jingyuLookupValid(item.project, r)) {
-      ElMessage.warning("账号或跑区信息不完整，请重新查询。");
+    if (jingyu && !jingyuLookupValid(item.project, r, fields.value)) {
+      ElMessage.warning(item.project === "yyd" ? "学校或规则信息不完整，请重新查询。" : "账号或跑区信息不完整，请重新查询。");
       return;
     }
     lookupResult.value = r;
@@ -723,7 +726,17 @@ function onResult(result) {
     ElMessage.success(isTotalDistanceService(selected.value)
       ? "已记录提交，可在服务订单中核对状态；执行结果尚未确认"
       : "订单已提交，可在服务订单中查看进度");
-    router.push({ path: "/service-orders", query: { focus: result.orderId } });
+    const providerType = selected.value.providerType;
+    // Cached pages retain teleported drawers: close the completed checkout before navigation.
+    selectionVersion++;
+    checkout.value = false;
+    quote.value = null;
+    fields.value = {};
+    jingyuTasks.value = [];
+    accountSessionId.value = null;
+    lookupResult.value = null;
+    consent.value = false;
+    router.push({ path: "/service-orders", query: { focus: result.orderId, providerType } });
   } else if (result.orderId)
     ElMessage.warning(
       "订单已保存，结果待核对。请勿重复下单，可在服务订单中继续查看。",
@@ -735,6 +748,9 @@ watch(authSessionScope, () => {
   fields.value = {}; lookupResult.value = null; accountSessionId.value = null; quote.value = null;
   lookupLoading.value = false; busy.value = false;
 }, { flush: "sync" });
+watch(() => router?.currentRoute?.value, (route) => {
+  if (route?.path === viewPath) filter.value = serviceTypeFromQuery(route.query.providerType);
+});
 watch(filter, () => {
   page.value = 1;
   load();

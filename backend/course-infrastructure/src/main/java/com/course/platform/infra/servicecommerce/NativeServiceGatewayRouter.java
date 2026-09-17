@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -24,8 +25,22 @@ public class NativeServiceGatewayRouter implements NativeServiceGateway {
     private final LeidianNativeServiceGateway leidian;
     private final JingyuNativeServiceGateway jingyu;
 
+    /** Native actions are independent of read-only directory support. No provider calls are made. */
+    public List<String> capabilities(String providerType) {
+        return gatewayForType(providerType) == null ? List.of() : PhpNativeServiceGateway.capabilities(providerType);
+    }
+
     private NativeServiceGateway forProvider(ApiProvider p) {
-        return switch (p.getProviderType()) {
+        NativeServiceGateway gateway = gatewayForType(p.getProviderType());
+        if (gateway == null) {
+            throw new com.course.platform.common.exception.BusinessException("不支持的原生服务接口");
+        }
+        return gateway;
+    }
+
+    private NativeServiceGateway gatewayForType(String providerType) {
+        if (providerType == null) return null;
+        return switch (providerType) {
             case "appui" -> appui;
             case "leidian" -> leidian;
             case "jingyu" -> jingyu;
@@ -33,8 +48,7 @@ public class NativeServiceGatewayRouter implements NativeServiceGateway {
             case "sxdk_tw" -> internship;
             case SsbenzDistanceGateway.TYPE -> distance;
             case "flash", "heisha", "jiguang" -> templates;
-            default ->
-                    throw new com.course.platform.common.exception.BusinessException("不支持的原生服务接口");
+            default -> null;
         };
     }
 

@@ -208,7 +208,7 @@ try {
   const providerDialog = page.getByRole("dialog", { name: "添加接口" });
   await providerDialog.getByPlaceholder("请输入接口名称").fill("总公里配置演示");
   await providerDialog.locator(".el-select").click();
-  await page.getByRole("option", { name: "总公里计划（P05 明文接口）", exact: true }).click();
+  await page.getByRole("option", { name: "总公里计划", exact: true }).click();
   assert.match(await providerDialog.innerText(), /无需 UID/);
   assert.equal(await providerDialog.getByPlaceholder("请输入账号").count(), 0);
   await providerDialog.getByPlaceholder("https://provider.example.com 或 /openapi 基础目录").fill("https://authorized.example/xbd/ydapi");

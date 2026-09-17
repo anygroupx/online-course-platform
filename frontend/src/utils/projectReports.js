@@ -1,3 +1,5 @@
+import { validLocalDateTime } from './localDateTime.js'
+
 const count = (n) => Number.isSafeInteger(n) && n >= 0
 const counts = (value, fields) => !!value && fields.every((field) => count(value[field]))
 const money = (n, signed = false) => typeof n === 'string' && (signed ? /^-?(0|[1-9]\d*)\.\d{2}$/ : /^(0|[1-9]\d*)\.\d{2}$/).test(n)
@@ -8,7 +10,7 @@ const validCalls = (value) => counts(value, callFields) && value.failed <= value
 
 export function validProjectReport(value, admin = false) {
   if (!value?.window || value.window.timezone !== 'Asia/Shanghai' ||
-      !['from', 'through'].every((key) => typeof value.window[key] === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?$/.test(value.window[key])) ||
+      !['from', 'through'].every((key) => validLocalDateTime(value.window[key])) ||
       !validCalls(value.calls) || !count(value.calls.actionKinds) || value.calls.actionKinds > value.calls.total ||
       !counts(value.clients, ['total', 'active', 'suspended', 'closed', 'projects']) ||
       !counts(value.tickets, ['total', 'open', 'inProgress', 'resolved', 'closed', 'pendingCompensation']) ||

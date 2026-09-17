@@ -9,6 +9,8 @@ import com.course.platform.domain.servicecommerce.*;
 import com.course.platform.domain.servicecommerce.ServiceCommerceTypes.*;
 import com.course.platform.domain.vo.plugin.PluginProduct;
 import com.course.platform.domain.vo.plugin.PluginProjectOption;
+import com.course.platform.domain.vo.plugin.PluginSchool;
+import com.course.platform.domain.vo.plugin.PluginSchoolPage;
 import com.course.platform.infra.external.ApiHttpClient;
 import com.course.platform.infra.http.ProviderUrlNormalizer;
 import com.fasterxml.jackson.core.*;
@@ -25,14 +27,16 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.ResolverStyle;
 import java.util.*;
 
-/** Fixed Jingyu keep/bdlp protocol. The row ID and the business receipt are separate identities. */
+/** Fixed Jingyu protocol. The row ID and the business receipt are separate identities. */
 @Component
 @RequiredArgsConstructor
 public class JingyuNativeServiceGateway implements NativeServiceGateway, PluginReadOnlyConnector {
     public static final String TYPE = "jingyu";
     private final ApiHttpClient http;
     private final ProviderUrlNormalizer normalizer;
-    private static final Set<String> PROJECTS = Set.of("keep", "bdlp");
+    private static final Set<String> PROJECTS = Set.of("keep", "bdlp", "yyd");
+    private static final String SCHOOL_SCOPE = "jingyu:yyd:v1";
+    private static final String SCHOOL_CONTEXT = "jingyu:yyd:school";
     private static final Set<String> COMMON_ACTIONS = Set.of("get_price", "orders", "get_task_data",
             "get_remain_count", "refund", "change_run_status", "edit_task", "delay_task", "fast_delay_task");
     private static final Set<String> ORDER_ACTIONS = Set.of("PAUSE", "RESUME", "DELAY", "DELAY_TASK", "CHANGE_TIME", "REFUND");
@@ -53,8 +57,9 @@ public class JingyuNativeServiceGateway implements NativeServiceGateway, PluginR
 
     @Override
     public List<PluginProjectOption> projects() {
-        // School-bound YYD recovery and YMTY authorization/repair pricing are intentionally not advertised yet.
-        return List.of(new PluginProjectOption("keep", "Keep 自由跑"), new PluginProjectOption("bdlp", "步道乐跑"));
+        // YMTY authorization/repair pricing is not advertised until its full flow is implemented.
+        return List.of(new PluginProjectOption("keep", "Keep 自由跑"), new PluginProjectOption("bdlp", "步道乐跑"),
+                new PluginProjectOption("yyd", "校园运动"));
     }
 
     @Override
@@ -93,13 +98,52 @@ public class JingyuNativeServiceGateway implements NativeServiceGateway, PluginR
     }
 
     private record Account(String studentId, List<Choice> zones, Map<String, String> facts,
-                           String school, String authType, String authTime, boolean authorized) {}
+                           String school, String authType, String authTime, boolean authorized,
+                           List<SchoolRunRule> schoolRules) {}
+
+    @Override
+    public PluginSchoolPage schools(ApiProvider provider, ServiceProduct product, int page, String keyword) {
+        if (!"yyd".equals(project(product))) throw bad("该项目无需选择学校");
+        if (page < 1 || page > 10) throw bad("学校查询页码超出范围");
+        List<PluginSchool> schools = schoolList(provider, keyword);
+        int start = Math.min((page - 1) * 20, schools.size()), end = Math.min(start + 20, schools.size());
+        return new PluginSchoolPage(schools.subList(start, end), page, 20, end < schools.size());
+    }
+
+    private List<PluginSchool> schoolList(ApiProvider provider, String keyword) {
+        if (keyword == null || keyword.isBlank() || keyword.length() > 80 || controls(keyword))
+            throw bad("请输入 1–80 字的学校名称后查询");
+        JsonNode rows = array(call(provider, "yyd", "get_school_data", Map.of("school", keyword.trim()))
+                .path("data").path("list"), 200);
+        List<PluginSchool> schools = new ArrayList<>();
+        Set<String> ids = new HashSet<>();
+        for (JsonNode row : rows) {
+            String id = id(row.path("school_id")), name = text(row.path("name"), 80);
+            if (!ids.add(id) || !name.equals(name.trim())) throw invalid();
+            schools.add(new PluginSchool(id, name));
+        }
+        return List.copyOf(schools);
+    }
+
+    private PluginSchool verifiedSchool(ApiProvider provider, Map<String, String> fields) {
+        String schoolId = value(fields, "schoolId", 19), schoolName = value(fields, "schoolName", 80);
+        if (!schoolId.matches("[1-9][0-9]{0,18}")) throw bad("请从查询结果中选择学校");
+        List<PluginSchool> matches = schoolList(provider, schoolName).stream()
+                .filter(school -> schoolName.equals(school.name())).toList();
+        // YYD order rows omit school_id. Ambiguous school names cannot prove ownership later.
+        if (matches.size() != 1 || !schoolId.equals(matches.get(0).id()))
+            throw bad("学校信息已变化或存在同名学校，请重新查询核对");
+        return matches.get(0);
+    }
 
     @Override
     public Lookup lookup(ApiProvider provider, ServiceProduct product, Map<String, String> fields) {
         String project = project(product);
-        validateFields(fields, "keep".equals(project) ? Set.of("account", "password") : Set.of("account"));
+        validateFields(fields, "yyd".equals(project) ? Set.of("account", "password", "schoolId", "schoolName")
+                : "keep".equals(project) ? Set.of("account", "password") : Set.of("account"));
         Account account = accountInfo(provider, project, fields);
+        if ("yyd".equals(project)) return new Lookup(account.facts(), account.zones(),
+                "请选择学校对应的跑步规则，再核对最低距离与每次执行时间。", null, null, null, null, account.schoolRules());
         return new Lookup(account.facts(), account.zones(), "bdlp".equals(project)
                 ? "请核对授权状态并选择跑区；每次费用与距离无关。授权失效时不能提交订单。"
                 : "请选择跑区、配速及每次执行时间；自由跑不保证计入有效成绩。");
@@ -107,6 +151,7 @@ public class JingyuNativeServiceGateway implements NativeServiceGateway, PluginR
 
     private Account accountInfo(ApiProvider provider, String project, Map<String, String> fields) {
         String account = account(fields, project);
+        if ("yyd".equals(project)) return schoolAccount(provider, fields, account);
         Map<String, Object> inputs = "bdlp".equals(project) ? Map.of("uid", account)
                 : Map.of("phone", account, "password", password(fields));
         JsonNode data = call(provider, project, "get_" + project + "_user_info", inputs).path("data");
@@ -147,7 +192,33 @@ public class JingyuNativeServiceGateway implements NativeServiceGateway, PluginR
             choices.add(new Choice("zoneId", zoneId, text(zone.path("name"), 100)));
         }
         if (choices.isEmpty()) throw invalid();
-        return new Account(studentId, List.copyOf(choices), Map.copyOf(facts), school, authType, authTime, authorized);
+        return new Account(studentId, List.copyOf(choices), Map.copyOf(facts), school, authType, authTime, authorized, List.of());
+    }
+
+    private Account schoolAccount(ApiProvider provider, Map<String, String> fields, String account) {
+        String password = password(fields);
+        PluginSchool school = verifiedSchool(provider, fields);
+        JsonNode student = call(provider, "yyd", "get_yyd_user_info",
+                Map.of("school_id", school.id(), "number", account, "password", password)).path("data").path("student");
+        if (!student.isObject() || student.has("number") && !account.equals(text(student.path("number"), 64))
+                || student.has("school_id") && !school.id().equals(id(student.path("school_id")))) throw invalid();
+        String studentId = id(student.path("student_id"));
+        List<SchoolRunRule> rules = new ArrayList<>();
+        List<Choice> choices = new ArrayList<>();
+        Set<String> ids = new HashSet<>();
+        for (JsonNode row : array(student.path("run_rule_items"), 200)) {
+            String ruleId = id(row.path("run_rule_item_id"));
+            if (!ids.add(ruleId)) throw invalid();
+            BigDecimal minimum = decimal(row.path("min_dis"), 1);
+            if (minimum.compareTo(BigDecimal.ONE) < 0 || minimum.compareTo(new BigDecimal("100")) > 0) throw invalid();
+            JsonNode zone = row.path("zone");
+            String zoneId = id(zone.path("zone_id")), zoneName = text(zone.path("name"), 100);
+            rules.add(new SchoolRunRule(ruleId, zoneId, zoneName, minimum.toPlainString()));
+            choices.add(new Choice("runRuleId", ruleId, zoneName));
+        }
+        if (rules.isEmpty()) throw invalid();
+        return new Account(studentId, List.copyOf(choices), Map.of("schoolId", school.id(), "schoolName", school.name()),
+                school.name(), null, null, true, List.copyOf(rules));
     }
 
     @Override
@@ -161,24 +232,40 @@ public class JingyuNativeServiceGateway implements NativeServiceGateway, PluginR
         String account = account(form.fields(), project);
         String label = account.length() < 5 ? "已授权账号" : account.substring(0, 2) + "***" + account.substring(account.length() - 2);
         return new PreparedOrder(body, form.quantity(), form.distance(), billable(project, form.distance()), label,
-                null, null, ServiceAccountFingerprint.create(account));
+                null, null, "yyd".equals(project) ? schoolBinding(body) : ServiceAccountFingerprint.create(account));
     }
 
     private Map<String, Object> createBody(ApiProvider provider, String project, Map<String, String> fields,
                                            int quantity, BigDecimal distance, List<String> times) {
-        validateFields(fields, "bdlp".equals(project) ? Set.of("account", "zoneId", "runType")
+        validateFields(fields, "yyd".equals(project) ? Set.of("account", "password", "schoolId", "schoolName", "runRuleId")
+                : "bdlp".equals(project) ? Set.of("account", "zoneId", "runType")
                 : Set.of("account", "password", "zoneId", "minMinute", "maxMinute"));
         distance(distance);
         validateTimes(times, quantity);
-        String account = account(fields, project), zoneId = value(fields, "zoneId", 19);
+        String account = account(fields, project);
         Account info = accountInfo(provider, project, fields);
         if (!info.authorized()) throw bad("账号授权已失效，请完成授权后重新查询");
-        Choice zone = info.zones().stream().filter(item -> zoneId.equals(item.value())).findFirst()
-                .orElseThrow(() -> bad("跑区已变化，请重新查询并选择"));
         Map<String, Object> body = new LinkedHashMap<>();
         putForm(body, "student_id", info.studentId());
-        putForm(body, "zone_id", zone.value());
-        putForm(body, "zone_name", zone.label());
+        if ("yyd".equals(project)) {
+            String ruleId = value(fields, "runRuleId", 19);
+            SchoolRunRule rule = info.schoolRules().stream().filter(item -> ruleId.equals(item.id())).findFirst()
+                    .orElseThrow(() -> bad("跑步规则已变化，请重新查询并选择"));
+            if (distance.compareTo(new BigDecimal(rule.minDistance())) < 0) throw bad("每次距离不能低于所选规则的最低距离");
+            putForm(body, "zone_id", rule.zoneId());
+            putForm(body, "zone_name", rule.zoneName());
+            putForm(body, "run_rule_item_id", rule.id());
+            putForm(body, "school_id", value(fields, "schoolId", 19));
+            putForm(body, "school_name", info.school());
+            putForm(body, "number", account);
+            putForm(body, "password", password(fields));
+        } else {
+            String zoneId = value(fields, "zoneId", 19);
+            Choice zone = info.zones().stream().filter(item -> zoneId.equals(item.value())).findFirst()
+                    .orElseThrow(() -> bad("跑区已变化，请重新查询并选择"));
+            putForm(body, "zone_id", zone.value());
+            putForm(body, "zone_name", zone.label());
+        }
         putForm(body, "dis", distance.stripTrailingZeros().toPlainString());
         if ("bdlp".equals(project)) {
             String runType = value(fields, "runType", 1);
@@ -190,7 +277,7 @@ public class JingyuNativeServiceGateway implements NativeServiceGateway, PluginR
             putForm(body, "is_auth", "1");
             putForm(body, "auth_type", info.authType());
             putForm(body, "auth_time", info.authTime());
-        } else {
+        } else if ("keep".equals(project)) {
             putForm(body, "phone", account);
             putForm(body, "password", password(fields));
             putForm(body, "run_type", "1");
@@ -311,15 +398,21 @@ public class JingyuNativeServiceGateway implements NativeServiceGateway, PluginR
             throw bad("下单快照不一致");
         String project = order.getProject();
         Map<String, String> inputs = new LinkedHashMap<>();
-        inputs.put("account", field(fields, "form[" + ("bdlp".equals(project) ? "uid" : "phone") + "]"));
-        inputs.put("zoneId", field(fields, "form[zone_id]"));
+        inputs.put("account", field(fields, "form[" + ("bdlp".equals(project) ? "uid" : "yyd".equals(project) ? "number" : "phone") + "]"));
+        if ("yyd".equals(project)) {
+            inputs.put("schoolId", field(fields, "form[school_id]"));
+            inputs.put("schoolName", field(fields, "form[school_name]"));
+            inputs.put("runRuleId", field(fields, "form[run_rule_item_id]"));
+            inputs.put("password", field(fields, "form[password]"));
+        } else inputs.put("zoneId", field(fields, "form[zone_id]"));
         if ("bdlp".equals(project)) inputs.put("runType", field(fields, "form[run_type]"));
-        else {
+        else if ("keep".equals(project)) {
             inputs.put("password", field(fields, "form[password]"));
             inputs.put("minMinute", field(fields, "form[min_minute]"));
             inputs.put("maxMinute", field(fields, "form[max_minute]"));
         }
-        if (!binding(order).matches(account(inputs, project))) throw bad("账号绑定不一致，请重新核对");
+        if (!("yyd".equals(project) ? matchesSchoolBody(binding(order), fields)
+                : binding(order).matches(account(inputs, project)))) throw bad("账号绑定不一致，请重新核对");
         List<String> times = new ArrayList<>();
         for (int i = 0; i < order.getQuantity(); i++) times.add(field(fields, "form[task_list][" + i + "][start_time]"));
         Map<String, Object> expected = createBody(provider, project, inputs, order.getQuantity(), order.getDistance(), times);
@@ -342,6 +435,11 @@ public class JingyuNativeServiceGateway implements NativeServiceGateway, PluginR
     }
 
     private static void verifyCreatedFields(JsonNode row, Map<String, Object> body, String project) {
+        if ("yyd".equals(project)) {
+            for (String key : List.of("school_name", "run_rule_item_id", "zone_name"))
+                if (!field(body, "form[" + key + "]").equals(text(row.path(key), 100))) throw invalid();
+            return;
+        }
         for (String key : List.of("zone_id", "zone_name"))
             if (!field(body, "form[" + key + "]").equals(text(row.path(key), 100))) throw invalid();
         if ("bdlp".equals(project)) {
@@ -426,10 +524,44 @@ public class JingyuNativeServiceGateway implements NativeServiceGateway, PluginR
         if (!order.getExternalSubOrderNo().equals(id(row.path("id")))
                 || !order.getExternalOrderNo().equals(receiptId(row.path(order.getProject() + "_order_id")))
                 || !provider.getUsername().equals(id(row.path("uid")))
-                || !binding(order).matches(text(row.path("user"), 64))
+                || !matchesOrderAccount(provider, order, row)
                 || count(row.path("num"), 365) != order.getQuantity()
                 || decimal(row.path("distance"), 2).compareTo(order.getDistance()) != 0) throw invalid();
         return row;
+    }
+
+    private boolean matchesOrderAccount(ApiProvider provider, ServiceOrder order, JsonNode row) {
+        ServiceAccountFingerprint fingerprint = binding(order);
+        if (!"yyd".equals(order.getProject())) return fingerprint.matches(text(row.path("user"), 64));
+        String schoolName = text(row.path("school_name"), 80);
+        if (!fingerprint.matchesScoped(SCHOOL_SCOPE, text(row.path("user"), 64), text(row.path("pass"), 128),
+                schoolName, id(row.path("run_rule_item_id")), text(row.path("zone_name"), 100))) return false;
+        List<PluginSchool> schools = schoolList(provider, schoolName).stream().filter(item -> schoolName.equals(item.name())).toList();
+        return schools.size() == 1 && fingerprint.matchesContext(SCHOOL_CONTEXT, schools.get(0).id());
+    }
+
+    private static ServiceAccountFingerprint schoolBinding(Map<String, Object> body) {
+        return ServiceAccountFingerprint.createScoped(SCHOOL_SCOPE, field(body, "form[number]"), field(body, "form[password]"),
+                field(body, "form[school_name]"), field(body, "form[run_rule_item_id]"), field(body, "form[zone_name]"))
+                .withContext(SCHOOL_CONTEXT, field(body, "form[school_id]"));
+    }
+
+    private static boolean matchesSchoolBody(ServiceAccountFingerprint fingerprint, Map<String, Object> body) {
+        return fingerprint.matchesScoped(SCHOOL_SCOPE, field(body, "form[number]"), field(body, "form[password]"),
+                field(body, "form[school_name]"), field(body, "form[run_rule_item_id]"), field(body, "form[zone_name]"))
+                && fingerprint.matchesContext(SCHOOL_CONTEXT, field(body, "form[school_id]"));
+    }
+
+    public static boolean matchesPreparedAccount(String project, Map<String, String> input, PreparedOrder prepared) {
+        if (input == null || prepared == null || prepared.accountFingerprint() == null) return false;
+        if (!"yyd".equals(project)) return prepared.accountFingerprint().matches(input.get("account"));
+        Map<String, Object> body = prepared.fields();
+        return body != null && Objects.equals(input.get("account"), body.get("form[number]"))
+                && Objects.equals(input.get("password"), body.get("form[password]"))
+                && Objects.equals(input.get("schoolId"), body.get("form[school_id]"))
+                && Objects.equals(input.get("schoolName"), body.get("form[school_name]"))
+                && Objects.equals(input.get("runRuleId"), body.get("form[run_rule_item_id]"))
+                && matchesSchoolBody(prepared.accountFingerprint(), body);
     }
 
     private static ServiceAccountFingerprint binding(ServiceOrder order) {
@@ -471,7 +603,8 @@ public class JingyuNativeServiceGateway implements NativeServiceGateway, PluginR
 
     private JsonNode call(ApiProvider provider, String project, String action, Map<String, Object> values) {
         if (provider == null || !TYPE.equals(provider.getProviderType()) || !supported(project, project)
-                || !(COMMON_ACTIONS.contains(action) || Set.of("get_" + project + "_user_info",
+                || !(COMMON_ACTIONS.contains(action) || "yyd".equals(project) && "get_school_data".equals(action)
+                        || Set.of("get_" + project + "_user_info",
                         "get_" + project + "_zone_data", project + "_add").contains(action)))
             throw bad("不支持的运动服务请求");
         if (provider.getUsername() == null || !provider.getUsername().matches("[1-9][0-9]{0,18}")
@@ -505,7 +638,11 @@ public class JingyuNativeServiceGateway implements NativeServiceGateway, PluginR
     }
 
     private static String account(Map<String, String> fields, String project) {
-        String account = value(fields, "account", "bdlp".equals(project) ? 19 : 15);
+        String account = value(fields, "account", "yyd".equals(project) ? 64 : "bdlp".equals(project) ? 19 : 15);
+        if ("yyd".equals(project)) {
+            if (!account.matches("[A-Za-z0-9_-]{1,64}")) throw bad("请填写有效学号，支持字母、数字、短横线和下划线");
+            return account;
+        }
         if (!("bdlp".equals(project) ? account.matches("[1-9][0-9]{0,18}") : account.matches("[0-9]{7,15}")))
             throw bad("请填写有效的账号编号或手机号");
         return account;

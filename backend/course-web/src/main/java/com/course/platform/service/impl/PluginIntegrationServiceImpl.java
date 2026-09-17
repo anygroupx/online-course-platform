@@ -37,12 +37,14 @@ public class PluginIntegrationServiceImpl implements PluginIntegrationService {
 
     @Override public IPage<PluginProviderOption> listProviders(String pluginId, PluginPageQuery query) {
         SecurityUtils.requireAuthority("api-provider:update");
-        PluginReadOnlyConnector connector = requireConnector(pluginId);
+        PluginIntegrationDescriptor descriptor = requireDescriptor(pluginId);
+        if (!descriptor.availableCapabilities().contains("CATALOG")
+                && !descriptor.serviceCapabilities().contains("CREATE")) throw unsupported();
         requireQuery(query);
         LambdaQueryWrapper<ApiProvider> filter = new LambdaQueryWrapper<ApiProvider>()
                 .select(ApiProvider::getId, ApiProvider::getName, ApiProvider::getProviderType,
                         ApiProvider::getStatus, ApiProvider::getVerifiedAt)
-                .eq(ApiProvider::getProviderType, connector.getProviderType())
+                .eq(ApiProvider::getProviderType, descriptor.providerType())
                 .like(!query.keyword().isEmpty(), ApiProvider::getName, query.keyword())
                 .orderByDesc(ApiProvider::getId);
         IPage<ApiProvider> found = providerMapper.selectPage(new Page<>(query.page(), query.pageSize()), filter);
@@ -72,9 +74,14 @@ public class PluginIntegrationServiceImpl implements PluginIntegrationService {
         return invoke(() -> connector.searchSchools(provider, query));
     }
 
-    private PluginReadOnlyConnector requireConnector(String pluginId) {
+    private PluginIntegrationDescriptor requireDescriptor(String pluginId) {
         PluginIntegrationDescriptor descriptor = research.find(pluginId);
-        if (descriptor == null) throw new BusinessException(ResultCode.NOT_FOUND, "未找到插件研究记录");
+        if (descriptor == null) throw new BusinessException(ResultCode.NOT_FOUND, "未找到此功能");
+        return descriptor;
+    }
+
+    private PluginReadOnlyConnector requireConnector(String pluginId) {
+        PluginIntegrationDescriptor descriptor = requireDescriptor(pluginId);
         PluginReadOnlyConnector connector = connectors.getConnector(descriptor.providerType());
         if (connector == null) throw unsupported();
         return connector;

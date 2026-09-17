@@ -19,7 +19,7 @@ const sources = [
   ["P11", "通用鲸鱼套娃对接.zip", "鲸鱼 · 通用版", "DUPLICATE", null],
   ["P12", "雷电_v1.2_二开对接.zip", "雷电 v1.2", "NATIVE_PARTIAL", "leidian"],
 ];
-const jingyuPendingNotice = "两个项目的 Java 业务流程已实现；页面与验收仍在完善，尚未部署和真实联调";
+const jingyuPendingNotice = "体育项目的图形验证、规则更新和补跑功能尚未开放。";
 const descriptors = sources.map(([id, archive, name, integrationStatus, providerType]) => ({
   id, archive, name, integrationStatus, providerType,
   category: id === "P07" ? "项目与账务" : ["P06", "P09"].includes(id) ? "实习计划" : id === "P02" ? "课程同步" : "运动计划",
@@ -34,10 +34,11 @@ const descriptors = sources.map(([id, archive, name, integrationStatus, provider
     : ["静态证据不代表上游业务全功能已验收", "财务、订单、学生授权均未开放"],
   evidence: id === "P08" ? ["jingyu/api.php（静态核对的固定表单协议）", "index/keep.php", "index/bdlp.php", "jingyu/jingyu_tables.sql"]
     : [`${providerType || "plugin"}/api.php:1–127`, "来源行号由本地解压报告记录"],
-  availableCapabilities: ["flash", "heisha", "jiguang", "wuxin", "sxdk_tw", "ssbenz_xbd", "appui", "leidian", "jingyu"].includes(providerType) ? ["CATALOG", ...(id === "P04" ? ["SCHOOLS"] : [])]
+  serviceCapabilities: ["flash", "heisha", "jiguang", "wuxin", "sxdk_tw", "ssbenz_xbd", "appui", "leidian", "jingyu"].includes(providerType) ? ["CREATE", "SYNC"] : [],
+  availableCapabilities: ["flash", "heisha", "jiguang", "wuxin", "ssbenz_xbd", "appui", "leidian", "jingyu"].includes(providerType) ? ["CATALOG", ...(id === "P04" ? ["SCHOOLS"] : [])]
     : id === "P02" ? ["COURSE_CATALOG", "BATCH_PROGRESS"] : id === "P07" ? ["PROJECT_CENTER"] : [],
   projects: id === "P01" ? [{ id: "sdxy", name: "闪动校园" }, { id: "ydsjxy", name: "运动世界校园" }, { id: "xbd", name: "校步点" }]
-    : id === "P08" ? [{ id: "keep", name: "Keep 自由跑" }, { id: "bdlp", name: "步道乐跑" }]
+    : id === "P08" ? [{ id: "keep", name: "Keep 自由跑" }, { id: "bdlp", name: "步道乐跑" }, { id: "yyd", name: "校园运动" }]
     : id === "P12" ? ["步道乐跑", "步道人脸跑", "步道自由跑", "乐健体育"].map((name, i) => ({ id: String(i + 1), name })) : [],
 }));
 const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -97,8 +98,8 @@ try {
       if (delayNextCatalog) { delayNextCatalog = false; await new Promise((resolve) => { releaseCatalog = resolve; }); }
       if (pluginId === "P03") return respond([]);
       if (pluginId === "P08") {
-        const project = url.searchParams.get("project"); assert.ok(["keep", "bdlp"].includes(project));
-        return respond([{ id: project, name: project === "keep" ? "Keep 自由跑" : "步道乐跑", unitPrice: "0.01", priceUnit: project === "keep" ? "元/次·公里" : "元/次" }]);
+        const project = url.searchParams.get("project"); assert.ok(["keep", "bdlp", "yyd"].includes(project));
+        return respond([{ id: project, name: project === "keep" ? "Keep 自由跑" : project === "yyd" ? "校园运动" : "步道乐跑", unitPrice: "0.01", priceUnit: project === "bdlp" ? "元/次" : "元/次·公里" }]);
       }
       if (pluginId === "P01") return respond([{ id: url.searchParams.get("project") || "sdxy", name: "项目报价（演示）", unitPrice: "0.123456", priceUnit: url.searchParams.get("project") === "sdxy" ? "元/次" : "元/公里（倍率另计）" }]);
       return respond([{ id: "1", name: providerId === "10" ? "二号接口项目（演示）" : "晨跑项目（演示）", unitPrice: "0.15", priceUnit: "元/公里" },
@@ -111,41 +112,54 @@ try {
   await page.getByTestId("plugin-P12").waitFor();
   assert.equal(await page.locator(".plugin-row").count(), 12);
   for (const id of ["P05", "P08", "P09", "P12"]) {
-    await page.getByTestId(`plugin-${id}`).getByRole("button", { name: "只读接入", exact: true }).waitFor();
-    await page.getByTestId(`plugin-${id}`).getByText(/部分核心不透明$/).waitFor();
+    await page.getByTestId(`plugin-${id}`).getByRole("button", { name: "配置与使用", exact: true }).waitFor();
+
   }
   const jingyuRow = page.getByTestId("plugin-P08");
-  await jingyuRow.getByText("服务能力（部分）", { exact: true }).waitFor();
-  await jingyuRow.getByText(/部分核心不透明$/).waitFor();
+  await jingyuRow.getByText("已实现部分功能", { exact: true }).waitFor();
+  assert.equal(await page.locator(".archive-name").count(), 0, "archive metadata is not user-facing copy");
   await jingyuRow.getByText("商品 / 报价", { exact: true }).waitFor();
   assert.equal(await jingyuRow.getByText("待补协议", { exact: true }).count(), 0);
   for (const id of ["P11"])
-    assert.equal(await page.getByTestId(`plugin-${id}`).getByRole("button", { name: "只读接入", exact: true }).count(), 0);
+    assert.equal(await page.getByTestId(`plugin-${id}`).getByRole("button", { name: "配置与使用", exact: true }).count(), 0);
   assert.equal(calls.filter(c => /\/(catalog|schools)$/.test(c.path)).length, 0);
   await page.getByLabel("搜索插件", { exact: true }).fill("鲸鱼");
   assert.equal(await page.locator(".plugin-row").count(), 2);
-  await jingyuRow.getByRole("button", { name: "查看证据", exact: true }).click();
+  await jingyuRow.getByRole("button", { name: "功能说明", exact: true }).click();
   await page.getByText(jingyuPendingNotice, { exact: true }).waitFor();
   assert.equal(await page.getByRole("tab", { name: "商品 / 报价", exact: true }).count(), 1);
   assert.equal(await page.getByRole("button", { name: /读取商品目录|读取项目报价/ }).count(), 0);
   assert.equal(calls.filter(call => call.path.includes("/P08/")).length, 0, "opening evidence alone must not query configured services");
   await page.screenshot({ animations: "disabled", path: `${screenshots}/jingyu-partial-evidence-desktop.png` });
-  await page.keyboard.press("Escape"); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
-  await page.getByTestId("plugin-P11").getByRole("button", { name: "查看证据" }).click();
-  await page.getByText("25 个文件中 24 个与 P08 字节一致", { exact: true }).waitFor();
+  await page.locator(".plugin-integration-drawer .el-drawer__close-btn").click(); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
+  await page.getByTestId("plugin-P11").getByRole("button", { name: "功能说明" }).click();
+  await page.getByText("请从鲸鱼运动服务入口配置和上架。", { exact: true }).waitFor();
   assert.equal(await page.getByRole("tab", { name: "商品 / 报价" }).count(), 0);
-  await page.keyboard.press("Escape"); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
+  await page.locator(".plugin-integration-drawer .el-drawer__close-btn").click(); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
   await page.getByLabel("搜索插件", { exact: true }).fill("");
 
   const open = async (id) => {
-    await page.getByTestId(`plugin-${id}`).getByRole("button", { name: "只读接入", exact: true }).click();
+    await page.getByTestId(`plugin-${id}`).getByRole("button", { name: "配置与使用", exact: true }).click();
     await page.locator(".provider-selector .el-select").waitFor();
-    await page.getByText("本页不填写密钥", { exact: false }).waitFor();
+    await page.getByText("选择配置不会自动查询商品", { exact: false }).waitFor();
+    await page.getByRole("tab", { name: "商品 / 报价", exact: true }).click();
   };
   const chooseProvider = async (label = "演示只读接口 A") => {
     await page.locator(".provider-selector .el-select").click();
     await page.getByRole("option", { name: new RegExp(label) }).click();
   };
+  await page.getByTestId("plugin-P06").getByRole("button", { name: "配置与使用", exact: true }).click();
+  await page.locator(".provider-selector .el-select").waitFor();
+  assert.equal(await page.getByRole("tab", { name: "商品 / 报价", exact: true }).count(), 0, "native-only internship does not invent a catalog");
+  assert.equal(await page.getByRole("button", { name: "上架此服务商品", exact: true }).isEnabled(), false);
+  await chooseProvider();
+  assert.equal(await page.getByRole("button", { name: "上架此服务商品", exact: true }).isEnabled(), true);
+  assert.equal(calls.filter(call => /P06.*(catalog|schools)/.test(call.path)).length, 0);
+  await page.locator(".plugin-integration-drawer .el-drawer__close-btn").click(); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
+  await page.getByTestId("plugin-P11").getByRole("button", { name: "前往鲸鱼服务", exact: true }).click();
+  await page.getByRole("dialog", { name: "鲸鱼运动服务 · 使用与配置", exact: true }).waitFor();
+  assert.equal(calls.filter(call => call.path.includes("/P11/")).length, 0);
+  await page.locator(".plugin-integration-drawer .el-drawer__close-btn").click(); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
   await open("P04");
   assert.equal(await page.getByRole("button", { name: "读取商品目录", exact: true }).isEnabled(), false);
   await page.locator(".provider-selector .el-select").click();
@@ -184,7 +198,7 @@ try {
   assert.equal(await page.getByText("晨跑项目（演示）", { exact: true }).count(), 0);
   await page.waitForFunction(() => document.querySelectorAll(".el-message").length === 0);
   await page.screenshot({ animations: "disabled", path: `${screenshots}/desktop-workspace.png` });
-  await page.keyboard.press("Escape"); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
+  await page.locator(".plugin-integration-drawer .el-drawer__close-btn").click(); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
 
   await open("P01"); await chooseProvider();
   await page.locator(".catalog-workspace .el-select").click();
@@ -193,11 +207,11 @@ try {
   await page.getByText("¥0.123456", { exact: true }).waitFor();
   await page.getByText("元/公里（倍率另计）", { exact: true }).waitFor();
   assert.equal(calls.filter(c => c.path.includes("P01") && c.path.endsWith("/catalog")).at(-1).params.project, "ydsjxy");
-  await page.keyboard.press("Escape"); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
+  await page.locator(".plugin-integration-drawer .el-drawer__close-btn").click(); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
 
-  // P08's two verified projects can be queried, while the duplicate P11 remains evidence-only.
+  // Directory reads stay manual and P11 reuses P08 rather than duplicating service calls.
   await open("P08"); await chooseProvider();
-  for (const [project, label, unit] of [["keep", "Keep 自由跑", "元/次·公里"], ["bdlp", "步道乐跑", "元/次"]]) {
+  for (const [project, label, unit] of [["keep", "Keep 自由跑", "元/次·公里"], ["bdlp", "步道乐跑", "元/次"], ["yyd", "校园运动", "元/次·公里"]]) {
     await page.locator(".catalog-workspace .el-select").click();
     await page.getByRole("option", { name: label, exact: true }).click();
     await page.getByRole("button", { name: "读取商品目录", exact: true }).click();
@@ -207,17 +221,17 @@ try {
   }
   await page.screenshot({ animations: "disabled", path: `${screenshots}/jingyu-project-catalog-desktop.png` });
   assert.equal(calls.filter(c => c.path.includes("/P11/")).length, 0);
-  await page.keyboard.press("Escape"); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
+  await page.locator(".plugin-integration-drawer .el-drawer__close-btn").click(); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
 
   await open("P03");
-  await page.getByText("没有找到对应配置。", { exact: false }).waitFor();
+  await page.getByText("尚未配置此服务。", { exact: false }).waitFor();
   assert.equal(await page.getByRole("button", { name: "读取商品目录", exact: true }).isEnabled(), false);
   heishaConfigured = true;
   await page.getByRole("button", { name: "刷新配置", exact: true }).click();
   await chooseProvider();
   await page.getByRole("button", { name: "读取商品目录", exact: true }).click();
   await page.getByText("未返回商品目录", { exact: true }).waitFor();
-  await page.keyboard.press("Escape"); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
+  await page.locator(".plugin-integration-drawer .el-drawer__close-btn").click(); await page.locator(".plugin-integration-drawer").waitFor({ state: "hidden" });
   await page.getByLabel("搜索插件", { exact: true }).fill("极光");
   await page.screenshot({ animations: "disabled", path: `${screenshots}/desktop-overview.png`, fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });

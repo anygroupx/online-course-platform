@@ -30,6 +30,7 @@ import org.springframework.util.StringUtils;
 
 import java.net.URI;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
@@ -212,13 +213,22 @@ public class ApiProviderServiceImpl implements ApiProviderService {
     }
 
     @Override
-    public IPage<ApiProvider> queryApiProviders(String keyword, Integer status, Integer page, Integer pageSize) {
+    public ApiProvider getApiProvider(Long id) {
+        return requireProvider(id);
+    }
+
+    @Override
+    public IPage<ApiProvider> queryApiProviders(String keyword, Integer status, Integer page, Integer pageSize,
+                                              List<String> providerTypes) {
         Page<ApiProvider> pageObj = new Page<>(page, pageSize);
         LambdaQueryWrapper<ApiProvider> query = new LambdaQueryWrapper<>();
         if (StrUtil.isNotBlank(keyword)) {
             query.and(q -> q.like(ApiProvider::getName, keyword).or().like(ApiProvider::getProviderType, keyword));
         }
         if (status != null) query.eq(ApiProvider::getStatus, status);
+        if (providerTypes != null && !providerTypes.isEmpty()) {
+            query.in(ApiProvider::getProviderType, providerTypes);
+        }
         query.orderByDesc(ApiProvider::getCreateTime);
         return apiProviderMapper.selectPage(pageObj, query);
     }

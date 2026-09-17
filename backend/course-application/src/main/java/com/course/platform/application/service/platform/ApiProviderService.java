@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.vo.ProviderConnectionTestResult;
 
+import java.util.List;
+
 /**
  * 第三方API接口服务接口
  * 
@@ -43,6 +45,9 @@ public interface ApiProviderService {
      */
     void deleteApiProvider(Long id);
 
+    /** Load saved metadata without decrypting credentials or contacting the configured service. */
+    ApiProvider getApiProvider(Long id);
+
     /**
      * 分页查询API接口
      * 
@@ -50,9 +55,11 @@ public interface ApiProviderService {
      * @param status 状态
      * @param page 当前页
      * @param pageSize 每页数量
+     * @param providerTypes 限定接口类型；为空时不限制
      * @return 接口分页数据
      */
-    IPage<ApiProvider> queryApiProviders(String keyword, Integer status, Integer page, Integer pageSize);
+    IPage<ApiProvider> queryApiProviders(String keyword, Integer status, Integer page, Integer pageSize,
+                                       List<String> providerTypes);
 
     /**
      * 按 ID 加载并解密运行时凭据。返回值只允许用于第三方对接，不得回写数据库。

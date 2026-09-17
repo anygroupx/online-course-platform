@@ -62,8 +62,10 @@ const messages = Object.freeze({
 });
 
 /** Applied filters are immutable until explicit submission; reads never trigger business actions. */
-export function useServiceOrderSearch(read, { scope, admin, active, focus = () => "" }) {
-  const draft = ref(emptyOrderSearch());
+export function useServiceOrderSearch(read, { scope, admin, active, focus = () => "", visible = () => true, preset = () => "" }) {
+  const providerPreset = computed(() => typeof preset() === "string" && orderSearchTypes.includes(preset()) ? preset() : "");
+  const blankDraft = () => ({ ...emptyOrderSearch(), providerType: providerPreset.value });
+  const draft = ref(blankDraft());
   const result = shallowRef(null), attempt = shallowRef(null);
   const loading = ref(false), error = ref(""), validation = ref("");
   const requests = latestRequest();
@@ -78,12 +80,15 @@ export function useServiceOrderSearch(read, { scope, admin, active, focus = () =
   const page = computed(() => result.value?.current || attempt.value?.page || 1);
   const pageCount = computed(() => Math.min(10000, Math.ceil(total.value / 20)));
 
+  function pause() {
+    requests.invalidate(); loading.value = false;
+  }
   function clear() {
     requests.invalidate(); result.value = null; attempt.value = null;
     error.value = ""; validation.value = ""; loading.value = false;
   }
   async function execute(filters, currentPage) {
-    if (!live || !active() || !Number.isInteger(currentPage) || currentPage < 1 || currentPage > 10000) return false;
+    if (!live || !active() || !visible() || !Number.isInteger(currentPage) || currentPage < 1 || currentPage > 10000) return false;
     const ticket = requests.begin();
     const query = { ...filters, page: currentPage, pageSize: 20 };
     attempt.value = { filters: { ...filters }, page: currentPage };
@@ -115,13 +120,13 @@ export function useServiceOrderSearch(read, { scope, admin, active, focus = () =
       ? execute(applied.value, next) : Promise.resolve(false);
   }
   function retry() { return error.value && !dirty.value ? refresh() : Promise.resolve(false); }
-  function reset() { draft.value = emptyOrderSearch(); return submit(); }
+  function reset() { draft.value = blankDraft(); return submit(); }
 
-  watch([scope, active, focus], () => {
-    clear(); draft.value = emptyOrderSearch();
-    if (active()) void submit();
+  watch([scope, active, focus, providerPreset], () => {
+    clear(); draft.value = blankDraft();
+    if (active() && visible()) void submit();
   }, { immediate: true, flush: "sync" });
   onScopeDispose(() => { live = false; clear(); });
   return { draft, applied, dirty, result, items, total, page, pageCount, loading, error, validation,
-    submit, refresh, goToPage, retry, reset };
+    submit, refresh, goToPage, retry, reset, pause };
 }

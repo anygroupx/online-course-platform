@@ -166,8 +166,8 @@ class JingyuNativeServiceGatewayTest {
     @Test
     void catalogAndPricingDoNotApplyTheOtherAdaptersMileageCapOrEndOnlyRounding() {
         var catalog = gateway.fetchCatalog(provider, null);
-        assertEquals(List.of("keep", "bdlp"), catalog.stream().map(item -> item.id()).toList());
-        assertEquals(List.of("元/次·公里", "元/次"), catalog.stream().map(item -> item.priceUnit()).toList());
+        assertEquals(List.of("keep", "bdlp", "yyd"), catalog.stream().map(item -> item.id()).toList());
+        assertEquals(List.of("元/次·公里", "元/次", "元/次·公里"), catalog.stream().map(item -> item.priceUnit()).toList());
         BigDecimal rate = new BigDecimal("0.01"), distance = new BigDecimal("1.5");
         assertEquals(new BigDecimal("0.02"), JingyuNativeServiceGateway.unitCharge(rate, "keep", distance));
         assertEquals(new BigDecimal("0.06"), JingyuNativeServiceGateway.unitCharge(rate, "keep", distance).multiply(new BigDecimal("3")));
@@ -178,7 +178,7 @@ class JingyuNativeServiceGatewayTest {
         assertEquals(0, writes());
     }
 
-    @ParameterizedTest @ValueSource(strings = {"yyd", "ymty", "KEEP", "unknown", "keep&act=refund"})
+    @ParameterizedTest @ValueSource(strings = {"ymty", "KEEP", "unknown", "keep&act=refund"})
     void unimplementedProjectsCannotBeAdvertisedOrDispatched(String project) {
         assertFalse(JingyuNativeServiceGateway.supported(project, project));
         assertThrows(BusinessException.class, () -> gateway.fetchCatalog(provider, project));

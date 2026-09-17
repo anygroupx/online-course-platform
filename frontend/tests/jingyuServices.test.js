@@ -22,10 +22,10 @@ const logs = (page = 1) => ({ page, hasMore: false, items: [row()] });
 const resolution = () => ({ outcome: "ACCEPTED", evidence: "已独立核实订单编号、记录编号及资金处理结果", upstreamChecked: true,
   externalOrderNo: "record_A-01", externalSubOrderNo: uid });
 
-test("Jingyu exposes only the two verified string projects and searchable orders", () => {
-  assert.deepEqual(Object.keys(jingyuProjects), ["keep", "bdlp"]);
+test("Jingyu exposes implemented string projects and searchable orders", () => {
+  assert.deepEqual(Object.keys(jingyuProjects), ["keep", "bdlp", "yyd"]);
   for (const project of Object.keys(jingyuProjects)) assert.equal(nativeProductSupported("jingyu", project, project), true);
-  for (const [project, id] of [["yyd", "yyd"], ["ymty", "ymty"], ["default", "keep"], ["keep", "bdlp"], [1, 1], [null, "keep"]])
+  for (const [project, id] of [["ymty", "ymty"], ["default", "keep"], ["keep", "bdlp"], [1, 1], [null, "keep"]])
     assert.equal(nativeProductSupported("jingyu", project, id), false);
   assert.equal(serviceNames.jingyu, "鲸鱼"); assert.equal(isReadOnlyProviderType("jingyu"), true);
   assert.equal(serviceOrderSearchParams({ providerType: "jingyu" }).providerType, "jingyu");

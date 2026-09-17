@@ -11,12 +11,13 @@ const data = (current = 1, props = {}) => ({ records: [row()], current, size: 20
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 function deferred() { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 function setup(t, read, options = {}) {
-  const context = ref("user:7"), admin = ref(false), active = ref(options.active ?? true), focus = ref(options.focus ?? "");
+  const context = ref("user:7"), admin = ref(false), active = ref(options.active ?? true), focus = ref(options.focus ?? ""), visible = ref(options.visible ?? true);
+  const preset = ref(options.preset ?? "");
   const scope = effectScope();
   const state = scope.run(() => useServiceOrderSearch(read, { scope: () => context.value, admin: () => admin.value,
-    active: () => active.value, focus: () => focus.value }));
+    active: () => active.value, focus: () => focus.value, visible: () => visible.value, preset: () => preset.value }));
   t.after(() => scope.stop());
-  return { state, context, admin, active, focus, stop: () => scope.stop() };
+  return { state, context, admin, active, focus, visible, preset, stop: () => scope.stop() };
 }
 
 test("order filters whitelist read-only fields and preserve literal text and 64-bit user IDs", () => {
@@ -184,4 +185,78 @@ test("page bounds reject fractional or excessive navigation and cap the UI range
   await flush(); assert.equal(state.pageCount.value, 10000);
   for (const page of [0, -1, 1.5, 10001, NaN, "2"]) assert.equal(await state.goToPage(page), false);
   assert.equal(count, 1); assert.equal(await state.goToPage(10000), true); assert.equal(state.page.value, 10000);
+});
+
+
+test("hidden cached views preserve draft and applied filters without issuing background reads", async (t) => {
+  const calls = [];
+  const { state, visible } = setup(t, async (params) => { calls.push(params); return data(params.page, { total: 41 }); });
+  await flush(); state.draft.value.keyword = "已查询"; await state.submit(); await state.goToPage(2);
+  state.draft.value.keyword = "未提交";
+  visible.value = false; state.pause();
+  assert.equal(await state.refresh(), false); assert.equal(calls.length, 3);
+  assert.equal(state.page.value, 2); assert.equal(state.applied.value.keyword, "已查询");
+  assert.equal(state.draft.value.keyword, "未提交"); assert.equal(state.items.value.length, 1);
+  visible.value = true; await flush();
+  assert.equal(calls.length, 3, "reactivating a cached result does not issue a redundant request");
+  await state.refresh();
+  assert.deepEqual(calls.at(-1), { keyword: "已查询", page: 2, pageSize: 20 });
+  assert.equal(state.draft.value.keyword, "未提交");
+});
+
+test("pausing an in-flight cached view aborts its read and ignores late completions", async (t) => {
+  const pending = [];
+  const { state, visible } = setup(t, (params, admin, signal) => {
+    const d = deferred(); pending.push({ ...d, params, signal }); return d.promise;
+  });
+  visible.value = false; state.pause();
+  assert.equal(pending[0].signal.aborted, true); assert.equal(state.loading.value, false);
+  pending[0].resolve(data()); await flush();
+  assert.equal(state.result.value, null);
+  visible.value = true;
+  const resumed = state.refresh();
+  assert.equal(pending.length, 2);
+  pending[1].resolve(data()); assert.equal(await resumed, true);
+});
+
+test("session changes clear hidden private data but do not fetch until the view is visible", async (t) => {
+  const calls = [];
+  const { state, context, visible } = setup(t, async (params) => { calls.push(params); return data(); });
+  await flush(); state.draft.value.keyword = "私有搜索";
+  visible.value = false; state.pause(); context.value = "user:8";
+  assert.equal(state.items.value.length, 0); assert.equal(state.draft.value.keyword, "");
+  assert.equal(await state.submit(), false); assert.equal(calls.length, 1);
+  visible.value = true; await state.refresh();
+  assert.equal(calls.length, 2); assert.deepEqual(state.applied.value, {});
+});
+
+
+test("workflow type presets survive reset and focus changes without widening owner permissions", async (t) => {
+  const calls = [];
+  const { state, preset, focus } = setup(t, async (params) => {
+    calls.push(params); return data(1, { records: [row({ providerType: params.providerType || "jiguang", id: params.orderId || id })] });
+  }, { preset: "sxdk_tw", focus: id });
+  await flush(); assert.deepEqual(calls[0], { providerType: "sxdk_tw", orderId: id, page: 1, pageSize: 20 });
+  state.draft.value.providerType = ""; await state.submit(); assert.equal(calls.at(-1).providerType, undefined);
+  await state.reset(); assert.equal(calls.at(-1).providerType, "sxdk_tw");
+  state.draft.value.ownerId = "8"; assert.equal(await state.submit(), false);
+  assert.equal(calls.some(call => call.ownerId), false);
+  preset.value = "appui"; await flush(); assert.equal(calls.at(-1).providerType, "appui");
+  assert.equal(state.draft.value.ownerId, ""); assert.equal(calls.at(-1).orderId, id);
+  focus.value = ""; await flush(); assert.equal(calls.at(-1).providerType, "appui"); assert.equal(calls.at(-1).orderId, undefined);
+  preset.value = ["flash"]; await flush(); assert.equal(state.draft.value.providerType, "");
+  assert.equal(calls.at(-1).providerType, undefined);
+});
+
+test("changing the workflow type aborts and discards the previous result", async (t) => {
+  const pending = [];
+  const { state, preset } = setup(t, (params, admin, signal) => {
+    const d = deferred(); pending.push({ ...d, params, signal }); return d.promise;
+  }, { preset: "sxdk_tw" });
+  preset.value = "jiguang";
+  assert.equal(pending.length, 2); assert.equal(pending[0].signal.aborted, true);
+  pending[1].resolve(data()); await flush();
+  pending[0].resolve(data(1, { records: [row({ providerType: "sxdk_tw" })] })); await flush();
+  assert.equal(state.items.value[0].providerType, "jiguang");
+  assert.deepEqual(state.applied.value, { providerType: "jiguang" });
 });

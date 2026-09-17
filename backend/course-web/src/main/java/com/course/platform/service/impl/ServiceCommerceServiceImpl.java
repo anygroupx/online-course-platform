@@ -184,7 +184,8 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
     public PluginSchoolPage schools(Long productId, int page, String keyword) {
         user();
         ServiceProduct p = forSale(productId);
-        if (daily(p) || "appui".equals(p.getProviderType()))
+        if (daily(p) || "appui".equals(p.getProviderType())
+                || jingyu(p.getProviderType()) && "yyd".equals(p.getProject()))
             return gateway.schools(
                     active(p.getProviderId(), p.getProviderType(), null), p, page, keyword);
         if (!"jiguang".equals(p.getProviderType())) throw bad("该服务不支持学校查询");
@@ -256,7 +257,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
         }
         if (jingyu(p.getProviderType())) {
             BigDecimal billable = JingyuNativeServiceGateway.billable(p.getProject(), form.distance());
-            if (prepared.accountFingerprint() == null || !prepared.accountFingerprint().matches(form.fields().get("account"))
+            if (!JingyuNativeServiceGateway.matchesPreparedAccount(p.getProject(), form.fields(), prepared)
                     || prepared.plan() != null || prepared.distancePlan() != null || prepared.quantity() != form.quantity()
                     || prepared.distance() == null || prepared.distance().compareTo(form.distance()) != 0
                     || prepared.billablePerUnit() == null || prepared.billablePerUnit().compareTo(billable) != 0)

@@ -19,7 +19,7 @@ services:
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./mysql/conf.d:/etc/mysql/conf.d:ro
     ports:
-      - "13306:3306"  # 映射到宿主机 13306，保持与原配置一致
+      - "127.0.0.1:13306:3306"  # 仅回环：数据库无外部消费者（2026-09-12 收窄）
     networks:
       - local_net
     healthcheck:
@@ -47,7 +47,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"  # 仅回环
     networks:
       - local_net
     healthcheck:
@@ -79,8 +79,8 @@ services:
     volumes:
       - es_data:/usr/share/elasticsearch/data
     ports:
-      - "9200:9200"
-      - "9300:9300"
+      - "127.0.0.1:9200:9200"  # 仅回环
+      - "127.0.0.1:9300:9300"  # 仅回环
     networks:
       - local_net
     healthcheck:

@@ -15,7 +15,7 @@
         </p>
       </div>
       <el-button :loading="loading" :disabled="!sessionActive" @click="load">刷新列表</el-button
-      ><el-button v-if="!admin" type="primary" @click="router.push('/services')"
+      ><el-button v-if="!admin" type="primary" @click="router.push(serviceDestination(applied.providerType) || '/services')"
         >购买服务</el-button
       >
     </header>
@@ -43,7 +43,7 @@
         v-for="item in items"
         :key="item.id"
         class="order-card"
-        :class="{ focused: route.query.focus === item.id, 'leidian-order': isLeidianService(item), 'jingyu-order': isJingyuService(item) }"
+        :class="{ focused: viewQuery.focus === item.id, 'leidian-order': isLeidianService(item), 'jingyu-order': isJingyuService(item) }"
       >
         <div class="order-title">
           <div>
@@ -595,7 +595,7 @@
   </div>
 </template>
 <script setup>
-import { computed, ref, watch, onBeforeUnmount } from "vue";
+import { computed, ref, shallowRef, watch, onActivated, onDeactivated, onBeforeUnmount } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -648,19 +648,34 @@ import { isJingyuService, jingyuLogsValid, jingyuTaskEditable, jingyuResolutionE
 import { isLeidianService, canReadLeidianRecord, editableLeidianPlan, leidianPlanError,
   leidianLogsValid, leidianResolutionError, leidianResolutionPayload } from "@/utils/leidianServices";
 import { latestRequest } from "@/utils/pluginIntegrations";
+import { serviceDestination, serviceTypeFromQuery } from "@/utils/pluginWorkflows";
 import { appuiPlanError, editableAppuiPlan, appuiRemainingText } from "@/utils/appuiServices";
 import ServiceQuoteConfirm from "@/components/ServiceQuoteConfirm.vue";
 const route = useRoute(),
   router = useRouter();
-const admin = computed(() => !!route.meta.serviceAdmin);
+// MainLayout keys cached views by path. Keep each instance's role and query
+// separate so another route cannot trigger reads or erase its saved filters.
+const viewPath = route.path;
+const admin = ref(!!route.meta.serviceAdmin);
+const viewQuery = shallowRef(route.query);
 const sessionActive = hasAuthenticatedSession;
-const hasFocus = computed(() => Object.hasOwn(route.query, "focus"));
+const viewActive = computed(() => sessionActive.value && route.path === viewPath);
+watch(() => route.path === viewPath ? route.query : null, (query) => {
+  if (query) viewQuery.value = query;
+}, { flush: "sync" });
+const hasFocus = computed(() => Object.hasOwn(viewQuery.value, "focus"));
 const { draft, applied, dirty, result, items, total, page, loading, error, validation,
-  submit, refresh: load, goToPage, retry, reset } = useServiceOrderSearch(listServiceOrders, {
+  submit, refresh: load, goToPage, retry, reset, pause } = useServiceOrderSearch(listServiceOrders, {
   scope: () => JSON.stringify([admin.value, authSessionScope.value]),
   admin: () => admin.value,
   active: () => sessionActive.value,
-  focus: () => hasFocus.value ? route.query.focus : "",
+  visible: () => viewActive.value,
+  focus: () => hasFocus.value ? viewQuery.value.focus : "",
+  preset: () => serviceTypeFromQuery(viewQuery.value.providerType),
+});
+onDeactivated(pause);
+onActivated(() => {
+  if (!result.value && !loading.value) void load();
 });
 const filterSummary = computed(() => {
   const f = applied.value, labels = [];
@@ -1182,7 +1197,7 @@ function clearPrivateDetails() {
   busyId.value = null;
   planLoading.value = resolving.value = settlementLoading.value = false;
 }
-watch([admin, authSessionScope], clearPrivateDetails, { flush: "sync" });
+watch([admin, authSessionScope, viewActive], clearPrivateDetails, { flush: "sync" });
 onBeforeUnmount(clearPrivateDetails);
 </script>
 <style scoped>

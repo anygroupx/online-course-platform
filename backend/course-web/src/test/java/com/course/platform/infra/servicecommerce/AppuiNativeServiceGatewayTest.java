@@ -97,7 +97,7 @@ class AppuiNativeServiceGatewayTest {
     @Test
     void registryPublishesNineCatalogProjectsAndOnlyImplementedActions() {
         var registry = new com.course.platform.infra.integration.PluginConnectorRegistry(List.of(gateway));
-        var descriptor = new com.course.platform.infra.integration.PluginResearchCatalog(registry).find("P09");
+        var descriptor = new com.course.platform.infra.integration.PluginResearchCatalog(registry, org.mockito.Mockito.mock(com.course.platform.infra.servicecommerce.NativeServiceGatewayRouter.class)).find("P09");
         assertEquals("appui", descriptor.providerType());
         assertEquals("NATIVE_PARTIAL", descriptor.integrationStatus());
         assertEquals(List.of("CATALOG"), descriptor.availableCapabilities());
