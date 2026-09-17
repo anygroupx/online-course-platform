@@ -15,7 +15,7 @@ const readSource = (path) =>
 
 const priceListSource = readSource("../src/views/PriceList.vue");
 const layoutSource = readSource("../src/layouts/MainLayout.vue");
-const routerSource = readSource("../src/router/index.js");
+const routerSource = readSource("../src/router/routes.js");
 const dashboardSource = readSource("../src/views/Dashboard.vue");
 const profileSource = readSource("../src/views/Profile.vue");
 const usersSource = readSource("../src/views/Users.vue");

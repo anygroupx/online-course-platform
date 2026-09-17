@@ -14,6 +14,8 @@ import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.domain.vo.plugin.PluginProduct;
 import com.course.platform.infra.integration.PluginConnectorRegistry;
 import com.course.platform.infra.integration.PluginResearchCatalog;
+import com.course.platform.infra.servicecommerce.NativeServiceGatewayRouter;
+import com.course.platform.infra.servicecommerce.PhpNativeServiceGateway;
 import com.course.platform.infra.persistence.mapper.ApiProviderMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -47,7 +49,7 @@ class PluginIntegrationServiceImplTest {
         var registry = new PluginConnectorRegistry(List.of(connector));
         mapper = mock(ApiProviderMapper.class);
         providers = mock(ApiProviderService.class);
-        service = new PluginIntegrationServiceImpl(new PluginResearchCatalog(registry), registry, mapper, providers);
+        service = new PluginIntegrationServiceImpl(new PluginResearchCatalog(registry, mock(NativeServiceGatewayRouter.class)), registry, mapper, providers);
         authenticate("api-provider:update");
         clearInvocations(connector);
     }
@@ -145,12 +147,43 @@ class PluginIntegrationServiceImplTest {
         assertFalse(filter.getSqlSelect().contains("api_key")); assertFalse(filter.getSqlSelect().contains("api_url"));
         verifyNoInteractions(providers);
     }
+    @Test @SuppressWarnings({"unchecked", "rawtypes"})
+    void nativeOnlyPluginCanListSavedConfigurationsButCannotQueryAnAbsentDirectory() {
+        var registry = new PluginConnectorRegistry(List.of());
+        var nativeServices = mock(NativeServiceGatewayRouter.class);
+        when(nativeServices.capabilities("sxdk_tw")).thenReturn(PhpNativeServiceGateway.capabilities("sxdk_tw"));
+        service = new PluginIntegrationServiceImpl(new PluginResearchCatalog(registry, nativeServices), registry, mapper, providers);
+        ApiProvider row = new ApiProvider(); row.setId(18L); row.setProviderType("sxdk_tw");
+        row.setName("实习配置"); row.setStatus(1); row.setVerifiedAt(LocalDateTime.now());
+        Page<ApiProvider> rows = new Page<>(1, 20, 1); rows.setRecords(List.of(row));
+        when(mapper.selectPage(any(Page.class), any())).thenReturn(rows);
+        var result = service.listProviders("P06", new PluginPageQuery(1, 20, ""));
+        assertEquals(18L, result.getRecords().get(0).id());
+        assertTrue(result.getRecords().get(0).verified());
+        ArgumentCaptor<LambdaQueryWrapper<ApiProvider>> captor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(mapper).selectPage(any(Page.class), captor.capture());
+        var filter = captor.getValue();
+        assertTrue(filter.getSqlSegment().contains("provider_type"));
+        assertTrue(filter.getParamNameValuePairs().containsValue("sxdk_tw"));
+        assertFalse(filter.getSqlSelect().contains("api_key"));
+        assertThrows(BusinessException.class, () -> service.fetchCatalog("P06", 18L, null));
+        assertThrows(BusinessException.class, () -> service.searchSchools("P06", 18L, new PluginPageQuery(1, 20, "")));
+        verifyNoInteractions(providers, connector);
+    }
+
+    @Test void unsupportedAndSharedEntriesCannotInventProviderOptions() {
+        for (String id : List.of("P02", "P06", "P07", "P11", "unknown")) {
+            assertThrows(BusinessException.class, () -> service.listProviders(id, new PluginPageQuery(1, 20, "")));
+        }
+        verifyNoInteractions(providers, mapper, connector);
+    }
+
     @Test void p05PlaintextCatalogRequiresItsOwnEnabledVerifiedProviderAndNoSchoolCapability() {
         PluginReadOnlyConnector distance = mock(PluginReadOnlyConnector.class);
         when(distance.getProviderType()).thenReturn("ssbenz_xbd");
         when(distance.projects()).thenReturn(List.of(new com.course.platform.domain.vo.plugin.PluginProjectOption("xbd", "总公里计划")));
         var registry = new PluginConnectorRegistry(List.of(connector, distance));
-        service = new PluginIntegrationServiceImpl(new PluginResearchCatalog(registry), registry, mapper, providers);
+        service = new PluginIntegrationServiceImpl(new PluginResearchCatalog(registry, mock(NativeServiceGatewayRouter.class)), registry, mapper, providers);
         ApiProvider provider = configured(1, true);
         provider.setProviderType("ssbenz_xbd");
         var rows = List.of(new PluginProduct("0", "总公里计划 · 方案 0", new BigDecimal("0.20"), "元/公里"));

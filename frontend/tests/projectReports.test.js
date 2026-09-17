@@ -51,3 +51,30 @@ test('inconsistent ticket/client totals and negative paid budgets fail rather th
   const balance = page(); balance.records[0].refundBudget = '-1.00'; assert.equal(validProjectBalancePage(balance), false)
   const money = owner(); money.localFunding.returned = '-0.01'; assert.equal(validProjectReport(money), false)
 })
+
+for (const separator of [' ', 'T']) {
+  test(`owner and admin reports accept server local timestamps with ${JSON.stringify(separator)}`, () => {
+    for (const fraction of ['', '.123', '.123456789']) {
+      const report = owner()
+      report.window.from = `2026-09-11${separator}18:19:25${fraction}`
+      report.window.through = `2026-09-12${separator}18:19:25${fraction}`
+      assert.equal(validProjectReport(report), true)
+      assert.equal(validProjectReport({ ...report, publishedProjects: 2, activeUpstreamBindings: 3,
+        activeUpstreamOwners: 2, activeLocalOwners: 1, upstreamFunding: { ...funding } }, true), true)
+      assert.equal(reportTime(report.window.through), '2026-09-12 18:19:25')
+    }
+  })
+}
+
+test('report windows reject malformed timestamps and impossible calendar or clock values', () => {
+  for (const timestamp of [null, 1789200000, '', '2026-09-12', '2026-09-12 18:19',
+    '2026-09-12 18:19:25Z', '2026-09-12T18:19:25+08:00', '2026-09-12\t18:19:25',
+    '2026-09-12 18:19:25 garbage', '2026-02-29 18:19:25', '2026-04-31T18:19:25',
+    '2026-09-12 24:00:00', '2026-09-12 18:60:00', '2026-09-12 18:19:60']) {
+    for (const field of ['from', 'through']) {
+      const report = owner()
+      report.window[field] = timestamp
+      assert.equal(validProjectReport(report), false, `${field}: ${JSON.stringify(timestamp)}`)
+    }
+  }
+})

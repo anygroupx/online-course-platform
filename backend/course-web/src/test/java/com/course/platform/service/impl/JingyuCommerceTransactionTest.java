@@ -60,7 +60,9 @@ class JingyuCommerceTransactionTest {
             Map<String, Object> body = inv.getArgument(2); calls.add(action);
             switch (action) {
                 case "get_price": return "{\"code\":1,\"data\":\"" + cost + "\"}";
-                case "get_keep_user_info", "get_bdlp_user_info": return data(json.createObjectNode().set("student", student));
+                case "get_keep_user_info", "get_bdlp_user_info", "get_yyd_user_info": return data(json.createObjectNode().set("student", student));
+                case "get_school_data": return data(json.createObjectNode().set("list", json.createArrayNode()
+                        .add(json.createObjectNode().put("school_id", "51").put("name", "示例学院"))));
                 case "get_keep_zone_data", "get_bdlp_zone_data":
                     return data(json.createObjectNode().set("list", json.createArrayNode()
                             .add(json.createObjectNode().put("zone_id", "7").put("name", "示例跑区"))));
@@ -72,7 +74,7 @@ class JingyuCommerceTransactionTest {
                     return page.toString();
                 case "get_task_data": return data(json.createObjectNode().set("list", tasks));
                 case "get_remain_count": return data(json.createObjectNode().put("refund_cnt", remaining));
-                case "keep_add", "bdlp_add", "refund", "change_run_status", "edit_task", "delay_task", "fast_delay_task":
+                case "keep_add", "bdlp_add", "yyd_add", "refund", "change_run_status", "edit_task", "delay_task", "fast_delay_task":
                     writes.incrementAndGet();
                     if (entered != null) { entered.countDown(); assertTrue(release.await(5, TimeUnit.SECONDS)); }
                     if ("change_run_status".equals(action)) remote.put("pause", (String) body.get("status"));
@@ -98,7 +100,12 @@ class JingyuCommerceTransactionTest {
                 .put("min_minute", "4").put("max_minute", "12").put("school_name", "示例学院")
                 .put("run_type", "1").put("is_auth", "1").put("auth_type", "设备授权").put("auth_time", "2026-01-01 08:00:00");
         student = json.createObjectNode();
-        if ("bdlp".equals(project)) {
+        if ("yyd".equals(project)) {
+            remote.put("pass", PASSWORD).put("run_rule_item_id", "91");
+            student.put("student_id", "81").put("school_id", "51").put("number", account());
+            student.putArray("run_rule_items").add(json.createObjectNode().put("run_rule_item_id", "91").put("min_dis", "1.5")
+                    .set("zone", json.createObjectNode().put("zone_id", "7").put("name", "示例跑区")));
+        } else if ("bdlp".equals(project)) {
             student.put("uid", UID); student.putObject("school").put("name", "示例学院");
             student.putObject("device").put("is_expired", false).put("login_type_display", "设备授权").put("refresh_at", "2026-01-01 08:00:00");
             student.putObject("run_rule").put("min_dis", "1.5");
@@ -107,10 +114,12 @@ class JingyuCommerceTransactionTest {
             student.putObject("default_zone").put("zone_id", "7").put("name", "示例跑区");
         }
     }
-    String account() { return "bdlp".equals(project) ? UID : PHONE; }
+    String account() { return "yyd".equals(project) ? "001_student-25" : "bdlp".equals(project) ? UID : PHONE; }
     String time(int days) { return ServiceTime.now().toLocalDate().plusDays(days) + " 07:30:00"; }
     String data(com.fasterxml.jackson.databind.JsonNode value) { return json.createObjectNode().put("code", 1).set("data", value).toString(); }
-    Map<String, String> fields() { return "bdlp".equals(project) ? Map.of("account", UID, "zoneId", "7", "runType", "1")
+    Map<String, String> fields() { return "yyd".equals(project)
+            ? Map.of("account", account(), "password", PASSWORD, "schoolId", "51", "schoolName", "示例学院", "runRuleId", "91")
+            : "bdlp".equals(project) ? Map.of("account", UID, "zoneId", "7", "runType", "1")
             : Map.of("account", PHONE, "password", PASSWORD, "zoneId", "7", "minMinute", "4", "maxMinute", "12"); }
     OrderForm form() { return new OrderForm(3, new BigDecimal("1.5"), fields(), List.of(time(1), time(2), time(3)), true); }
     void publish() {
@@ -169,7 +178,7 @@ class JingyuCommerceTransactionTest {
         verifyNoInteractions(http); assertEquals(0, ledgerRows());
     }
 
-    @ParameterizedTest @ValueSource(strings = {"yyd", "ymty", "bad", ""})
+    @ParameterizedTest @ValueSource(strings = {"ymty", "bad", ""})
     void unimplementedProjectsCannotBePublished(String value) {
         f.auth(7, "api-provider:update"); clearInvocations(http);
         assertThrows(BusinessException.class, () -> f.service.saveProduct(null, new ProductCommand(9L, value, value, "测试", "", BigDecimal.ONE, true, null)));

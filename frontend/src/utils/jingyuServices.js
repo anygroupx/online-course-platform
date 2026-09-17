@@ -1,6 +1,6 @@
 import { beijingToday } from "./internshipServices.js";
 
-export const jingyuProjects = Object.freeze({ keep: "Keep 自由跑", bdlp: "步道乐跑" });
+export const jingyuProjects = Object.freeze({ keep: "Keep 自由跑", bdlp: "步道乐跑", yyd: "校园运动" });
 export const isJingyuService = (value) => value?.providerType === "jingyu";
 const matches = (value, pattern) => typeof value === "string" && pattern.test(value) && !/\p{Cc}/u.test(value);
 const text = (value, max) => typeof value === "string" && value.trim().length > 0 && value.length <= max && !/\p{Cc}/u.test(value);
@@ -44,27 +44,39 @@ export function jingyuTaskTimesError(times, quantity, now = new Date()) {
 export function jingyuAccountError(project, fields = {}) {
   if (!Object.hasOwn(jingyuProjects, project)) return "请选择有效的运动项目";
   if (project === "bdlp") return identifier(fields?.account) ? "" : "请填写已授权的账号 UID（1–19 位正整数）";
-  if (!matches(fields?.account, /^[0-9]{7,15}$/)) return "请填写 7–15 位数字手机号";
+  if (project === "yyd") {
+    if (!identifier(fields?.schoolId) || !text(fields?.schoolName, 80) || fields.schoolName !== fields.schoolName.trim())
+      return "请先查询并选择学校";
+    if (!matches(fields?.account, /^[A-Za-z0-9_-]{1,64}$/)) return "请填写有效学号，支持字母、数字、短横线和下划线";
+  } else if (!matches(fields?.account, /^[0-9]{7,15}$/)) return "请填写 7–15 位数字手机号";
   return text(fields?.password, 128) ? "" : "请填写 1–128 字的账号密码，不支持控制字符";
 }
-const formKeys = Object.freeze({ keep: ["account", "password", "zoneId", "minMinute", "maxMinute"], bdlp: ["account", "zoneId", "runType"] });
+const formKeys = Object.freeze({ keep: ["account", "password", "zoneId", "minMinute", "maxMinute"], bdlp: ["account", "zoneId", "runType"],
+  yyd: ["schoolId", "schoolName", "account", "password", "runRuleId"] });
 // UID and passwords stay strings; never round long IDs or trim meaningful password spaces.
 export function jingyuLookupFields(project, fields = {}) {
   if (!object(fields)) return {};
-  return Object.fromEntries((project === "keep" ? ["account", "password"] : project === "bdlp" ? ["account"] : [])
+  return Object.fromEntries((project === "yyd" ? ["schoolId", "schoolName", "account", "password"]
+    : project === "keep" ? ["account", "password"] : project === "bdlp" ? ["account"] : [])
     .filter((key) => Object.hasOwn(fields, key) && typeof fields[key] === "string").map((key) => [key, fields[key]]));
 }
 export function jingyuFormFields(project, fields = {}) {
   if (!object(fields) || !Object.hasOwn(formKeys, project)) return {};
   return Object.fromEntries(formKeys[project].filter((key) => Object.hasOwn(fields, key) && typeof fields[key] === "string").map((key) => [key, fields[key]]));
 }
-export function jingyuLookupValid(project, lookup) {
+export function jingyuLookupValid(project, lookup, fields) {
   if (!Object.hasOwn(jingyuProjects, project) || !object(lookup?.suggested) || !Array.isArray(lookup.choices) ||
       lookup.choices.length < 1 || lookup.choices.length > 200 ||
-      !lookup.choices.every((choice) => choice?.field === "zoneId" && identifier(choice.value) && text(choice.label, 100)) ||
+      !lookup.choices.every((choice) => choice?.field === (project === "yyd" ? "runRuleId" : "zoneId") && identifier(choice.value) && text(choice.label, 100)) ||
       new Set(lookup.choices.map((choice) => choice.value)).size !== lookup.choices.length) return false;
   const facts = lookup.suggested;
   if (project === "keep") return Object.keys(facts).length === 0;
+  if (project === "yyd") return Object.keys(facts).length === 2 && identifier(facts.schoolId) && text(facts.schoolName, 80) &&
+    facts.schoolName === facts.schoolName.trim() && (fields === undefined || fields?.schoolId === facts.schoolId && fields?.schoolName === facts.schoolName) &&
+    Array.isArray(lookup.schoolRules) && lookup.schoolRules.length === lookup.choices.length &&
+    new Set(lookup.schoolRules.map((rule) => rule?.id)).size === lookup.schoolRules.length &&
+    lookup.schoolRules.every((rule) => identifier(rule?.id) && identifier(rule.zoneId) && text(rule.zoneName, 100) && distanceValid(rule.minDistance) &&
+      lookup.choices.some((choice) => choice.value === rule.id && choice.label === rule.zoneName));
   return Object.keys(facts).length === 5 && text(facts.schoolName, 100) && distanceValid(facts.minDistance) &&
     ["VALID", "EXPIRED"].includes(facts.authorizationState) && text(facts.authorizationType, 100) && jingyuTimestampValid(facts.authorizedAt);
 }
@@ -73,9 +85,13 @@ export function jingyuOrderError(product, fields, quantity, distance, lookup, ti
     return "此商品暂不能购买，请重新选择运动项目";
   const accountError = jingyuAccountError(product.project, fields);
   if (accountError) return accountError;
-  if (!jingyuLookupValid(product.project, lookup)) return "请先查询账号与跑区";
+  if (!jingyuLookupValid(product.project, lookup, fields)) return product.project === "yyd" ? "请先查询账号与规则" : "请先查询账号与跑区";
   if (product.project === "bdlp" && lookup.suggested.authorizationState !== "VALID") return "账号授权已失效，请完成授权后重新查询";
-  if (!lookup.choices.some((choice) => choice.value === fields.zoneId)) return "请选择查询结果中的跑区";
+  if (product.project === "yyd") {
+    const rule = lookup.schoolRules.find((item) => item.id === fields.runRuleId);
+    if (!rule) return "请选择学校对应的跑步规则";
+    if (distanceValid(distance) && Number(distance) < Number(rule.minDistance)) return `所选规则要求每次至少 ${rule.minDistance} 公里`;
+  } else if (!lookup.choices.some((choice) => choice.value === fields.zoneId)) return "请选择查询结果中的跑区";
   if (product.project === "bdlp" && !["1", "2"].includes(fields.runType)) return "请选择有效跑或自由跑";
   if (product.project === "keep" && (!matches(fields.minMinute, /^[3-6]$/) || !matches(fields.maxMinute, /^(?:[89]|1[0-5])$/)))
     return "请设置配速：最快 3–6 分钟/公里，最慢 8–15 分钟/公里";

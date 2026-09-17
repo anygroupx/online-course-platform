@@ -59,6 +59,9 @@ public class TurnstileVerifier {
     @Value("${cloudflare.turnstile.expected-hostname:}")
     private String expectedHostname;
 
+    /** 允许的人机验证域名集合（expected-hostname 支持逗号分隔多域名）。 */
+    private Set<String> allowedHostnames = Set.of();
+
     @Value("${cloudflare.turnstile.verify-url:https://challenges.cloudflare.com/turnstile/v0/siteverify}")
     private String verifyUrl;
 
@@ -76,6 +79,11 @@ public class TurnstileVerifier {
         if (enabled && "prod".equalsIgnoreCase(activeProfile) && !StringUtils.hasText(expectedHostname)) {
             throw new IllegalStateException("TURNSTILE_EXPECTED_HOSTNAME is required in production");
         }
+        this.allowedHostnames = java.util.Arrays.stream(expectedHostname.split(","))
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .map(String::toLowerCase)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     /**
@@ -120,10 +128,11 @@ public class TurnstileVerifier {
             auditFailure(expectedAction, "provider-rejected", "WARN");
             throw new BusinessException(ResultCode.HUMAN_VERIFICATION_FAILED);
         }
-        if (StringUtils.hasText(expectedHostname)
-                && !expectedHostname.equalsIgnoreCase(response.hostname())) {
+        if (!allowedHostnames.isEmpty()
+                && (response.hostname() == null
+                    || !allowedHostnames.contains(response.hostname().toLowerCase()))) {
             log.warn("Cloudflare Turnstile 域名不匹配：expected={}, actual={}",
-                    expectedHostname, response.hostname());
+                    allowedHostnames, response.hostname());
             auditFailure(expectedAction, "hostname-mismatch", "WARN");
             throw new BusinessException(ResultCode.HUMAN_VERIFICATION_FAILED);
         }

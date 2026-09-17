@@ -6,8 +6,12 @@
         <h1>配置可购买的服务商品。</h1>
         <p>选择已验证的服务配置，设置售价并上架，用户即可在服务商城购买。</p>
       </div>
-      <el-button type="primary" @click="open()">上架服务商品</el-button>
+      <el-button type="primary" :disabled="saving" @click="open()">上架服务商品</el-button>
     </header>
+    <el-alert v-if="publicationLoading" type="info" title="正在核对所选服务接口，请稍候" :closable="false" />
+    <el-alert v-if="publicationError" type="error" :title="publicationError" :closable="false">
+      <el-button v-if="router" text @click="readRequestedProvider(router.currentRoute.value.query)">重新核对配置</el-button>
+    </el-alert>
     <el-alert v-if="error" type="warning" :title="error" :closable="false" />
     <el-table v-loading="loading" :data="items"
       ><el-table-column
@@ -52,6 +56,7 @@
     <el-dialog
       v-model="dialog"
       class="service-product-dialog"
+      append-to-body
       :title="editing ? '编辑服务商品' : '上架服务商品'"
       width="min(660px, 95vw)"
       :close-on-click-modal="false"
@@ -62,14 +67,19 @@
           type="info"
           :closable="false"
         />
-        <el-form-item label="已保存的服务接口"
+        <el-form-item label="已保存的服务接口" :error="providersError"
           ><div class="provider-row">
             <el-select
               v-model="form.providerId"
+              class="service-provider-select"
+              aria-label="已保存的服务接口"
               filterable
-              remote
-              :remote-method="searchProviders"
+              fit-input-width
+              popper-class="service-provider-select-popper"
+              :filter-method="searchProviders"
               :loading="providersLoading"
+              loading-text="正在加载服务接口"
+              :no-data-text="providerEmptyText"
               :disabled="!!editing"
               placeholder="选择已验证启用的服务接口"
               @change="providerChanged"
@@ -92,16 +102,18 @@
             :loading="providersLoading"
             @click="loadProviders(false)"
             >加载更多接口</el-button
-          ></el-form-item
+          >
+          <div v-if="!editing && !providersLoading && !providersError && !providers.length && !providerKeyword" class="service-config-empty">
+            <p>没有匹配的已启用服务接口。请先添加对应服务，完成验证并启用。</p>
+            <el-button type="primary" plain @click="configureService">{{ providerTypeFilter ? '添加此服务接口' : '选择并配置服务' }}</el-button>
+          </div>
+          </el-form-item
         >
         <el-form-item v-if="selectedType === 'flash'" label="项目"
           ><el-select
             v-model="form.project"
             :disabled="!!editing"
-            @change="
-              remoteProducts = [];
-              form.remoteProductId = '';
-            "
+            @change="projectChanged"
             ><el-option label="闪动校园" value="sdxy" /><el-option
               label="运动世界校园"
               value="ydsjxy" /><el-option
@@ -110,15 +122,15 @@
         ></el-form-item>
         <el-form-item v-if="selectedType === 'jingyu'" label="运动项目">
           <el-select v-model="form.project" aria-label="运动项目" :disabled="!!editing"
-            @change="remoteProducts = []; form.remoteProductId = '';">
+            @change="projectChanged">
             <el-option v-for="(label, key) in jingyuProjects" :key="key" :label="label" :value="key" />
           </el-select>
         </el-form-item>
         <el-alert v-if="selectedType === 'jingyu'" type="info" :closable="false"
-          title="Keep 按每次距离计费，单次费用先保留两位小数，再计算总额；步道乐跑按次数计费。购买 1–365 次，每次 1–100 公里；退款须核对实际次数后入账。" />
+          title="Keep、校园运动按每次距离计费，单次费用先保留两位小数，再计算总额；步道乐跑按次数计费。购买 1–365 次，每次 1–100 公里；校园运动还须满足所选规则的最低距离。退款须核对实际次数后入账。" />
         <el-form-item v-if="selectedType === 'leidian'" label="运动项目">
           <el-select v-model="form.project" aria-label="运动项目" :disabled="!!editing"
-            @change="remoteProducts = []; form.remoteProductId = '';">
+            @change="projectChanged">
             <el-option v-for="(label, key) in leidianProjects" :key="key" :label="label" :value="key" />
           </el-select>
         </el-form-item>
@@ -126,7 +138,7 @@
           title="每次距离为 1–10 公里。步道三个项目每次计费距离最多按 2 公里计算；乐健体育按实际距离计费。订单总额以确认页面为准，取消不代表退款入账。" />
         <el-form-item v-if="selectedType === 'appui'" label="实习项目">
           <el-select v-model="form.project" :disabled="!!editing"
-            @change="remoteProducts = []; form.remoteProductId = '';">
+            @change="projectChanged">
             <el-option v-for="(label, key) in appuiProjects" :key="key" :label="label" :value="key" />
           </el-select>
         </el-form-item>
@@ -157,7 +169,7 @@
                 :label="`${p.name} · 成本 ¥${p.unitPrice}`" /></el-select
             ><el-button
               :loading="reading"
-              :disabled="!form.providerId || !!editing"
+              :disabled="!selectedProviderReady || !!editing"
               @click="readCatalog"
               >读取目录</el-button
             >
@@ -198,7 +210,7 @@
             ><el-input
               v-model="contract.unitCost"
               inputmode="decimal"
-              placeholder="填写合同成本，不是原插件的默认值"
+              placeholder="填写已核实的每服务日成本"
           /></el-form-item>
           <el-form-item label="本次价格核对有效期（最长 90 天）"
             ><el-date-picker
@@ -231,6 +243,7 @@
           :loading="saving"
           :disabled="
             !form.providerId ||
+            (!editing && !selectedProviderReady) ||
             !form.remoteProductId ||
             !form.title ||
             !form.unitPrice
@@ -243,7 +256,8 @@
   </div>
 </template>
 <script setup>
-import { computed, ref, onBeforeUnmount } from "vue";
+import { computed, inject, ref, watch, onBeforeUnmount } from "vue";
+import { routerKey } from "vue-router";
 import { ElMessage } from "element-plus";
 import request from "@/utils/request";
 import { listServiceProducts, saveServiceProduct } from "@/api/serviceCommerce";
@@ -253,6 +267,13 @@ import { appuiProjects } from "@/utils/appuiServices";
 import { leidianProjects } from "@/utils/leidianServices";
 import { jingyuProjects } from "@/utils/jingyuServices";
 import { serviceNames, nativeProductSupported } from "@/utils/serviceCommerce";
+import { serviceTypeFromQuery, servicePublishRequest, validPublicationProvider } from "@/utils/pluginWorkflows";
+import { latestRequest } from "@/utils/pluginIntegrations";
+const router = inject(routerKey, null);
+const viewPath = router?.currentRoute.value.path;
+const providerTypeFilter = ref(serviceTypeFromQuery(router?.currentRoute.value.query.providerType));
+const publicationLoading = ref(false), publicationError = ref("");
+const publicationRequests = latestRequest(), productListRequests = latestRequest(), catalogRequests = latestRequest();
 const items = ref([]),
   page = ref(1),
   total = ref(0),
@@ -282,72 +303,101 @@ const contract = ref({
   upstreamChecked: false,
 });
 const providersLoading = ref(false),
+  providersError = ref(""),
   providerPage = ref(1),
   providerTotal = ref(0),
   providerKeyword = ref("");
 let providerRequest = 0,
   searchTimer;
+const providerEmptyText = computed(() =>
+  providersError.value || (providerKeyword.value
+    ? "未找到匹配的服务接口"
+    : "暂无已启用的服务接口，请先完成验证并启用"),
+);
+const selectedProvider = computed(() => providers.value.find((p) => p.id === form.value.providerId));
+const selectedProviderReady = computed(() => selectedProvider.value?.status === 1 && !!selectedProvider.value.verifiedAt);
 const selectedType = computed(
   () =>
-    providers.value.find((p) => p.id === form.value.providerId)?.providerType ||
+    selectedProvider.value?.providerType ||
     editing.value?.providerType ||
     "",
 );
 async function load() {
+  const task = productListRequests.begin();
   loading.value = true;
   error.value = "";
   try {
     const r = await listServiceProducts(
-      { page: page.value, pageSize: 20 },
+      { page: page.value, pageSize: 20, providerType: providerTypeFilter.value || undefined },
       true,
     );
+    if (!task.current()) return;
     items.value = r.records;
     total.value = r.total;
   } catch {
+    if (!task.current()) return;
     error.value =
       "服务商城未启用或读取失败，请联系系统管理员完成必要配置。";
   } finally {
-    loading.value = false;
+    if (task.current()) loading.value = false;
   }
 }
 async function loadProviders(reset = true) {
+  clearTimeout(searchTimer);
   const token = ++providerRequest,
     next = reset ? 1 : providerPage.value + 1;
   providersLoading.value = true;
+  providersError.value = "";
   const selected = providers.value.find((p) => p.id === form.value.providerId);
+  if (reset) {
+    providers.value = selected ? [selected] : [];
+    providerPage.value = 0;
+    providerTotal.value = 0;
+  }
   try {
     const r = await request.get("/admin/api-providers", {
       params: {
         page: next,
         pageSize: 50,
         status: 1,
+        providerTypes: providerTypeFilter.value || Object.keys(serviceNames).join(","),
         keyword: providerKeyword.value || undefined,
       },
     });
     if (token !== providerRequest) return;
-    const rows = r.data.records.filter((p) => serviceNames[p.providerType]);
+    const rows = r.data.records.filter((p) => serviceTypeFromQuery(p?.providerType) &&
+      (!providerTypeFilter.value || p.providerType === providerTypeFilter.value));
     providers.value = [
       ...new Map(
         [
+          ...(selected ? [selected] : []),
           ...(reset ? [] : providers.value),
           ...rows,
-          ...(selected ? [selected] : []),
         ].map((p) => [p.id, p]),
       ).values(),
     ];
     providerPage.value = next;
     providerTotal.value = r.data.total;
   } catch {
+    if (token === providerRequest)
+      providersError.value = "服务接口加载失败，请点击“刷新接口”重试";
   } finally {
     if (token === providerRequest) providersLoading.value = false;
   }
 }
 function searchProviders(keyword) {
+  if (keyword === providerKeyword.value) return;
+  providerRequest++;
   providerKeyword.value = keyword;
+  providersLoading.value = true;
+  providersError.value = "";
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => loadProviders(true), 250);
 }
-function open(row) {
+function open(row, preset = null, requested = null) {
+  resetCatalog();
+  publicationRequests.invalidate(); publicationLoading.value = false;
+  if (!preset) publicationError.value = "";
   contract.value = {
     unitCost: row?.contractPrice?.unitCost || "",
     validUntil: row?.contractPrice?.validUntil || "",
@@ -372,10 +422,60 @@ function open(row) {
   remoteProducts.value = row
     ? [{ id: row.remoteProductId, name: row.title, unitPrice: row.unitPrice }]
     : [];
+  if (preset) {
+    providers.value = [preset];
+    form.value.providerId = preset.id;
+    providerChanged();
+    if (requested?.project) {
+      form.value.project = requested.project;
+      if (selectedType.value === "sxdk_tw") internshipProjectChanged();
+    }
+  }
   dialog.value = true;
   loadProviders();
 }
+function configureService() {
+  dialog.value = false;
+  router?.push(providerTypeFilter.value
+    ? { path: "/admin/api-providers", query: { type: providerTypeFilter.value } }
+    : { path: "/admin/plugin-integrations" });
+}
+async function readRequestedProvider(query) {
+  publicationRequests.invalidate(); publicationLoading.value = false; publicationError.value = "";
+  if (!query) { if (router) dialog.value = false; return; }
+  providerTypeFilter.value = serviceTypeFromQuery(query.providerType);
+  dialog.value = false;
+  if (!Object.hasOwn(query, "providerId") && !Object.hasOwn(query, "project")) return;
+  const requested = servicePublishRequest(query);
+  if (!requested) {
+    publicationError.value = "上架信息不完整或不正确，请从功能页重新选择服务配置。";
+    return;
+  }
+  const task = publicationRequests.begin(); publicationLoading.value = true;
+  try {
+    const response = await request.get(`/admin/api-providers/${requested.providerId}`, { signal: task.signal });
+    if (!task.current()) return;
+    if (!validPublicationProvider(response.data, requested)) {
+      publicationError.value = "所选接口不存在、类型不匹配或尚未验证启用，请检查配置后重试。";
+      return;
+    }
+    const { id, name, providerType, status, verifiedAt } = response.data;
+    open(null, { id, name, providerType, status, verifiedAt }, requested);
+  } catch {
+    if (task.current()) publicationError.value = "无法核对所选服务接口，请检查查看权限和接口配置后重试。";
+  } finally { if (task.current()) publicationLoading.value = false; }
+}
+function resetCatalog() {
+  catalogRequests.invalidate();
+  reading.value = false;
+  remoteProducts.value = [];
+}
+function projectChanged() {
+  resetCatalog();
+  form.value.remoteProductId = "";
+}
 function providerChanged() {
+  projectChanged();
   if (selectedType.value === "sxdk_tw") {
     form.value.project = "zxjy";
     internshipProjectChanged();
@@ -388,11 +488,14 @@ function providerChanged() {
   remoteProducts.value = [];
 }
 function internshipProjectChanged() {
+  resetCatalog();
   form.value.remoteProductId = form.value.project;
   form.value.title = `实习 · ${internshipProjects[form.value.project]}`;
   remoteProducts.value = [];
 }
 async function readCatalog() {
+  if (reading.value || !selectedProviderReady.value || editing.value || !dialog.value) return;
+  const task = catalogRequests.begin();
   reading.value = true;
   const providerId = form.value.providerId,
     project = form.value.project,
@@ -402,8 +505,9 @@ async function readCatalog() {
       { flash: "P01", heisha: "P03", jiguang: "P04", wuxin: "P10", ssbenz_xbd: "P05", appui: "P09", leidian: "P12", jingyu: "P08" }[type],
       providerId,
       ["flash", "ssbenz_xbd", "appui", "leidian", "jingyu"].includes(type) ? project : null,
+      task.signal,
     );
-    if (!dialog.value || form.value.providerId !== providerId || form.value.project !== project)
+    if (!task.current() || !dialog.value || form.value.providerId !== providerId || form.value.project !== project)
       return;
     remoteProducts.value = r.data.filter((p) =>
       nativeProductSupported(type, project, p.id),
@@ -412,7 +516,7 @@ async function readCatalog() {
       ElMessage.warning("没有可下单的商品");
   } catch {
   } finally {
-    reading.value = false;
+    if (task.current()) reading.value = false;
   }
 }
 function selectRemote() {
@@ -439,13 +543,23 @@ async function save() {
     saving.value = false;
   }
 }
+watch(providerTypeFilter, () => { page.value = 1; load(); });
+watch(() => router && router.currentRoute.value.path === viewPath ? router.currentRoute.value.query : null,
+  readRequestedProvider, { immediate: true, flush: "sync" });
+watch(dialog, (visible) => {
+  if (!visible) { resetCatalog(); providerRequest++; clearTimeout(searchTimer); providersLoading.value = false; }
+});
 onBeforeUnmount(() => {
+  publicationRequests.invalidate(); productListRequests.invalidate(); resetCatalog();
   providerRequest++;
   clearTimeout(searchTimer);
 });
 load();
 </script>
 <style scoped>
+.service-config-empty { margin-top: 10px; width: 100%; }
+.service-config-empty p { margin: 0 0 8px; line-height: 1.7; color: var(--text-secondary); }
+
 :global(.service-product-dialog) {
   display: flex;
   flex-direction: column;
@@ -456,6 +570,26 @@ load();
   min-height: 0;
   overflow: auto;
   flex: 1;
+}
+.service-provider-select :deep(.el-select__input:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+:global(.service-provider-select-popper .el-select-dropdown__wrap) {
+  max-height: min(274px, 40dvh);
+}
+:global(.service-provider-select-popper .el-select-dropdown__empty) {
+  padding-inline: 12px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+:global(.service-provider-select-popper .el-select-dropdown__item) {
+  height: auto;
+  min-height: 34px;
+  padding-block: 7px;
+  line-height: 20px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .contract-consent {
   height: auto;

@@ -1,5 +1,6 @@
 package com.course.platform.controller;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.course.platform.application.service.platform.ApiProviderService;
 import com.course.platform.application.service.platform.PlatformDockingService;
 import com.course.platform.application.service.security.SecurityAuditService;
@@ -31,6 +32,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -78,6 +80,93 @@ class ApiProviderControllerTest {
                 Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toList());
         SecurityContextHolder.getContext().setAuthentication(authentication);
         return authentication;
+    }
+
+    @Test
+    void providerTypeFilterIsOptionalForExistingListClients() throws Exception {
+        var auth = authenticate("api-provider:update");
+        when(providers.queryApiProviders(null, null, 1, 10, null)).thenReturn(new Page<>(1, 10, 0));
+        mvc.perform(get("/admin/api-providers").principal(auth))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(0));
+        verify(providers).queryApiProviders(null, null, 1, 10, null);
+        verifyNoInteractions(docking);
+    }
+
+    @Test
+    void providerTypesAreParsedBeforePaginationAndRowsRemainMasked() throws Exception {
+        var auth = authenticate("api-provider:update");
+        ApiProvider row = new ApiProvider();
+        row.setId(9L);
+        row.setName("运动服务");
+        row.setProviderType("jiguang");
+        row.setStatus(ApiProvider.STATUS_ACTIVE);
+        row.setVerifiedAt(LocalDateTime.of(2026, 9, 13, 10, 0));
+        row.setApiKey("must-not-be-returned");
+        Page<ApiProvider> rows = new Page<>(2, 50, 51);
+        rows.setRecords(List.of(row));
+        when(providers.queryApiProviders("运动", 1, 2, 50, List.of("jiguang", "jingyu"))).thenReturn(rows);
+        String body = mvc.perform(get("/admin/api-providers").principal(auth)
+                        .param("keyword", "运动").param("status", "1").param("page", "2").param("pageSize", "50")
+                        .param("providerTypes", "jiguang,jingyu"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(51))
+                .andExpect(jsonPath("$.data.current").value(2))
+                .andExpect(jsonPath("$.data.records[0].providerType").value("jiguang"))
+                .andExpect(jsonPath("$.data.records[0].verifiedAt").exists())
+                .andExpect(jsonPath("$.data.records[0].hasApiKey").value(true))
+                .andExpect(jsonPath("$.data.records[0].apiKey").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        assertFalse(body.contains("must-not-be-returned"));
+        verify(providers).queryApiProviders("运动", 1, 2, 50, List.of("jiguang", "jingyu"));
+        verifyNoInteractions(docking);
+    }
+
+    @Test
+    void filteredProviderListsStillRequireProviderManagementAuthority() throws Exception {
+        for (String authority : new String[]{"ROLE_USER", "ROLE_ADMIN", "orders:read"}) {
+            var auth = authenticate(authority);
+            mvc.perform(get("/admin/api-providers").principal(auth).param("providerTypes", "jiguang,jingyu"))
+                    .andExpect(status().isForbidden());
+        }
+        verifyNoInteractions(providers, docking);
+    }
+
+    @Test
+    void savedProviderLookupIsReadOnlyAndNeverReturnsCredentials() throws Exception {
+        var auth = authenticate("api-provider:update");
+        ApiProvider row = new ApiProvider();
+        row.setId(99L);
+        row.setName("运动服务配置");
+        row.setProviderType("jingyu");
+        row.setStatus(ApiProvider.STATUS_ACTIVE);
+        row.setVerifiedAt(LocalDateTime.of(2026, 9, 13, 10, 0));
+        row.setApiKey("fixture-secret-key");
+        row.setPassword("fixture-secret-password");
+        row.setToken("fixture-secret-token");
+        row.setCookie("fixture-secret-cookie");
+        when(providers.getApiProvider(99L)).thenReturn(row);
+        String body = mvc.perform(get("/admin/api-providers/99").principal(auth))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(99))
+                .andExpect(jsonPath("$.data.providerType").value("jingyu"))
+                .andExpect(jsonPath("$.data.verifiedAt").exists())
+                .andExpect(jsonPath("$.data.hasApiKey").value(true))
+                .andExpect(jsonPath("$.data.apiKey").doesNotExist())
+                .andExpect(jsonPath("$.data.password").doesNotExist())
+                .andExpect(jsonPath("$.data.token").doesNotExist())
+                .andExpect(jsonPath("$.data.cookie").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        assertFalse(body.contains("fixture-secret"));
+        verify(providers).getApiProvider(99L);
+        verifyNoMoreInteractions(providers);
+        verifyNoInteractions(docking, logs);
+    }
+
+    @Test
+    void savedProviderLookupStillRequiresExplicitManagementAuthority() throws Exception {
+        for (String authority : new String[]{"ROLE_USER", "ROLE_ADMIN", "orders:read"}) {
+            mvc.perform(get("/admin/api-providers/99").principal(authenticate(authority)))
+                    .andExpect(status().isForbidden());
+        }
+        verifyNoInteractions(providers, docking, logs);
     }
 
     @Test

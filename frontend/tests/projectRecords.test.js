@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { validOwner, validOwnerDetail, validRecordPage, validSubject, validLedger, recordFilters, validRecordFilters, recordStatus } from '../src/utils/projectRecords.js'
+import { validOwner, validOwnerDetail, validRecordPage, validSubject, validLedger, recordFilters, validRecordFilters, recordStatus, recordTime } from '../src/utils/projectRecords.js'
 const id = '11d9f28e-2cf5-4ddc-8a4d-4263f7d763d1'
 const owner = { id: 7, username: null, status: 'MISSING', activeAccounts: 0, activeClients: 0, accountDebited: '1.01', accountReturned: '0.01', clientDebited: '0.00', clientReturned: '0.00', lastActivity: null }
 const row = { book: 'PROJECT_ACCOUNT', id, ownerId: 7, projectId: 1, title: '原样显示 <img src=x>', subjectId: id, action: 'TOP_UP', direction: 'DEBIT', amount: '999999999999.99', units: '12345678901234.123456', unitPrice: '0.123456', subjectBalanceAfter: null, walletBalanceAfter: null, requestedAt: '2026-09-08T10:00:00', settledAt: '2026-09-10T23:59:59' }
@@ -70,4 +70,35 @@ test('pages and settled actions cannot contradict their declared book and totals
   value.total = 1; value.current = 2; assert.equal(validLedger(value), false)
   value.current = 1; value.records[0].action = 'OPEN'; assert.equal(validLedger(value), false)
   value.records[0].action = 'PROVISION'; assert.equal(validLedger(value), true)
+})
+
+for (const separator of [' ', 'T']) {
+  test(`ledger and subject timestamps accept ${JSON.stringify(separator)} without converting timezones`, () => {
+    for (const fraction of ['', '.123', '.123456789']) {
+      const timestamp = `2026-09-12${separator}18:19:25${fraction}`
+      const value = ledger()
+      value.checkedAt = value.records[0].requestedAt = value.records[0].settledAt = timestamp
+      assert.equal(validLedger(value), true)
+      assert.equal(validOwner({ ...owner, lastActivity: timestamp }), true)
+      const account = { id, projectId: 1, title: '账户', status: 'ACTIVE', cachedBalance: '10',
+        balanceCheckedAt: timestamp, unitPrice: '0.25', refundableUnits: '10', refundBudget: '2.50',
+        debited: '2.50', returned: '0.00', unresolvedOperations: 0 }
+      assert.equal(validSubject(account, false), true)
+      assert.equal(validSubject({ ...account, label: '客户', balance: '10', createdAt: timestamp }, true), true)
+      assert.equal(recordTime(timestamp), '2026-09-12 18:19:25')
+    }
+  })
+}
+
+test('every required ledger timestamp still rejects malformed or missing values', () => {
+  for (const timestamp of [null, undefined, '', '2026-09-12', '2026-09-12 18:19',
+    '2026-09-12 18:19:25Z', '2026-09-12T18:19:25+08:00', '2026-02-29 18:19:25',
+    '2026-09-12 24:00:00']) {
+    for (const field of ['requestedAt', 'settledAt', 'checkedAt']) {
+      const value = ledger()
+      if (field === 'checkedAt') value[field] = timestamp
+      else value.records[0][field] = timestamp
+      assert.equal(validLedger(value), false, `${field}: ${JSON.stringify(timestamp)}`)
+    }
+  }
 })

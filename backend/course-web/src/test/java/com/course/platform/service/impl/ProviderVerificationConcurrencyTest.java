@@ -214,7 +214,7 @@ class ProviderVerificationConcurrencyTest {
         service.updateStatus(id, ApiProvider.STATUS_ACTIVE);
         var connectors = new com.course.platform.infra.integration.PluginConnectorRegistry(java.util.List.of(connector));
         var integration = new PluginIntegrationServiceImpl(
-                new com.course.platform.infra.integration.PluginResearchCatalog(connectors), connectors, mapper, service);
+                new com.course.platform.infra.integration.PluginResearchCatalog(connectors, org.mockito.Mockito.mock(com.course.platform.infra.servicecommerce.NativeServiceGatewayRouter.class)), connectors, mapper, service);
         var security = org.springframework.security.core.context.SecurityContextHolder.getContext();
         security.setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
                 7L, null, java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("api-provider:update"))));

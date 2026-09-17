@@ -31,7 +31,7 @@ export function serviceSchoolPage(data, requestedPage, maxPage = 10000, idMode =
 }
 
 /** Search owns only discovery state; selecting/clearing an order field is always explicit. */
-export function useServiceSchools(load, { productId, active, maxPage, idMode = () => "code" }) {
+export function useServiceSchools(load, { productId, active, maxPage, idMode = () => "code", requireKeyword = () => false }) {
   const keyword = ref("");
   const result = shallowRef(null);
   const attempt = shallowRef(null);
@@ -41,7 +41,7 @@ export function useServiceSchools(load, { productId, active, maxPage, idMode = (
   const live = ref(true);
   const enabled = computed(() => live.value && active() && productId() != null && productId() !== "");
   const queryValid = computed(() => typeof keyword.value === "string" &&
-    keyword.value.length <= schoolKeywordLimit && !controlCharacters.test(keyword.value));
+    keyword.value.length <= schoolKeywordLimit && (!requireKeyword() || keyword.value.trim().length > 0) && !controlCharacters.test(keyword.value));
   const canPrevious = computed(() => enabled.value && !loading.value && result.value?.page > 1);
   const canNext = computed(() => enabled.value && !loading.value && !!result.value?.hasMore);
 
@@ -96,7 +96,7 @@ export function useServiceSchools(load, { productId, active, maxPage, idMode = (
 
   // Abort plus a generation check: transports may settle after cancellation.
   watch(keyword, reset, { flush: "sync" });
-  watch([productId, maxPage, idMode], () => { keyword.value = ""; reset(); }, { flush: "sync" });
+  watch([productId, maxPage, idMode, requireKeyword], () => { keyword.value = ""; reset(); }, { flush: "sync" });
   watch(active, () => { reset(); }, { flush: "sync" });
   onScopeDispose(() => { live.value = false; reset(); });
 

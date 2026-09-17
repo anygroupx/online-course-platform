@@ -17,7 +17,7 @@ const server = await createServer({ logLevel: 'error', server: { host: '127.0.0.
 }) } }] })
 const calls={total:120,failed:10,last24Hours:46,failedLast24Hours:3,actionKinds:3}
 const localFunding={settledOperations:25,debited:'320.00',returned:'60.00',netDebited:'260.00',unresolvedOperations:0}
-const owner={window:{from:'2026-09-08T22:00:00',through:'2026-09-09T22:00:00',timezone:'Asia/Shanghai'},calls,
+const owner={window:{from:'2026-09-08 22:00:00',through:'2026-09-09 22:00:00',timezone:'Asia/Shanghai'},calls,
   actions:[{action:'SELF',total:80,failed:8,last24Hours:30,failedLast24Hours:2},{action:'TICKETS',total:30,failed:2,last24Hours:10,failedLast24Hours:1},{action:'USAGE',total:10,failed:0,last24Hours:6,failedLast24Hours:0}],moreActions:false,
   clients:{total:22,active:21,suspended:1,closed:0,projects:21},tickets:{total:3,open:1,inProgress:1,resolved:1,closed:0,pendingCompensation:1},localFunding}
 const global={...owner,publishedProjects:21,activeUpstreamBindings:3,activeUpstreamOwners:2,activeLocalOwners:1,
@@ -30,14 +30,14 @@ const listing=(records,total=records.length,current=1)=>({records,total,current,
 try {
   await server.listen();const base=server.resolvedUrls.local[0].replace(/\/$/,'')
   browser=await chromium.launch({executablePath:existsSync('/snap/bin/chromium')?'/snap/bin/chromium':undefined,args:['--no-sandbox','--disable-dev-shm-usage']})
-  const context=await browser.newContext({viewport:{width:1440,height:1100}})
+  const context=await browser.newContext({viewport:{width:1440,height:1100},timezoneId:'America/Los_Angeles'})
   await context.route('**/*',async route=>{
     const req=route.request(),url=new URL(req.url())
     if(url.origin!==new URL(base).origin){unexpected.push(url.origin);return route.abort()}
     if(!url.pathname.startsWith('/api/'))return route.continue()
     const path=url.pathname.slice(4);if(req.method()!=='GET'){writes.push(path);return route.abort()}
     reads.push(path);assert.ok(req.headers().authorization?.startsWith('Bearer '))
-    const ok=async data=>{try{await route.fulfill({json:{code:1,data},headers:{'Cache-Control':'no-store'}})}catch{}}
+    const ok=async data=>{try{await route.fulfill({json:{code:1,success:true,data},headers:{'Cache-Control':'no-store'}})}catch{}}
     if(path==='/project-clients/usage'){
       if(holdOwner){ownerHeld.resolve();await releaseOwner.promise}
       if(failOwner)return route.fulfill({status:500,json:{code:-1,message:'模拟统计读取失败'}})
@@ -61,6 +61,8 @@ try {
   await page.goto(base+'/__project_reporting')
   await page.getByText('120.000001',{exact:true}).waitFor()
   await page.getByText('滚动 24 小时',{exact:false}).waitFor()
+  await page.getByText('2026-09-08 22:00:00',{exact:false}).waitFor()
+  await page.getByText('2026-09-09 22:00:00',{exact:false}).waitFor()
   assert.equal(await page.getByText('项目账户兑换',{exact:true}).count(),0)
   mkdirSync('../.cache/native-service-ui',{recursive:true})
   await page.screenshot({path:'../.cache/native-service-ui/project-usage-owner-desktop.png',animations:'disabled'})

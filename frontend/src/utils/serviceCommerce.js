@@ -197,7 +197,7 @@ export function editableWuxinPlan(suggested = {}, distance = "") {
 
 // Catalog rows are not an authorization to sell unknown product IDs.
 export function nativeProductSupported(type, project, id) {
-  if (type === "jingyu") return ["keep", "bdlp"].includes(project) && project === id;
+  if (type === "jingyu") return ["keep", "bdlp", "yyd"].includes(project) && project === id;
   if (type === "leidian") return ["1", "2", "3", "4"].includes(project) && project === id;
   if (type === "sxdk_tw")
     return Object.hasOwn(internshipProjects, project) && project === id;

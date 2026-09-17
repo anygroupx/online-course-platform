@@ -260,3 +260,20 @@ test("switching identifier mode invalidates pending discovery and keeps the new 
   assert.equal(state.result.value.items[0].id, "示例大学");
   assert.equal(state.canNext.value, false);
 });
+
+test("keyword-required catalogs reject an empty search without changing legacy catalogs", async (t) => {
+  let requests = 0;
+  const required = ref(true), scope = effectScope(); t.after(() => scope.stop());
+  const state = scope.run(() => useServiceSchools(async () => { requests++; return pageData(); }, {
+    productId: () => 1, active: () => true, maxPage: () => 10, requireKeyword: () => required.value,
+  }));
+  for (const value of ["", "   "]) {
+    state.keyword.value = value;
+    assert.equal(state.queryValid.value, false); assert.equal(await state.search(), false);
+  }
+  assert.equal(requests, 0);
+  state.keyword.value = "  测试学院  "; assert.equal(await state.search(), true); assert.equal(requests, 1);
+  required.value = false;
+  assert.equal(state.keyword.value, ""); assert.equal(state.queryValid.value, true); assert.equal(state.result.value, null);
+  assert.equal(await state.search(), true); assert.equal(requests, 2);
+});

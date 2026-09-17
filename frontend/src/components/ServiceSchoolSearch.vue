@@ -4,7 +4,7 @@
       <el-input
         v-model="keyword"
         aria-label="学校关键词"
-        placeholder="输入学校关键词，可留空查询"
+        :placeholder="requireKeyword ? '输入学校名称后查询' : '输入学校关键词，可留空查询'"
         :maxlength="schoolKeywordLimit"
         :disabled="!enabled"
         clearable
@@ -13,7 +13,7 @@
       <el-button :loading="loading" :disabled="!enabled || !queryValid" @click="search">查询学校</el-button>
     </div>
     <p v-if="!result && !loading && !error" class="school-hint">
-      {{ active ? '查询后选择学校；更换关键词不会修改已选学校。' : '请先勾选账号授权，再查询学校。' }}
+      {{ active ? (requireKeyword ? '输入学校名称后查询；请选择完整校名，不会自动选择。' : '查询后选择学校；更换关键词不会修改已选学校。') : '请先勾选账号授权，再查询学校。' }}
     </p>
     <p v-if="loading" class="school-hint" role="status">正在查询第 {{ attempt.page }} 页学校…</p>
     <div v-if="error" class="school-error" role="alert">
@@ -64,6 +64,7 @@ const props = defineProps({
   selectedId: { type: String, default: "" },
   selectedName: { type: String, default: "" },
   maxPage: { type: Number, default: 10000 },
+  requireKeyword: Boolean,
   idMode: { type: String, default: "code", validator: (value) => ["code", "name"].includes(value) },
 });
 const emit = defineEmits(["select"]);
@@ -74,9 +75,11 @@ const { keyword, result, attempt, error, loading, enabled, queryValid, canPrevio
   active: () => props.active && !disabled.value,
   maxPage: () => props.maxPage,
   idMode: () => props.idMode,
+  requireKeyword: () => props.requireKeyword,
 });
 const errorMessage = computed(() => {
-  if (error.value === "KEYWORD") return "关键词最多 80 字，请勿使用换行或控制字符。";
+  if (error.value === "KEYWORD") return props.requireKeyword
+    ? "请输入 1–80 字的学校名称，请勿使用换行或控制字符。" : "关键词最多 80 字，请勿使用换行或控制字符。";
   const issue = error.value === "RESPONSE" ? "学校列表格式有误" : "学校查询失败";
   const retained = result.value ? `；仍显示第 ${result.value.page} 页结果` : "";
   return `第 ${attempt.value.page} 页${issue}${retained}。请重试或更换关键词。`;

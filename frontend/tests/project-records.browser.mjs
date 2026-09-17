@@ -21,10 +21,10 @@ const server = await createTestServer({ logLevel: 'error', plugins: [{ name: 'pr
   })
 } }] })
 const uuid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
-const time = '2026-09-10T10:00:00'
+const time = '2026-09-10 10:00:00'
 const funding = { settledOperations: 3, unresolvedOperations: 1, debited: '100.11', returned: '1.01', netDebited: '99.10' }
 const usage = {
-  window: { from: '2026-09-09T10:00:00', through: time, timezone: 'Asia/Shanghai' },
+  window: { from: '2026-09-09 10:00:00', through: time, timezone: 'Asia/Shanghai' },
   calls: { total: 3, failed: 1, last24Hours: 2, failedLast24Hours: 1, actionKinds: 1 },
   actions: [{ action: 'USAGE', total: 3, failed: 1, last24Hours: 2, failedLast24Hours: 1 }], moreActions: false,
   clients: { total: 2, active: 1, suspended: 1, closed: 0, projects: 1 },
@@ -43,7 +43,7 @@ const records = Array.from({ length: 22 }, (_, i) => ({
   action: i === 2 ? 'WITHDRAW' : 'TOP_UP', direction: i === 2 ? 'CREDIT' : 'DEBIT',
   amount: i === 0 ? '999999999999.99' : i === 1 ? '10.11' : i === 2 ? '1.01' : '0.01',
   units: '12.123456', unitPrice: '0.123456', subjectBalanceAfter: i === 0 ? null : '23.123456', walletBalanceAfter: i === 0 ? null : '45.11',
-  requestedAt: '2026-09-08T22:00:00', settledAt: time,
+  requestedAt: '2026-09-08 22:00:00', settledAt: time,
 }))
 records.push({ ...records[0], id: uuid(90), ownerId: 8, title: '经营者八独立记录', amount: '8.00' })
 const listing = (rows, current = 1) => ({ records: rows.slice((current - 1) * 20, current * 20), total: rows.length, current, size: 20 })
@@ -83,7 +83,7 @@ try {
     if (request.method() !== 'GET') { writes.push(path); return route.abort() }
     reads.push({ path, query })
     assert.match(request.headers().authorization || '', /^Bearer /)
-    const ok = async (data) => { try { await route.fulfill({ json: { code: 1, data }, headers: { 'Cache-Control': 'no-store' } }) } catch {} }
+    const ok = async (data) => { try { await route.fulfill({ json: { code: 1, success: true, data }, headers: { 'Cache-Control': 'no-store' } }) } catch {} }
     const failure = async (mode) => { try { await route.fulfill({ status: mode === 'deny' ? 403 : 500, json: { code: -1, message: '模拟读取失败' } }) } catch {} }
     if (path === '/admin/project-reports/owners') {
       if (ownerMode === 'deny' || ownerMode === 'error') return failure(ownerMode)

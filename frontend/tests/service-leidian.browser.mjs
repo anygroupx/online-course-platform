@@ -14,7 +14,7 @@ import {applyAuthSession,clearAuthSession} from '/src/utils/authSession.js';
 window.testLogin=(userId=7)=>applyAuthSession({token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600,sub:userId}))+'.signature',userId});window.testLogin();
 const router=createRouter({history:createMemoryHistory(),routes:[{path:'/services',component:Store},{path:'/service-orders',component:Orders},{path:'/admin/service-products',component:Admin},{path:'/admin/service-orders',component:Orders,meta:{serviceAdmin:true}},{path:'/providers',component:Providers}]});
 window.navigate=(path)=>router.push(path);window.logout=clearAuthSession;
-await router.push('/services');await router.isReady();createApp({render:()=>h(RouterView)}).use(router).use(ElementPlus,{locale:zhCn}).mount('#app');
+await router.push('/services');await router.isReady();createApp({render:()=>h(RouterView,null,{default:({Component,route})=>Component?h(Component,{key:route.path}):null})}).use(router).use(ElementPlus,{locale:zhCn}).mount('#app');
 </script></body></html>`;
 const server = await createTestServer({ logLevel: "error", server: { host: "127.0.0.1", port: 0 }, plugins: [{
   name: "leidian-regression-fixture", configureServer(vite) { vite.middlewares.use(async (req, res, next) => {

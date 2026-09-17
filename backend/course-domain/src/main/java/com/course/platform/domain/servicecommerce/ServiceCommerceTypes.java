@@ -151,7 +151,13 @@ public final class ServiceCommerceTypes {
             InternshipSchedule schedule,
             List<LocalDate> paidDates,
             InternshipAdvice advice,
-            List<RunRule> runRules) {
+            List<RunRule> runRules,
+            List<SchoolRunRule> schoolRules) {
+        public Lookup(Map<String, String> suggested, List<Choice> choices, String notice,
+                      InternshipSchedule schedule, List<LocalDate> paidDates, InternshipAdvice advice,
+                      List<RunRule> runRules) {
+            this(suggested, choices, notice, schedule, paidDates, advice, runRules, null);
+        }
         public Lookup(Map<String, String> suggested, List<Choice> choices, String notice,
                       InternshipSchedule schedule, List<LocalDate> paidDates, InternshipAdvice advice) {
             this(suggested, choices, notice, schedule, paidDates, advice, null);
@@ -295,6 +301,9 @@ public final class ServiceCommerceTypes {
 
     /** Safe running-rule projection, never an arbitrary remote form or HTML fragment. */
     public record RunRule(String distance, String startTime, String endTime) {}
+
+    /** A school-specific rule with its own zone and minimum distance; IDs remain strings. */
+    public record SchoolRunRule(String id, String zoneId, String zoneName, String minDistance) {}
 
     public record OrderText(String text) {
         @Override

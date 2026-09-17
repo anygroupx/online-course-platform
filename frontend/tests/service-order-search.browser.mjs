@@ -12,7 +12,7 @@ import Orders from '/src/views/ServiceOrders.vue';import {applyAuthSession,clear
 const session=(userId,permissions=[])=>applyAuthSession({token:'test.'+btoa(JSON.stringify({userId,permissions,exp:Date.now()/1000+3600}))+'.signature',uid:'20000000-0000-4000-8000-'+String(userId).padStart(12,'0'),role:'USER',isAdmin:false,permissions});session(7);
 const router=createRouter({history:createMemoryHistory(),routes:[{path:'/service-orders',component:Orders},{path:'/admin/service-orders',component:Orders,meta:{serviceAdmin:true}}]});
 await router.push('/service-orders');await router.isReady();window.__ordersFixture={go:(p)=>router.push(p),query:()=>router.currentRoute.value.query,session,logout:clearAuthSession,rotate:()=>applyAuthSession({...sessionUserInfo.value,balance:'8.00',nickname:'更新的昵称',token:'test.'+btoa(JSON.stringify({userId:7,exp:Date.now()/1000+7200}))+'.rotated'})};
-createApp({render:()=>h(RouterView)}).use(router).use(ElementPlus).mount('#app');
+createApp({render:()=>h(RouterView,null,{default:({Component,route})=>Component?h(Component,{key:route.path}):null})}).use(router).use(ElementPlus).mount('#app');
 </script></body></html>`;
 const server = await createTestServer({ logLevel: "error", plugins: [{ name: "order-search-fixture", configureServer(vite) {
   vite.middlewares.use(async (req, res, next) => {

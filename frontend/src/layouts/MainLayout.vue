@@ -153,10 +153,8 @@
           <el-breadcrumb separator="/" class="breadcrumb">
             <el-breadcrumb-item
               v-for="item in breadcrumbList"
-              :key="item.path"
-              :to="item.path"
-              @click="handleBreadcrumbClick(item.path)"
-              style="cursor: pointer"
+              :key="item.key"
+              :to="item.to"
             >
               {{ item.name }}
             </el-breadcrumb-item>
@@ -323,6 +321,7 @@ import { useUserStore } from "@/stores/user";
 import { useTagsViewStore } from "@/stores/tagsView";
 import { useAppConfigStore } from "@/stores/appConfig";
 import { useResponsive } from "@/composables/useResponsive";
+import { buildBreadcrumbs } from "@/utils/breadcrumbs.js";
 import { ElMessage } from "element-plus";
 import { changePassword } from "@/api/user";
 import { getSystemAnnouncement } from "@/api/announcement";
@@ -459,96 +458,8 @@ watch(
   { immediate: true }
 );
 
-// 面包屑导航
-const breadcrumbList = computed(() => {
-  const breadcrumbs = [];
-  const pathSegments = route.path.split("/").filter((segment) => segment);
-
-  // 添加首页
-  breadcrumbs.push({ name: "首页", path: "/dashboard" });
-
-  // 根据路径生成面包屑
-  let currentPath = "";
-  pathSegments.forEach((segment, index) => {
-    currentPath += `/${segment}`;
-
-    // 根据路径生成名称
-    let name = "";
-    switch (segment) {
-      case "dashboard":
-        name = "首页";
-        break;
-      case "orders":
-        name = "订单管理";
-        break;
-      case "courses":
-        name = "课程列表";
-        break;
-      case "users":
-        name = "代理管理";
-        break;
-      case "price-list":
-        name = "项目管理";
-        break;
-      case "logs":
-        name = "操作日志";
-        break;
-      case "admin":
-        name = "系统管理";
-        break;
-      case "platforms":
-        name = "课程平台";
-        break;
-      case "api-providers":
-        name = "接口配置";
-        break;
-      case "services":
-        name = "服务商城";
-        break;
-      case "service-orders":
-        name = "服务订单";
-        break;
-      case "service-products":
-        name = "服务商品";
-        break;
-      case "plugin-integrations":
-        name = "接口接入检查";
-        break;
-      case "settings":
-        name = "系统设置";
-        break;
-      case "announcements":
-        name = "公告管理";
-      case "cards":
-        name = "充值卡密";
-      case "variables":
-        name = "系统变量";
-      case "countdown":
-        name = "倒计时管理";
-      case "customer-service":
-        name = "客服管理";
-        break;
-      default:
-        name = segment;
-    }
-
-    // 如果是最后一个路径，不添加链接
-    if (index === pathSegments.length - 1) {
-      breadcrumbs.push({ name, path: "" });
-    } else {
-      breadcrumbs.push({ name, path: currentPath });
-    }
-  });
-
-  return breadcrumbs;
-});
-
-// 处理面包屑点击
-const handleBreadcrumbClick = (path) => {
-  if (path) {
-    router.push(path);
-  }
-};
+// 面包屑导航与页面路由元数据保持一致。
+const breadcrumbList = computed(() => buildBreadcrumbs(route));
 
 const handleCommand = (command) => {
   if (command === "logout") {

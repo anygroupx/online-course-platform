@@ -14,7 +14,7 @@ import {applyAuthSession,clearAuthSession,accessToken} from '/src/utils/authSess
 window.testLogin=(userId=7)=>applyAuthSession({token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600,sub:userId}))+'.signature',userId});window.testLogin();
 const router=createRouter({history:createMemoryHistory(),routes:[{path:'/services',component:Store},{path:'/service-orders',component:Orders},{path:'/admin/service-products',component:Admin},{path:'/admin/service-orders',component:Orders,meta:{serviceAdmin:true}},{path:'/providers',component:Providers}]});
 window.navigate=(path)=>router.push(path);window.logout=clearAuthSession;window.switchIdentity=(userId)=>applyAuthSession({token:accessToken.value,userId});
-await router.push('/services');await router.isReady();createApp({render:()=>h(RouterView)}).use(router).use(ElementPlus,{locale:zhCn}).mount('#app');
+await router.push('/services');await router.isReady();createApp({render:()=>h(RouterView,null,{default:({Component,route})=>Component?h(Component,{key:route.path}):null})}).use(router).use(ElementPlus,{locale:zhCn}).mount('#app');
 </script></body></html>`;
 const server = await createTestServer({ logLevel: "error", server: { host: "127.0.0.1", port: 0 }, plugins: [{
   name: "jingyu-regression-fixture", configureServer(vite) { vite.middlewares.use(async (req, res, next) => {
@@ -444,7 +444,7 @@ try {
   await admin.waitFor({ state: "hidden" }); assert.equal(saves.length, 1);
   await navigate("/providers"); await page.getByRole("button", { name: "添加接口", exact: true }).click();
   const provider = page.locator(".el-dialog:visible"); await provider.locator(".el-select").first().click();
-  await page.getByRole("option", { name: "鲸鱼（Keep / 步道乐跑）", exact: true }).click();
+  await page.getByRole("option", { name: "鲸鱼运动服务", exact: true }).click();
   await provider.getByText(/不要添加 jingyu 或 api.php/).waitFor(); await provider.locator(".el-dialog__headerbtn").click();
   check("admin configuration and publishing only expose verified projects with correct price units");
 
