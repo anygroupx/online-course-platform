@@ -323,12 +323,13 @@ const typeLabels = {
   session_status: '会话状态',
   message_type: '消息类型',
   theme_color_light: '主题色 · 浅色',
-  theme_color_dark: '主题色 · 深色'
+  theme_color_dark: '主题色 · 深色',
+  theme_color_liquid_glass: '主题色 · 液态玻璃'
 }
 const typeTagMap = {
   order_status: 'primary', dock_status: 'success', user_status: 'warning', platform_status: 'info',
   card_status: 'danger', announcement_type: 'primary', session_status: 'success', message_type: 'info',
-  theme_color_light: 'primary', theme_color_dark: 'info'
+  theme_color_light: 'primary', theme_color_dark: 'info', theme_color_liquid_glass: 'success'
 }
 
 const isThemeFilter = computed(() => isThemeVariableType(filters.variableType))

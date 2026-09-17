@@ -87,7 +87,45 @@ export const darkTheme = {
   "--shadow-float": "0 36px 90px rgba(0, 0, 0, 0.58), 0 0 44px rgba(56, 213, 222, 0.10)",
 };
 
+export const liquidGlassTheme = {
+  ...commonTokens,
+  "--brand-primary": "#3463ce",
+  "--brand-primary-hover": "#2952b3",
+  "--brand-primary-pressed": "#1f3f8c",
+  "--brand-cyan": "#22b8cf",
+  "--brand-violet": "#6366f1",
+  "--primary-gradient-start": "#3463ce",
+  "--primary-gradient-end": "#22b8cf",
+  "--primary-gradient": "linear-gradient(135deg, #3463ce 0%, #3b82f6 48%, #22b8cf 100%)",
+  "--color-success": "#37a06f",
+  "--color-warning": "#d97706",
+  "--color-danger": "#dc2626",
+  "--color-info": "#3463ce",
+  "--bg-body": "#f5f6f8",
+  "--bg-card": "rgba(255, 255, 255, 0.65)",
+  "--bg-card-hover": "rgba(255, 255, 255, 0.82)",
+  "--bg-overlay": "rgba(245, 246, 248, 0.75)",
+  "--surface-solid": "#ffffff",
+  "--surface-mica": "rgba(245, 247, 250, 0.80)",
+  "--surface-acrylic": "rgba(255, 255, 255, 0.52)",
+  "--text-primary": "#252b35",
+  "--text-regular": "#3b4453",
+  "--text-secondary": "#717a88",
+  "--text-placeholder": "#9aa2af",
+  "--text-on-brand": "#ffffff",
+  "--border-color": "rgba(205, 210, 219, 0.72)",
+  "--border-color-light": "rgba(223, 226, 231, 0.60)",
+  "--stroke-highlight": "rgba(255, 255, 255, 0.95)",
+  "--focus-ring": "rgba(52, 99, 206, 0.35)",
+  "--shadow-sm": "0 2px 5px rgba(31, 42, 58, 0.08), 0 1px 2px rgba(31, 42, 58, 0.04)",
+  "--shadow-md": "0 8px 16px -10px rgba(31, 42, 58, 0.19), 0 4px 8px rgba(31, 42, 58, 0.06)",
+  "--shadow-lg": "0 24px 36px -20px rgba(31, 42, 58, 0.23), 0 8px 16px -10px rgba(31, 42, 58, 0.19)",
+  "--shadow-float": "0 32px 48px -20px rgba(31, 42, 58, 0.28), 0 12px 24px -10px rgba(31, 42, 58, 0.16)",
+};
+
 export const themes = {
   light: lightTheme,
   dark: darkTheme,
+  "liquid-glass": liquidGlassTheme,
 };
+

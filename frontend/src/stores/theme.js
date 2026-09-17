@@ -8,7 +8,7 @@ import {
   isCssColor
 } from '@/config/themeVariableConfig'
 
-const EMPTY_THEME_OVERRIDES = () => ({ light: {}, dark: {} })
+const EMPTY_THEME_OVERRIDES = () => ({ light: {}, dark: {}, 'liquid-glass': {} })
 
 export const useThemeStore = defineStore('theme', () => {
   const currentThemeName = ref('light')
@@ -34,7 +34,9 @@ export const useThemeStore = defineStore('theme', () => {
       root.style.setProperty(key, value)
     })
 
+    root.dataset.theme = normalizedTheme
     root.classList.toggle('dark', normalizedTheme === 'dark')
+    root.classList.toggle('theme-liquid-glass', normalizedTheme === 'liquid-glass')
     currentThemeName.value = normalizedTheme
     if (persistPreference) {
       localStorage.setItem('app-theme-preference', normalizedTheme)
@@ -58,7 +60,8 @@ export const useThemeStore = defineStore('theme', () => {
       const response = await getThemeVariables()
       serverOverrides.value = {
         light: normalizeServerTheme(response.data?.light),
-        dark: normalizeServerTheme(response.data?.dark)
+        dark: normalizeServerTheme(response.data?.dark),
+        'liquid-glass': normalizeServerTheme(response.data?.['liquid-glass'] || response.data?.liquid_glass)
       }
       themeVariablesLoaded.value = true
       applyTheme(currentThemeName.value, false)
@@ -72,8 +75,19 @@ export const useThemeStore = defineStore('theme', () => {
     }
   }
 
+  const cycleTheme = () => {
+    const order = ['light', 'dark', 'liquid-glass']
+    const currentIndex = order.indexOf(currentThemeName.value)
+    const nextIndex = (currentIndex === -1 ? 0 : currentIndex + 1) % order.length
+    applyTheme(order[nextIndex])
+  }
+
   const toggleTheme = () => {
-    applyTheme(currentThemeName.value === 'dark' ? 'light' : 'dark')
+    cycleTheme()
+  }
+
+  const setTheme = (themeName) => {
+    applyTheme(themeName)
   }
 
   const initTheme = async () => {
@@ -95,7 +109,10 @@ export const useThemeStore = defineStore('theme', () => {
     composeTheme,
     applyTheme,
     toggleTheme,
+    cycleTheme,
+    setTheme,
     refreshThemeVariables,
     initTheme
   }
 })
+

@@ -2,10 +2,10 @@
   <button
     class="theme-toggle"
     @click="toggleTheme"
-    :title="iconState ? '切换到浅色模式' : '切换到深色模式'"
-    :aria-label="iconState ? '切换到浅色模式' : '切换到深色模式'"
+    :title="buttonTitle"
+    :aria-label="buttonTitle"
   >
-    <div class="icon-container" :class="{ 'is-dark': iconState }">
+    <div class="icon-container" :class="`theme-${themeState}`">
       <!-- Sun Icon -->
       <svg
         class="icon sun"
@@ -15,6 +15,7 @@
         stroke-width="2"
         stroke-linecap="round"
         stroke-linejoin="round"
+        aria-hidden="true"
       >
         <circle cx="12" cy="12" r="5"></circle>
         <line x1="12" y1="1" x2="12" y2="3"></line>
@@ -36,8 +37,25 @@
         stroke-width="2"
         stroke-linecap="round"
         stroke-linejoin="round"
+        aria-hidden="true"
       >
         <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+      </svg>
+
+      <!-- Liquid Glass Lens Icon -->
+      <svg
+        class="icon glass"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <rect x="3" y="3" width="18" height="18" rx="5" ry="5"></rect>
+        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+        <path d="M21 15l-5-5L5 21"></path>
       </svg>
     </div>
   </button>
@@ -48,16 +66,21 @@ import { ref, watch, computed } from "vue";
 import { useThemeStore } from "../stores/theme";
 
 const themeStore = useThemeStore();
-const isDark = computed(() => themeStore.currentThemeName === 'dark');
+const currentTheme = computed(() => themeStore.currentThemeName);
 
 // 独立的图标状态，延迟更新以避免动画闪烁
-const iconState = ref(isDark.value);
+const themeState = ref(currentTheme.value);
 
-// 监听 isDark 变化，但不在过渡动画中立即更新图标
-watch(isDark, (newVal) => {
-  // 如果不在过渡动画中，立即同步
+const buttonTitle = computed(() => {
+  if (themeState.value === 'light') return '当前：浅色模式（点击切换深色模式）';
+  if (themeState.value === 'dark') return '当前：深色模式（点击切换液态玻璃主题）';
+  return '当前：液态玻璃主题（点击切换浅色模式）';
+});
+
+// 监听 currentTheme 变化，但不在过渡动画中立即更新图标
+watch(currentTheme, (newVal) => {
   if (!document.documentElement.classList.contains("view-transition-active")) {
-    iconState.value = newVal;
+    themeState.value = newVal;
   }
 });
 
@@ -68,12 +91,9 @@ const toggleTheme = async (event) => {
 
   if (!isAppearanceTransition) {
     themeStore.toggleTheme();
-    iconState.value = isDark.value;
+    themeState.value = currentTheme.value;
     return;
   }
-
-  // 保存切换前的状态
-  const wasDark = isDark.value;
 
   const x = event.clientX;
   const y = event.clientY;
@@ -82,24 +102,19 @@ const toggleTheme = async (event) => {
     Math.max(y, innerHeight - y)
   );
 
-  // 添加标记类，表示正在过渡
   document.documentElement.classList.add("view-transition-active");
 
-  // startViewTransition 的回调是同步执行的，会捕获新状态
   const transition = document.startViewTransition(() => {
     themeStore.toggleTheme();
   });
 
-  // 等待过渡准备好后，应用自定义动画
   transition.ready.then(() => {
     const clipPath = [
       `circle(0px at ${x}px ${y}px)`,
       `circle(${endRadius}px at ${x}px ${y}px)`,
     ];
     document.documentElement.animate(
-      {
-        clipPath: clipPath,
-      },
+      { clipPath },
       {
         duration: 400,
         easing: "ease-out",
@@ -108,15 +123,13 @@ const toggleTheme = async (event) => {
     );
   });
 
-  // 动画完成后再更新图标状态
   transition.finished
     .then(() => {
-      iconState.value = isDark.value;
+      themeState.value = currentTheme.value;
       document.documentElement.classList.remove("view-transition-active");
     })
     .catch(() => {
-      // 如果动画被取消，也要清理状态
-      iconState.value = isDark.value;
+      themeState.value = currentTheme.value;
       document.documentElement.classList.remove("view-transition-active");
     });
 };
@@ -131,51 +144,12 @@ const toggleTheme = async (event) => {
   overflow: hidden;
 }
 
-/* 始终让新视图在上层，通过 clip-path 扩展展示 */
 ::view-transition-old(root) {
   z-index: 1;
 }
 
 ::view-transition-new(root) {
   z-index: 9999;
-}
-</style>
-
-<style scoped>
-/* 主题按钮模拟 Windows 11 的轻量实体控件，按下时回到基准面。 */
-.theme-toggle {
-  width: 38px;
-  height: 38px;
-  padding: 8px;
-  border: 1px solid var(--border-color-light);
-  border-radius: 12px;
-  color: var(--text-regular);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.14), transparent),
-    color-mix(in srgb, var(--surface-solid) 58%, transparent);
-  box-shadow:
-    inset 0 1px 0 var(--stroke-highlight),
-    0 3px 8px rgba(33, 51, 78, 0.10);
-  transition:
-    transform var(--motion-fast) cubic-bezier(0.16, 1, 0.3, 1),
-    color var(--motion-fast) ease,
-    background-color var(--motion-fast) ease;
-}
-
-.theme-toggle:hover {
-  color: var(--brand-primary);
-  background: color-mix(in srgb, var(--brand-primary) 9%, var(--surface-solid));
-  transform: translateY(-1px);
-}
-
-.theme-toggle:active {
-  transform: translateY(1px);
-}
-
-.icon {
-  transition:
-    opacity var(--motion-base) ease,
-    transform var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1);
 }
 </style>
 
@@ -187,7 +161,7 @@ const toggleTheme = async (event) => {
   padding: 8px;
   border-radius: 50%;
   color: var(--text-primary);
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, transform 0.15s;
   overflow: hidden;
   width: 40px;
   height: 40px;
@@ -198,16 +172,22 @@ const toggleTheme = async (event) => {
 
 .theme-toggle:hover {
   background-color: rgba(0, 0, 0, 0.05);
+  transform: translateY(-1px);
 }
 
-html.dark .theme-toggle:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+.theme-toggle:active {
+  transform: translateY(1px);
+}
+
+html.dark .theme-toggle:hover,
+html.theme-liquid-glass .theme-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.15);
 }
 
 .icon-container {
   position: relative;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
 }
 
 .icon {
@@ -216,26 +196,28 @@ html.dark .theme-toggle:hover {
   left: 0;
   width: 100%;
   height: 100%;
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  transform: rotate(90deg) scale(0.5);
+  pointer-events: none;
 }
 
-.sun {
+/* Light active: show Sun */
+.theme-light .sun {
   opacity: 1;
   transform: rotate(0deg) scale(1);
 }
 
-.moon {
-  opacity: 0;
-  transform: rotate(90deg) scale(0);
-}
-
-.is-dark .sun {
-  opacity: 0;
-  transform: rotate(-90deg) scale(0);
-}
-
-.is-dark .moon {
+/* Dark active: show Moon */
+.theme-dark .moon {
   opacity: 1;
   transform: rotate(0deg) scale(1);
+}
+
+/* Liquid Glass active: show Lens */
+.theme-liquid-glass .glass {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+  color: var(--brand-primary, #3463ce);
 }
 </style>

@@ -203,6 +203,12 @@ const routes = [
         meta: { title: "主题配置", requiresAuth: true, adminOnly: true, breadcrumbGroup: "系统管理" },
       },
       {
+        path: "liquid-glass",
+        name: "LiquidGlassWorkbench",
+        component: () => import("@/views/LiquidGlassWorkbench.vue"),
+        meta: { title: "液态玻璃工作台", requiresAuth: false },
+      },
+      {
         path: "payment/callback",
         name: "PaymentCallback",
         component: () => import("@/views/PaymentCallback.vue"),
@@ -215,6 +221,12 @@ const routes = [
         meta: { title: "支付订单", requiresAuth: true },
       },
     ],
+  },
+  {
+    path: "/standalone/liquid-glass",
+    name: "LiquidGlassStandalone",
+    component: () => import("@/views/LiquidGlassWorkbench.vue"),
+    meta: { title: "液态玻璃工作台" },
   },
 ];
 
