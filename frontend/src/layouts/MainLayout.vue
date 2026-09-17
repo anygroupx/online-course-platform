@@ -86,6 +86,11 @@
           <template #title>操作日志</template>
         </el-menu-item>
 
+        <el-menu-item index="/liquid-glass">
+          <el-icon><MagicStick /></el-icon>
+          <template #title>液态玻璃</template>
+        </el-menu-item>
+
         <el-sub-menu v-if="userStore.isAdmin" index="service-admin">
           <template #title>
             <el-icon><Tickets /></el-icon>

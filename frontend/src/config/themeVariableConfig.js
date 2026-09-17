@@ -1,8 +1,9 @@
-import { darkTheme, lightTheme } from '@/styles/themes'
+import { darkTheme, lightTheme, liquidGlassTheme } from '../styles/themes/index.js'
 
 export const THEME_VARIABLE_TYPES = {
   light: 'theme_color_light',
-  dark: 'theme_color_dark'
+  dark: 'theme_color_dark',
+  'liquid-glass': 'theme_color_liquid_glass'
 }
 
 export const THEME_TYPE_TO_MODE = Object.fromEntries(
@@ -11,7 +12,8 @@ export const THEME_TYPE_TO_MODE = Object.fromEntries(
 
 export const THEME_MODE_LABELS = {
   light: '浅色主题',
-  dark: '深色主题'
+  dark: '深色主题',
+  'liquid-glass': '液态玻璃'
 }
 
 export const THEME_GROUPS = [
@@ -29,7 +31,8 @@ const token = (key, cssVariable, label, group, description) => ({
   description,
   defaults: {
     light: lightTheme[cssVariable],
-    dark: darkTheme[cssVariable]
+    dark: darkTheme[cssVariable],
+    'liquid-glass': liquidGlassTheme[cssVariable]
   }
 })
 

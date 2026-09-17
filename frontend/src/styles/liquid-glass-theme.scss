@@ -1,0 +1,272 @@
+/* ==========================================================================
+   Liquid Glass System Theme
+   Adheres to zsio/liquid-glass visual language:
+   - Cool-neutral shell (#f5f6f8, #252b35, #717a88, #cdd2db)
+   - Translucent surfaces with live backdrop refraction
+   - Solid hierarchy for control inspectors / dialogs
+   - Soft slate shadows, zero neon glow
+   - Semantic controls outside optical filters
+   ========================================================================== */
+
+html[data-theme="liquid-glass"],
+html.theme-liquid-glass {
+  background-color: #f5f6f8;
+  background-image:
+    radial-gradient(120% 100% at 50% 0%, rgba(220, 228, 242, 0.45) 0%, transparent 60%),
+    radial-gradient(80% 80% at 100% 100%, rgba(200, 215, 235, 0.3) 0%, transparent 50%),
+    radial-gradient(70% 70% at 0% 100%, rgba(215, 230, 245, 0.3) 0%, transparent 50%);
+  background-attachment: fixed;
+  color: var(--text-primary);
+
+  body {
+    background: transparent;
+    color: var(--text-primary);
+  }
+
+  /* Main layout header with frosted glass refraction */
+  .layout-header,
+  header.main-header,
+  .el-header {
+    background: rgba(245, 246, 248, 0.78) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(205, 210, 219, 0.55) !important;
+    box-shadow: 0 4px 16px -8px rgba(31, 42, 58, 0.08);
+  }
+
+  /* Main layout sidebar */
+  .layout-sidebar,
+  aside.main-sidebar,
+  .el-aside {
+    background: rgba(245, 246, 248, 0.72) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-right: 1px solid rgba(205, 210, 219, 0.5) !important;
+  }
+
+  /* Cards with liquid glass translucent styling */
+  .el-card,
+  .spatial-card,
+  .fluent-card,
+  .stat-card,
+  .filter-card,
+  .search-card,
+  .table-card,
+  .data-card,
+  .chart-card {
+    background: rgba(255, 255, 255, 0.65) !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(205, 210, 219, 0.68) !important;
+    border-radius: var(--radius-lg, 16px);
+    box-shadow:
+      0 8px 24px -10px rgba(31, 42, 58, 0.12),
+      0 2px 6px rgba(31, 42, 58, 0.04),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.78) !important;
+      box-shadow:
+        0 14px 32px -12px rgba(31, 42, 58, 0.16),
+        0 4px 12px rgba(31, 42, 58, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.95);
+    }
+
+    .el-card__header {
+      border-bottom: 1px solid rgba(205, 210, 219, 0.45);
+    }
+  }
+
+  /* Solid inspector hierarchy beside glass surfaces */
+  .glass-inspector,
+  .inspector-solid {
+    background: #ffffff !important;
+    border: 1px solid #dfe2e7 !important;
+    box-shadow: 0 4px 20px -6px rgba(31, 42, 58, 0.10);
+    border-radius: 21px;
+  }
+
+  /* Dialogs and drawers */
+  .el-dialog,
+  .el-drawer {
+    background: rgba(255, 255, 255, 0.92) !important;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(205, 210, 219, 0.75);
+    border-radius: var(--radius-xl, 24px);
+    box-shadow:
+      0 24px 48px -18px rgba(31, 42, 58, 0.25),
+      0 8px 16px -8px rgba(31, 42, 58, 0.12);
+  }
+
+  /* Tables */
+  .el-table {
+    background: transparent !important;
+    --el-table-bg-color: transparent;
+    --el-table-tr-bg-color: transparent;
+    --el-table-header-bg-color: rgba(245, 247, 250, 0.75);
+    --el-table-row-hover-bg-color: rgba(255, 255, 255, 0.65);
+    --el-table-border-color: rgba(205, 210, 219, 0.45);
+
+    th.el-table__cell {
+      background: rgba(245, 247, 250, 0.8) !important;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    td.el-table__cell {
+      border-bottom: 1px solid rgba(205, 210, 219, 0.35);
+    }
+  }
+
+  /* Form controls */
+  .el-input__wrapper,
+  .el-select__wrapper {
+    background-color: rgba(255, 255, 255, 0.75) !important;
+    border-radius: var(--radius-sm, 8px);
+    box-shadow: 0 0 0 1px rgba(205, 210, 219, 0.8) inset !important;
+    transition: box-shadow 0.2s ease, background 0.2s ease;
+
+    &:hover {
+      box-shadow: 0 0 0 1px var(--brand-primary) inset !important;
+      background-color: #ffffff !important;
+    }
+
+    &.is-focus {
+      box-shadow: 0 0 0 2px var(--brand-primary) inset !important;
+      background-color: #ffffff !important;
+    }
+  }
+
+  /* Buttons */
+  .el-button {
+    border-radius: var(--radius-sm, 8px);
+    transition: all 0.18s ease;
+
+    &.el-button--primary {
+      background: var(--brand-primary) !important;
+      border-color: var(--brand-primary) !important;
+      color: #ffffff !important;
+      box-shadow: 0 4px 12px -4px rgba(52, 99, 206, 0.4);
+
+      &:hover {
+        background: var(--brand-primary-hover) !important;
+        border-color: var(--brand-primary-hover) !important;
+        transform: translateY(-0.5px);
+      }
+
+      &:active {
+        background: var(--brand-primary-pressed) !important;
+        transform: translateY(0.5px);
+      }
+    }
+
+    &.el-button--default {
+      background: rgba(255, 255, 255, 0.8) !important;
+      border-color: rgba(205, 210, 219, 0.8) !important;
+      color: var(--text-primary) !important;
+
+      &:hover {
+        background: #ffffff !important;
+        border-color: var(--brand-primary) !important;
+        color: var(--brand-primary) !important;
+      }
+    }
+  }
+
+  /* Tags */
+  .el-tag {
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(205, 210, 219, 0.6);
+  }
+
+  /* Dropdown menus and popovers */
+  .el-dropdown-menu,
+  .el-popover.el-popper {
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(205, 210, 219, 0.65) !important;
+    border-radius: var(--radius-md, 12px);
+    box-shadow: 0 12px 32px -10px rgba(31, 42, 58, 0.18);
+  }
+
+  /* Breadcrumbs */
+  .el-breadcrumb {
+    .el-breadcrumb__inner {
+      color: var(--text-secondary) !important;
+      font-weight: 500;
+      &.is-link:hover {
+        color: var(--brand-primary) !important;
+      }
+    }
+    .el-breadcrumb__item:last-child .el-breadcrumb__inner {
+      color: var(--text-primary) !important;
+      font-weight: 600;
+    }
+  }
+
+  /* Tabs */
+  .el-tabs--border-card {
+    background: rgba(255, 255, 255, 0.7) !important;
+    border: 1px solid rgba(205, 210, 219, 0.6) !important;
+    border-radius: var(--radius-md, 12px);
+    overflow: hidden;
+
+    .el-tabs__header {
+      background: rgba(245, 247, 250, 0.75) !important;
+      border-bottom: 1px solid rgba(205, 210, 219, 0.5) !important;
+    }
+
+    .el-tabs__item.is-active {
+      background: rgba(255, 255, 255, 0.9) !important;
+      color: var(--brand-primary) !important;
+      border-right-color: rgba(205, 210, 219, 0.5) !important;
+      border-left-color: rgba(205, 210, 219, 0.5) !important;
+    }
+  }
+
+  /* Pagination */
+  .el-pagination {
+    button {
+      background: rgba(255, 255, 255, 0.7) !important;
+      border-radius: var(--radius-xs, 6px);
+      &:disabled {
+        background: rgba(245, 247, 250, 0.5) !important;
+      }
+    }
+    .el-pager li {
+      background: rgba(255, 255, 255, 0.7) !important;
+      border-radius: var(--radius-xs, 6px);
+      transition: all 0.15s ease;
+      &.is-active {
+        background: var(--brand-primary) !important;
+        color: #ffffff !important;
+      }
+      &:hover:not(.is-active) {
+        color: var(--brand-primary);
+        background: #ffffff !important;
+      }
+    }
+  }
+
+  /* Loading Mask */
+  .el-loading-mask {
+    background-color: rgba(245, 246, 248, 0.68) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  /* Message Box */
+  .el-message-box {
+    background: rgba(255, 255, 255, 0.92) !important;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(205, 210, 219, 0.75) !important;
+    border-radius: var(--radius-xl, 20px) !important;
+    box-shadow: 0 20px 48px -16px rgba(31, 42, 58, 0.22) !important;
+  }
+}
