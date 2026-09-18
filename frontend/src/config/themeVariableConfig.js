@@ -6,6 +6,8 @@ export const THEME_VARIABLE_TYPES = {
   'liquid-glass': 'theme_color_liquid_glass'
 }
 
+export const LIQUID_GLASS_THEME_TYPE = THEME_VARIABLE_TYPES['liquid-glass']
+
 export const THEME_TYPE_TO_MODE = Object.fromEntries(
   Object.entries(THEME_VARIABLE_TYPES).map(([mode, type]) => [type, mode])
 )
@@ -72,6 +74,122 @@ export const THEME_COLOR_TOKENS = [
 export const THEME_TOKEN_BY_KEY = Object.fromEntries(
   THEME_COLOR_TOKENS.map((item) => [item.key, item])
 )
+
+const materialToken = (
+  key,
+  label,
+  description,
+  control,
+  defaultValue,
+  options = {}
+) => ({
+  key,
+  label,
+  description,
+  control,
+  defaultValue,
+  ...options
+})
+
+/**
+ * 液态玻璃材质参数与光学引擎保持一一对应。
+ * 这些参数独立于颜色 Token，避免颜色编辑器承担材质生命周期职责。
+ */
+export const LIQUID_GLASS_MATERIAL_TOKENS = [
+  materialToken('glass_renderer_mode', '渲染模式', '自动选择增强折射或兼容毛玻璃', 'mode', 'auto', {
+    options: [
+      { label: '自动', value: 'auto' },
+      { label: '增强折射', value: 'svg' },
+      { label: '兼容毛玻璃', value: 'css' }
+    ]
+  }),
+  materialToken('glass_refraction', '折射强度', '控制边缘背景位移强度', 'number', '56', {
+    min: 0, max: 100, step: 1, unit: ''
+  }),
+  materialToken('glass_bevel', '斜面宽度', '控制产生折射与高光的边缘范围', 'number', '22', {
+    min: 2, max: 48, step: 1, unit: 'px'
+  }),
+  materialToken('glass_blur', '光学模糊', '增强折射路径中的轻微模糊', 'number', '0.35', {
+    min: 0, max: 8, step: 0.05, unit: 'px'
+  }),
+  materialToken('glass_dispersion', '色散强度', '控制边缘 RGB 通道的微弱分离', 'number', '1.2', {
+    min: 0, max: 5, step: 0.05, unit: ''
+  }),
+  materialToken('glass_radius', '表面圆角', '控制主壳层和玻璃卡片的圆角', 'number', '24', {
+    min: 8, max: 48, step: 1, unit: 'px'
+  }),
+  materialToken('glass_tint', '材质着色', '叠加在实时背景上的低透明度颜色', 'color', 'rgba(255,255,255,0.018)'),
+  materialToken('glass_surface_opacity', '表面透明度', '控制普通业务卡片的透明表面强度', 'number', '0.65', {
+    min: 0.12, max: 0.92, step: 0.01, unit: ''
+  }),
+  materialToken('glass_backdrop_blur', '兼容模糊', 'CSS 降级路径与普通业务表面的背景模糊', 'number', '16', {
+    min: 4, max: 32, step: 1, unit: 'px'
+  }),
+  materialToken('glass_saturation', '背景饱和度', '控制玻璃后方内容的饱和度', 'number', '108', {
+    min: 80, max: 160, step: 1, unit: '%'
+  })
+]
+
+export const LIQUID_GLASS_MATERIAL_BY_KEY = Object.fromEntries(
+  LIQUID_GLASS_MATERIAL_TOKENS.map((item) => [item.key, item])
+)
+
+export const DEFAULT_LIQUID_GLASS_MATERIAL = Object.fromEntries(
+  LIQUID_GLASS_MATERIAL_TOKENS.map((item) => [item.key, item.defaultValue])
+)
+
+export const isValidMaterialValue = (definition, value) => {
+  if (!definition || value === null || value === undefined) return false
+  const normalized = String(value).trim()
+  if (definition.control === 'mode') {
+    return definition.options.some((option) => option.value === normalized)
+  }
+  if (definition.control === 'color') return isCssColor(normalized)
+  const numericValue = Number(normalized)
+  return Number.isFinite(numericValue)
+    && numericValue >= definition.min
+    && numericValue <= definition.max
+}
+
+export const normalizeLiquidGlassMaterial = (values = {}) => Object.fromEntries(
+  LIQUID_GLASS_MATERIAL_TOKENS.map((definition) => {
+    const value = values[definition.key]
+    return [
+      definition.key,
+      isValidMaterialValue(definition, value) ? String(value).trim() : definition.defaultValue
+    ]
+  })
+)
+
+export const materialToEngineOptions = (values = {}) => {
+  const material = normalizeLiquidGlassMaterial(values)
+  return {
+    mode: material.glass_renderer_mode,
+    refraction: Number(material.glass_refraction),
+    bevel: Number(material.glass_bevel),
+    blur: Number(material.glass_blur),
+    dispersion: Number(material.glass_dispersion),
+    radius: Number(material.glass_radius),
+    tint: material.glass_tint,
+    fallbackBlur: Number(material.glass_backdrop_blur),
+    saturation: Number(material.glass_saturation) / 100
+  }
+}
+
+export const materialToCssVariables = (values = {}) => {
+  const material = normalizeLiquidGlassMaterial(values)
+  return {
+    '--glass-refraction': material.glass_refraction,
+    '--glass-bevel': `${material.glass_bevel}px`,
+    '--glass-optical-blur': `${material.glass_blur}px`,
+    '--glass-dispersion': material.glass_dispersion,
+    '--glass-radius': `${material.glass_radius}px`,
+    '--glass-tint': material.glass_tint,
+    '--glass-surface-opacity': material.glass_surface_opacity,
+    '--glass-backdrop-blur': `${material.glass_backdrop_blur}px`,
+    '--glass-saturation': `${material.glass_saturation}%`
+  }
+}
 
 export const isThemeVariableType = (type) => Boolean(THEME_TYPE_TO_MODE[type])
 

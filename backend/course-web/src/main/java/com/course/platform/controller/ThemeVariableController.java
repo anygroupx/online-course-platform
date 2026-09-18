@@ -13,9 +13,9 @@ import java.util.Map;
 
 /**
  * 客户端主题变量接口。
- * 仅暴露白名单内且已启用的主题色值，不包含系统变量管理能力。
+ * 仅暴露白名单内且已启用的主题颜色与材质值，不包含系统变量管理能力。
  */
-@Tag(name = "客户端主题", description = "读取系统统一配置的主题颜色")
+@Tag(name = "客户端主题", description = "读取系统统一配置的主题颜色与材质参数")
 @RequestMapping("/theme")
 @RequiredArgsConstructor
 @RestController
@@ -23,7 +23,7 @@ public class ThemeVariableController {
 
     private final SystemVariableService systemVariableService;
 
-    @Operation(summary = "获取主题颜色", description = "获取浅色与深色主题中已启用的语义颜色变量")
+    @Operation(summary = "获取主题变量", description = "获取浅色、深色与液态玻璃主题中已启用的受控变量")
     @GetMapping("/variables")
     public Result<Map<String, Map<String, String>>> getThemeVariables() {
         return Result.success(systemVariableService.getEnabledThemeVariables());

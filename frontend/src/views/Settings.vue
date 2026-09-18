@@ -181,7 +181,7 @@
                 @click="$router.push({ path: '/admin/variables', query: { type: 'theme_color_light' } })"
               >
                 <el-icon><Brush /></el-icon>
-                管理系统主题颜色
+                管理系统主题与液态材质
               </el-button>
             </el-form-item>
 

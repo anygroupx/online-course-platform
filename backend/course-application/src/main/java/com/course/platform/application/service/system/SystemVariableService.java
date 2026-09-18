@@ -35,7 +35,7 @@ public interface SystemVariableService {
     void updateVariable(SystemVariableUpdateRequest request, Long operatorId);
 
     /**
-     * 原子批量更新主题变量，避免多次请求造成部分发布。
+     * 原子批量更新主题颜色与材质变量，避免多次请求造成部分发布。
      */
     void updateThemeVariables(List<SystemVariableUpdateRequest> requests, Long operatorId);
 
@@ -74,9 +74,9 @@ public interface SystemVariableService {
     SystemVariable getVariableById(Long variableId);
 
     /**
-     * 获取面向客户端的已启用主题颜色配置。
+     * 获取面向客户端的已启用主题颜色与材质配置。
      *
-     * @return light/dark -> 变量键 -> 色值
+     * @return light/dark/liquid-glass -> 变量键 -> 配置值
      */
     Map<String, Map<String, String>> getEnabledThemeVariables();
 

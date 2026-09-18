@@ -4,7 +4,7 @@
       <div class="header-content">
         <div>
           <h2>系统变量管理</h2>
-          <p>统一管理业务状态与系统主题色，配置保存后对所有客户端生效。</p>
+          <p>统一管理业务状态、系统主题色与液态玻璃材质，配置保存后对所有客户端生效。</p>
         </div>
         <div v-if="isThemeFilter" class="theme-header-badge">
           <span class="theme-header-swatch" :style="{ background: themePreviewTokens['--primary-gradient'] }" />
@@ -27,7 +27,7 @@
             </el-button>
             <el-button @click="resetThemeDrafts">
               <el-icon><MagicStick /></el-icon>
-              恢复系统默认色
+              恢复系统默认
             </el-button>
           </template>
           <template v-else>
@@ -78,7 +78,20 @@
               <button class="preview-secondary">次要操作</button>
             </div>
           </div>
-          <div class="preview-status-list">
+          <LiquidGlass
+            v-if="isLiquidGlassThemeEditor"
+            class="theme-material-preview"
+            v-bind="materialPreviewOptions"
+          >
+            <div class="material-preview-copy">
+              <span>REAL DOM · LIVE BACKDROP</span>
+              <strong>液态玻璃</strong>
+              <small>
+                折射 {{ materialPreviewOptions.refraction }} · 斜面 {{ materialPreviewOptions.bevel }} · 色散 {{ materialPreviewOptions.dispersion }}
+              </small>
+            </div>
+          </LiquidGlass>
+          <div v-else class="preview-status-list">
             <span class="preview-status success">成功</span>
             <span class="preview-status warning">警告</span>
             <span class="preview-status danger">危险</span>
@@ -94,7 +107,7 @@
         :closable="false"
         show-icon
         title="部分主题变量尚未写入数据库"
-        :description="`缺少 ${missingThemeVariables.length} 项。重启新版后端或执行 010_theme_color_variables.sql 后即可管理；当前预览使用内置默认值。`"
+        :description="missingThemeDescription"
       />
 
       <section v-for="group in THEME_GROUPS" :key="group.key" class="theme-group-section">
@@ -141,6 +154,99 @@
               </el-button>
             </div>
             <div v-else class="token-missing">等待系统变量初始化</div>
+          </article>
+        </div>
+      </section>
+
+      <section v-if="isLiquidGlassThemeEditor" class="theme-group-section material-group-section">
+        <div class="theme-group-heading">
+          <div>
+            <h3>材质与光学</h3>
+            <p>参数同时驱动主壳层真实折射和业务表面的兼容材质；保存后对所有客户端生效。</p>
+          </div>
+          <span>{{ LIQUID_GLASS_MATERIAL_TOKENS.length }} 项</span>
+        </div>
+
+        <div class="material-token-grid">
+          <article
+            v-for="item in materialItems"
+            :key="item.key"
+            class="theme-token-card material-token-card"
+          >
+            <div class="token-heading">
+              <div class="material-token-icon" aria-hidden="true"></div>
+              <div class="token-copy">
+                <strong>{{ item.label }}</strong>
+                <code>{{ item.key }}</code>
+              </div>
+              <el-switch
+                v-if="item.variable"
+                :model-value="getMaterialDraft(item)?.enabled"
+                inline-prompt
+                active-text="启"
+                inactive-text="停"
+                @change="(value) => updateMaterialDraftEnabled(item, value)"
+              />
+            </div>
+            <p>{{ item.description }}</p>
+
+            <div v-if="item.variable" class="material-editor">
+              <el-radio-group
+                v-if="item.control === 'mode'"
+                :model-value="getMaterialDraft(item)?.value"
+                size="small"
+                @change="(value) => updateMaterialDraftValue(item, value)"
+              >
+                <el-radio-button
+                  v-for="option in item.options"
+                  :key="option.value"
+                  :value="option.value"
+                  :label="option.value"
+                >
+                  {{ option.label }}
+                </el-radio-button>
+              </el-radio-group>
+
+              <div v-else-if="item.control === 'color'" class="material-color-editor">
+                <el-color-picker
+                  :model-value="getMaterialDraft(item)?.value"
+                  show-alpha
+                  color-format="rgb"
+                  @change="(value) => updateMaterialDraftValue(item, value)"
+                />
+                <el-input
+                  :model-value="getMaterialDraft(item)?.value"
+                  :class="{ 'is-invalid-color': !isCssColor(getMaterialDraft(item)?.value) }"
+                  @input="(value) => updateMaterialDraftValue(item, value)"
+                />
+              </div>
+
+              <div v-else class="material-number-editor">
+                <el-slider
+                  :model-value="Number(getMaterialDraft(item)?.value)"
+                  :min="item.min"
+                  :max="item.max"
+                  :step="item.step"
+                  :show-tooltip="false"
+                  @input="(value) => updateMaterialDraftValue(item, value)"
+                />
+                <el-input-number
+                  :model-value="Number(getMaterialDraft(item)?.value)"
+                  :min="item.min"
+                  :max="item.max"
+                  :step="item.step"
+                  :precision="getMaterialPrecision(item)"
+                  controls-position="right"
+                  @change="(value) => updateMaterialDraftValue(item, value)"
+                />
+                <span class="material-unit">{{ item.unit || '×' }}</span>
+              </div>
+
+              <el-button text title="恢复此项默认值" @click="resetMaterialItem(item)">
+                <el-icon><RefreshLeft /></el-icon>
+              </el-button>
+            </div>
+            <div v-else class="token-missing">等待后端初始化或执行 033 迁移</div>
           </article>
         </div>
       </section>
@@ -251,7 +357,9 @@ import { ArrowDown, Check, MagicStick, Plus, Refresh, RefreshLeft, Search } from
 import { useResponsive } from '@/composables/useResponsive'
 import { useThemeStore } from '@/stores/theme'
 import { themes } from '@/styles/themes'
+import LiquidGlass from '@/components/liquid-glass/LiquidGlass.vue'
 import {
+  LIQUID_GLASS_MATERIAL_TOKENS,
   THEME_COLOR_TOKENS,
   THEME_GROUPS,
   THEME_MODE_LABELS,
@@ -259,6 +367,9 @@ import {
   buildPrimaryGradient,
   getThemeModeByType,
   isCssColor,
+  isValidMaterialValue,
+  materialToCssVariables,
+  materialToEngineOptions,
   isThemeVariableType
 } from '@/config/themeVariableConfig'
 import {
@@ -285,6 +396,7 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref()
 const themeDrafts = reactive({})
+const materialDrafts = reactive({})
 let searchTimer
 
 const filters = reactive({
@@ -334,14 +446,33 @@ const typeTagMap = {
 
 const isThemeFilter = computed(() => isThemeVariableType(filters.variableType))
 const themeMode = computed(() => getThemeModeByType(filters.variableType))
+const isLiquidGlassThemeEditor = computed(() => themeMode.value === 'liquid-glass')
 const creatableVariableTypes = computed(() => variableTypes.value.filter((type) => !isThemeVariableType(type)))
 const variableByThemeKey = computed(() => Object.fromEntries(variables.value.map((item) => [item.variableKey, item])))
-const missingThemeVariables = computed(() => THEME_COLOR_TOKENS.filter((item) => !variableByThemeKey.value[item.key]))
-const changedThemeRows = computed(() => THEME_COLOR_TOKENS.filter((item) => {
+const missingThemeVariables = computed(() => [
+  ...THEME_COLOR_TOKENS,
+  ...(isLiquidGlassThemeEditor.value ? LIQUID_GLASS_MATERIAL_TOKENS : [])
+].filter((item) => !variableByThemeKey.value[item.key]))
+const changedColorRows = computed(() => THEME_COLOR_TOKENS.filter((item) => {
   const variable = variableByThemeKey.value[item.key]
   const draft = themeDrafts[item.key]
   return variable && draft && (draft.value !== variable.variableValue || draft.enabled !== Boolean(variable.isEnabled))
 }))
+const changedMaterialRows = computed(() => isLiquidGlassThemeEditor.value
+  ? LIQUID_GLASS_MATERIAL_TOKENS.filter((item) => {
+      const variable = variableByThemeKey.value[item.key]
+      const draft = materialDrafts[item.key]
+      return variable && draft && (draft.value !== variable.variableValue || draft.enabled !== Boolean(variable.isEnabled))
+    })
+  : [])
+const changedThemeRows = computed(() => [...changedColorRows.value, ...changedMaterialRows.value])
+const materialPreviewValues = computed(() => Object.fromEntries(
+  LIQUID_GLASS_MATERIAL_TOKENS.map((item) => [
+    item.key,
+    materialDrafts[item.key]?.enabled ? materialDrafts[item.key].value : item.defaultValue
+  ])
+))
+const materialPreviewOptions = computed(() => materialToEngineOptions(materialPreviewValues.value))
 const themePreviewTokens = computed(() => {
   const tokens = { ...themes[themeMode.value] }
   for (const item of THEME_COLOR_TOKENS) {
@@ -349,21 +480,40 @@ const themePreviewTokens = computed(() => {
     if (draft?.enabled && isCssColor(draft.value)) tokens[item.cssVariable] = draft.value.trim()
   }
   tokens['--primary-gradient'] = buildPrimaryGradient(tokens)
+  if (isLiquidGlassThemeEditor.value) {
+    Object.assign(tokens, materialToCssVariables(materialPreviewValues.value))
+  }
   return tokens
+})
+const missingThemeDescription = computed(() => {
+  if (isLiquidGlassThemeEditor.value) {
+    return `缺少 ${missingThemeVariables.value.length} 项。重启新版后端或执行 033_liquid_glass_theme_variables.sql 后即可管理；当前预览使用内置默认值。`
+  }
+  return `缺少 ${missingThemeVariables.value.length} 项。重启新版后端或执行 010_theme_color_variables.sql 后即可管理；当前预览使用内置默认值。`
 })
 
 const getTypeLabel = (type) => typeLabels[type] || type
 const getTypeTagType = (type) => typeTagMap[type] || 'default'
 const getThemeDraft = (item) => themeDrafts[item.key]
+const getMaterialDraft = (item) => materialDrafts[item.key]
 const themeItemsForGroup = (group) => THEME_COLOR_TOKENS
   .filter((item) => item.group === group)
   .map((item) => ({ ...item, variable: variableByThemeKey.value[item.key] }))
+const materialItems = computed(() => LIQUID_GLASS_MATERIAL_TOKENS
+  .map((item) => ({ ...item, variable: variableByThemeKey.value[item.key] })))
 
 const syncThemeDrafts = () => {
   for (const item of THEME_COLOR_TOKENS) {
     const variable = variableByThemeKey.value[item.key]
     themeDrafts[item.key] = {
       value: variable?.variableValue || item.defaults[themeMode.value],
+      enabled: variable ? Boolean(variable.isEnabled) : true
+    }
+  }
+  for (const item of LIQUID_GLASS_MATERIAL_TOKENS) {
+    const variable = variableByThemeKey.value[item.key]
+    materialDrafts[item.key] = {
+      value: variable?.variableValue || item.defaultValue,
       enabled: variable ? Boolean(variable.isEnabled) : true
     }
   }
@@ -425,10 +575,27 @@ const resetThemeItem = (item) => {
   themeDrafts[item.key].value = item.defaults[themeMode.value]
   themeDrafts[item.key].enabled = true
 }
+const updateMaterialDraftValue = (item, value) => {
+  if (!materialDrafts[item.key] || value === null || value === undefined) return
+  materialDrafts[item.key].value = String(value)
+}
+const updateMaterialDraftEnabled = (item, enabled) => {
+  if (materialDrafts[item.key]) materialDrafts[item.key].enabled = enabled
+}
+const resetMaterialItem = (item) => {
+  if (!materialDrafts[item.key]) return
+  materialDrafts[item.key].value = item.defaultValue
+  materialDrafts[item.key].enabled = true
+}
+const getMaterialPrecision = (item) => {
+  const step = String(item.step)
+  return step.includes('.') ? step.split('.')[1].length : 0
+}
 const resetThemeDrafts = async () => {
   try {
-    await ElMessageBox.confirm(`确定将${THEME_MODE_LABELS[themeMode.value]}恢复为系统默认色吗？保存前仍可撤销。`, '恢复默认主题色', { type: 'warning' })
+    await ElMessageBox.confirm(`确定将${THEME_MODE_LABELS[themeMode.value]}恢复为系统默认值吗？保存前仍可撤销。`, '恢复默认主题', { type: 'warning' })
     THEME_COLOR_TOKENS.forEach(resetThemeItem)
+    if (isLiquidGlassThemeEditor.value) LIQUID_GLASS_MATERIAL_TOKENS.forEach(resetMaterialItem)
   } catch (error) {
     // 用户取消，无需提示。
   }
@@ -436,16 +603,21 @@ const resetThemeDrafts = async () => {
 const discardThemeChanges = () => syncThemeDrafts()
 
 const saveThemeChanges = async () => {
-  const invalid = changedThemeRows.value.find((item) => !isCssColor(themeDrafts[item.key]?.value))
-  if (invalid) {
-    ElMessage.error(`${invalid.label}不是有效的 CSS 颜色`)
+  const invalidColor = changedColorRows.value.find((item) => !isCssColor(themeDrafts[item.key]?.value))
+  if (invalidColor) {
+    ElMessage.error(`${invalidColor.label}不是有效的 CSS 颜色`)
+    return
+  }
+  const invalidMaterial = changedMaterialRows.value.find((item) => !isValidMaterialValue(item, materialDrafts[item.key]?.value))
+  if (invalidMaterial) {
+    ElMessage.error(`${invalidMaterial.label}不在允许范围内`)
     return
   }
   savingTheme.value = true
   try {
     const updates = changedThemeRows.value.map((item) => {
       const variable = variableByThemeKey.value[item.key]
-      const draft = themeDrafts[item.key]
+      const draft = themeDrafts[item.key] || materialDrafts[item.key]
       return {
         ...variable,
         variableValue: draft.value.trim(),
@@ -456,11 +628,11 @@ const saveThemeChanges = async () => {
       }
     })
     await updateThemeVariables(updates)
-    ElMessage.success('主题颜色已发布')
+    ElMessage.success('主题颜色与材质参数已发布')
     await loadVariables()
     await themeStore.refreshThemeVariables()
   } catch (error) {
-    ElMessage.error(error?.message || '主题颜色保存失败')
+    ElMessage.error(error?.message || '主题配置保存失败')
   } finally {
     savingTheme.value = false
   }
@@ -572,6 +744,12 @@ onBeforeUnmount(() => clearTimeout(searchTimer))
 .preview-status.warning { background: var(--color-warning); }
 .preview-status.danger { background: var(--color-danger); }
 .preview-status.info { background: var(--color-info); }
+.theme-material-preview { width: min(100%, 360px); min-height: 178px; justify-self: end; --lg-solid: var(--surface-solid); }
+.theme-material-preview :deep(.lg-content) { min-height: 178px; display: grid; place-items: center; padding: 24px; text-align: center; }
+.material-preview-copy { display: grid; gap: 8px; justify-items: center; color: var(--text-primary); }
+.material-preview-copy > span { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--text-secondary); font-size: 9px; letter-spacing: .12em; }
+.material-preview-copy > strong { font-size: 26px; font-weight: 620; letter-spacing: -.03em; }
+.material-preview-copy > small { color: var(--text-secondary); font-size: 11px; }
 .theme-warning { margin-bottom: 20px; }
 .theme-group-section { margin-bottom: 22px; }
 .theme-group-heading { margin-bottom: 12px; padding: 0 4px; }
@@ -590,6 +768,18 @@ onBeforeUnmount(() => clearTimeout(searchTimer))
 .token-editor :deep(.el-input__inner) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
 .token-editor .is-invalid-color :deep(.el-input__wrapper) { box-shadow: inset 0 0 0 1px var(--color-danger) !important; }
 .token-missing { padding: 9px 10px; border-radius: var(--radius-sm); color: var(--text-placeholder); font-size: 12px; background: color-mix(in srgb, var(--color-warning) 8%, transparent); }
+.material-group-section { padding-top: 6px; }
+.material-token-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.material-token-card { min-height: 190px; }
+.material-token-icon { flex: 0 0 auto; width: 38px; height: 38px; border: 1px solid var(--border-color); border-radius: 12px; background: radial-gradient(circle at 28% 20%, rgba(255,255,255,.92), rgba(255,255,255,.08) 46%, transparent 68%), var(--surface-acrylic); box-shadow: inset 0 1px 0 var(--stroke-highlight), var(--shadow-sm); }
+.material-editor { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.material-editor :deep(.el-radio-group) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+.material-editor :deep(.el-radio-button__inner) { width: 100%; padding-inline: 8px; }
+.material-color-editor { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; }
+.material-color-editor .is-invalid-color :deep(.el-input__wrapper) { box-shadow: inset 0 0 0 1px var(--color-danger) !important; }
+.material-number-editor { display: grid; grid-template-columns: minmax(100px, 1fr) 118px 24px; gap: 10px; align-items: center; }
+.material-number-editor :deep(.el-input-number) { width: 118px; }
+.material-unit { color: var(--text-placeholder); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; }
 
 @media (max-width: 1100px) { .theme-token-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 767px) {
@@ -603,9 +793,11 @@ onBeforeUnmount(() => clearTimeout(searchTimer))
   .left-actions :deep(.el-button:nth-child(3)) { grid-column: 1 / -1; }
   .type-filter, .keyword-filter, .right-filters :deep(.el-select) { width: 100%; }
   .theme-preview { grid-template-columns: 1fr; padding: 24px 18px; }
+  .theme-material-preview { width: 100%; justify-self: stretch; }
   .preview-status-list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .preview-status { min-height: 54px; font-size: 12px; }
   .theme-token-grid { grid-template-columns: 1fr; }
+  .material-token-grid { grid-template-columns: 1fr; }
   .pagination-container :deep(.el-pagination) { max-width: 100%; flex-wrap: wrap; justify-content: center; row-gap: 8px; }
 }
 @media (max-width: 480px) {
@@ -613,5 +805,7 @@ onBeforeUnmount(() => clearTimeout(searchTimer))
   .left-actions :deep(.el-button:nth-child(3)) { grid-column: auto; }
   .preview-status-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .preview-actions { flex-direction: column; }
+  .material-number-editor { grid-template-columns: minmax(0, 1fr) 104px 20px; }
+  .material-number-editor :deep(.el-input-number) { width: 104px; }
 }
 </style>

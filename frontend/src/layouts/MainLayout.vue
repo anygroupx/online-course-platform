@@ -18,6 +18,12 @@
         'mobile-visible': isMobileMenuVisible && isMobile,
       }"
     >
+      <LiquidGlass
+        class="sidebar-material"
+        :enabled="isLiquidGlassTheme"
+        v-bind="shellGlassOptions"
+      >
+        <div class="sidebar-inner">
       <div class="logo" data-depth="brand">
         <span class="logo-device" aria-hidden="true">
           <i></i><i></i><i></i><i></i>
@@ -86,11 +92,6 @@
           <template #title>操作日志</template>
         </el-menu-item>
 
-        <el-menu-item index="/liquid-glass">
-          <el-icon><MagicStick /></el-icon>
-          <template #title>液态玻璃</template>
-        </el-menu-item>
-
         <el-sub-menu v-if="userStore.isAdmin" index="service-admin">
           <template #title>
             <el-icon><Tickets /></el-icon>
@@ -113,6 +114,7 @@
           <el-menu-item index="/admin/cards">充值卡密</el-menu-item>
           <el-menu-item index="/admin/announcements">公告管理</el-menu-item>
           <el-menu-item index="/admin/customer-service">客服管理</el-menu-item>
+          <el-menu-item index="/theme-config">主题配置</el-menu-item>
           <el-menu-item index="/admin/variables">系统变量</el-menu-item>
           <el-menu-item index="/admin/countdown">倒计时管理</el-menu-item>
           <el-menu-item index="/admin/aqks">AQKS刷课管理</el-menu-item>
@@ -132,10 +134,18 @@
         </div>
         <div class="copyright">Copyright © 2025 二开台</div>
       </div>
+        </div>
+      </LiquidGlass>
     </el-aside>
 
     <el-container>
       <el-header class="header">
+        <LiquidGlass
+          class="header-material"
+          :enabled="isLiquidGlassTheme"
+          v-bind="shellGlassOptions"
+        >
+          <div class="header-inner">
         <div class="header-left">
           <!-- 移动端菜单按钮 -->
           <el-button
@@ -198,6 +208,8 @@
             </template>
           </el-dropdown>
         </div>
+          </div>
+        </LiquidGlass>
       </el-header>
 
       <!-- 标签页导航 -->
@@ -325,6 +337,7 @@ import { useRouter, useRoute } from "vue-router";
 import { useUserStore } from "@/stores/user";
 import { useTagsViewStore } from "@/stores/tagsView";
 import { useAppConfigStore } from "@/stores/appConfig";
+import { useThemeStore } from "@/stores/theme";
 import { useResponsive } from "@/composables/useResponsive";
 import { buildBreadcrumbs } from "@/utils/breadcrumbs.js";
 import { ElMessage } from "element-plus";
@@ -333,6 +346,7 @@ import { getSystemAnnouncement } from "@/api/announcement";
 import TagsView from "@/components/TagsView.vue";
 import CustomerService from "@/components/CustomerService.vue";
 import ThemeToggle from "@/components/ThemeToggle.vue";
+import LiquidGlass from "@/components/liquid-glass/LiquidGlass.vue";
 import {
   HomeFilled,
   Document,
@@ -355,6 +369,15 @@ const route = useRoute();
 const userStore = useUserStore();
 const tagsViewStore = useTagsViewStore();
 const appConfigStore = useAppConfigStore();
+const themeStore = useThemeStore();
+const isLiquidGlassTheme = computed(
+  () => themeStore.currentThemeName === "liquid-glass"
+);
+const shellGlassOptions = computed(() => ({
+  ...themeStore.liquidGlassOptions,
+  // 主壳层保持产品级圆角，避免工作台式超大圆角侵占可用空间。
+  radius: Math.min(themeStore.liquidGlassOptions.radius, 32),
+}));
 const settings = computed(() => ({
   site_name: appConfigStore.branding.siteName,
   site_keywords: appConfigStore.branding.siteKeywords,
@@ -656,6 +679,25 @@ onUnmounted(() => {
   position: relative;
   /* 添加宽度变化的过渡动画 */
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-material,
+.sidebar-material :deep(.lg-content),
+.sidebar-inner {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.sidebar-material {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sidebar-inner {
   display: flex;
   flex-direction: column;
 }
@@ -1074,6 +1116,20 @@ html.dark .menu .el-menu-item.is-active {
   justify-content: space-between;
   padding: 0 24px;
   backdrop-filter: blur(10px);
+}
+
+.header-material,
+.header-material :deep(.lg-content),
+.header-inner {
+  width: 100%;
+  height: 100%;
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .header-left {

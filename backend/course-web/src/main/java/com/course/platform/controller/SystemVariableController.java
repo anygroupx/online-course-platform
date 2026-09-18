@@ -75,9 +75,9 @@ public class SystemVariableController {
     }
 
     /**
-     * 批量更新主题颜色变量
+     * 批量更新主题变量
      */
-    @Operation(summary = "批量更新主题颜色", description = "在单个事务中发布一组主题颜色配置")
+    @Operation(summary = "批量更新主题变量", description = "在单个事务中发布一组主题颜色或液态玻璃材质参数")
     @PutMapping("/theme")
     public Result<Void> updateThemeVariables(@Validated @RequestBody List<@Valid SystemVariableUpdateRequest> requests,
                                              Authentication authentication) {
@@ -85,7 +85,7 @@ public class SystemVariableController {
         checkAdmin(userId);
 
         systemVariableService.updateThemeVariables(requests, userId);
-        return Result.success("主题颜色更新成功");
+        return Result.success("主题变量更新成功");
     }
 
     /**
@@ -174,7 +174,7 @@ public class SystemVariableController {
         List<String> types = List.of(
             "order_status", "dock_status", "user_status", "platform_status",
             "card_status", "announcement_type", "session_status", "message_type",
-            "theme_color_light", "theme_color_dark"
+            "theme_color_light", "theme_color_dark", "theme_color_liquid_glass"
         );
         return Result.success(types);
     }

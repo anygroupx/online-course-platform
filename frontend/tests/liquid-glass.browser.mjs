@@ -1,39 +1,97 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { mkdirSync } from 'node:fs'
 import { chromium } from 'playwright'
 import { createTestServer } from './fixtures/test-server.mjs'
 
-const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="app"></div><script type="module">
-import { createApp, h } from 'vue';
-import { createPinia } from 'pinia';
-import { RouterView } from 'vue-router';
-import ElementPlus from 'element-plus';
-import * as icons from '@element-plus/icons-vue';
-import 'element-plus/dist/index.css';
-import 'element-plus/theme-chalk/dark/css-vars.css';
-import '/src/styles/variables.scss';
-import '/src/styles/element-overrides.scss';
-import '/src/styles/global.css';
-import '/src/styles/fluent-spatial.scss';
-import '/src/styles/responsive.scss';
-import '/src/styles/liquid-glass-theme.scss';
-import router from '/src/router/index.js';
+const materialValues = {
+  glass_renderer_mode: 'auto',
+  glass_refraction: '47',
+  glass_bevel: '19',
+  glass_blur: '0.4',
+  glass_dispersion: '0.9',
+  glass_radius: '22',
+  glass_tint: 'rgba(255,255,255,0.024)',
+  glass_surface_opacity: '0.62',
+  glass_backdrop_blur: '14',
+  glass_saturation: '112'
+}
 
-const app = createApp({ render: () => h(RouterView) }).use(createPinia()).use(ElementPlus);
-for (const [name, icon] of Object.entries(icons)) app.component(name, icon);
-await router.push('/standalone/liquid-glass');
-app.use(router);
-await router.isReady();
-app.mount('#app');
+const colorValues = {
+  brand_primary: '#3463ce',
+  brand_primary_hover: '#2952b3',
+  brand_primary_pressed: '#1f3f8c',
+  brand_cyan: '#22b8cf',
+  brand_violet: '#6366f1',
+  primary_gradient_start: '#3463ce',
+  primary_gradient_end: '#22b8cf',
+  color_success: '#37a06f',
+  color_warning: '#d97706',
+  color_danger: '#dc2626',
+  color_info: '#3463ce',
+  bg_body: '#f5f6f8',
+  bg_card: 'rgba(255, 255, 255, 0.65)',
+  bg_card_hover: 'rgba(255, 255, 255, 0.82)',
+  bg_overlay: 'rgba(245, 246, 248, 0.75)',
+  surface_solid: '#ffffff',
+  surface_mica: 'rgba(245, 247, 250, 0.80)',
+  surface_acrylic: 'rgba(255, 255, 255, 0.52)',
+  text_primary: '#252b35',
+  text_regular: '#3b4453',
+  text_secondary: '#717a88',
+  text_placeholder: '#9aa2af',
+  text_on_brand: '#ffffff',
+  border_color: 'rgba(205, 210, 219, 0.72)',
+  border_color_light: 'rgba(223, 226, 231, 0.60)',
+  stroke_highlight: 'rgba(255, 255, 255, 0.95)',
+  focus_ring: 'rgba(52, 99, 206, 0.35)'
+}
+
+const labels = {
+  ...Object.fromEntries(Object.keys(colorValues).map((key) => [key, key])),
+  glass_renderer_mode: '渲染模式',
+  glass_refraction: '折射强度',
+  glass_bevel: '斜面宽度',
+  glass_blur: '光学模糊',
+  glass_dispersion: '色散强度',
+  glass_radius: '表面圆角',
+  glass_tint: '材质着色',
+  glass_surface_opacity: '表面透明度',
+  glass_backdrop_blur: '兼容模糊',
+  glass_saturation: '背景饱和度'
+}
+
+const themeRows = Object.entries({ ...colorValues, ...materialValues }).map(([key, value], index) => ({
+  id: index + 1,
+  variableKey: key,
+  variableName: labels[key],
+  variableType: 'theme_color_liquid_glass',
+  variableValue: value,
+  variableLabel: labels[key],
+  sortOrder: index + 1,
+  isDefault: 0,
+  isEnabled: 1,
+  color: null,
+  icon: null
+}))
+
+const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="app"></div><script type="module">
+import {createApp,h} from 'vue';import {createPinia} from 'pinia';import {RouterView} from 'vue-router';import ElementPlus from 'element-plus';import * as icons from '@element-plus/icons-vue';
+import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';import '/src/styles/variables.scss';import '/src/styles/element-overrides.scss';import '/src/styles/global.css';import '/src/styles/fluent-spatial.scss';import '/src/styles/responsive.scss';import '/src/styles/liquid-glass-theme.scss';
+import router from '/src/router/index.js';import {applyAuthSession} from '/src/utils/authSession.js';import {useThemeStore} from '/src/stores/theme.js';
+applyAuthSession({token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',uid:'20000000-0000-4000-8000-000000000007',role:'ADMIN',isAdmin:true,nickname:'测试管理员'});
+localStorage.setItem('app-theme-preference','liquid-glass');
+const pinia=createPinia();const app=createApp({render:()=>h(RouterView)}).use(pinia).use(ElementPlus);for(const [name,icon] of Object.entries(icons))app.component(name,icon);
+await router.push('/admin/variables?type=theme_color_liquid_glass');app.use(router);await router.isReady();app.mount('#app');await useThemeStore(pinia).initTheme();
 </script></body></html>`
 
 const server = await createTestServer({
   logLevel: 'error',
   plugins: [{
-    name: 'liquid-glass-fixture',
+    name: 'liquid-glass-global-fixture',
     configureServer(vite) {
       vite.middlewares.use(async (req, res, next) => {
-        if (!req.url?.startsWith('/__liquid_glass_test')) return next()
+        if (!req.url?.startsWith('/__liquid_glass_global')) return next()
         res.setHeader('Content-Type', 'text/html;charset=utf-8')
         res.end(await vite.transformIndexHtml(req.url, html))
       })
@@ -41,7 +99,11 @@ const server = await createTestServer({
   }]
 })
 
-let browser, base
+const output = new URL('../../.cache/liquid-glass-global/', import.meta.url).pathname
+mkdirSync(output, { recursive: true })
+
+let browser
+let base
 
 test.before(async () => {
   await server.listen()
@@ -50,125 +112,118 @@ test.before(async () => {
 })
 
 test.after(async () => {
-  if (browser) await browser.close()
-  if (server) await server.close()
+  await browser?.close()
+  await server.close()
 })
 
-test('liquid glass workbench renders with 4-layer topology and live optics', async (t) => {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+async function openFixture(viewport, contextOptions = {}) {
+  const context = await browser.newContext({ viewport, ...contextOptions })
   const page = await context.newPage()
-  page.setDefaultTimeout(30000)
-
   const errors = []
-  page.on('pageerror', (err) => errors.push(err.message))
+  const unexpected = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.route('**/*', async (route) => {
+    const request = route.request()
+    const url = new URL(request.url())
+    if (url.origin !== base) {
+      unexpected.push(request.url())
+      return route.abort()
+    }
+    if (!url.pathname.startsWith('/api/')) return route.continue()
+    const endpoint = url.pathname.slice(4)
+    const respond = (data) => route.fulfill({
+      json: { code: 1, success: true, data },
+      headers: { 'Cache-Control': 'no-store' }
+    })
+    if (endpoint === '/client/bootstrap') return respond({})
+    if (endpoint === '/theme/variables') {
+      return respond({ light: {}, dark: {}, 'liquid-glass': { ...colorValues, ...materialValues } })
+    }
+    if (endpoint === '/announcement/system') return respond(null)
+    if (endpoint === '/customer-service/unread-count') return respond(0)
+    if (endpoint === '/admin/variables/types') {
+      return respond(['theme_color_light', 'theme_color_dark', 'theme_color_liquid_glass'])
+    }
+    if (endpoint === '/admin/variables') {
+      return respond({ records: themeRows, total: themeRows.length, current: 1, size: 100 })
+    }
+    unexpected.push(`${request.method()} ${endpoint}`)
+    return route.abort()
+  })
+  await page.goto(`${base}/__liquid_glass_global`)
+  await page.locator('.system-variable-management').waitFor()
+  return { context, page, errors, unexpected }
+}
 
-  await page.goto(`${base}/__liquid_glass_test`)
-  await page.waitForSelector('.lgw-shell')
+test('global liquid-glass theme mounts optics and exposes material controls', async () => {
+  const fixture = await openFixture({ width: 1440, height: 900 })
+  const { context, page, errors, unexpected } = fixture
+  try {
+    assert.equal(await page.locator('html').getAttribute('data-theme'), 'liquid-glass')
+    assert.equal(await page.locator('html').evaluate((node) => node.classList.contains('theme-liquid-glass')), true)
+    assert.equal(await page.locator('html').evaluate((node) => getComputedStyle(node).getPropertyValue('--glass-backdrop-blur').trim()), '14px')
 
-  // 1. Verify 4-layer topology
-  const lens = page.locator('.lgw-lens')
-  await lens.waitFor({ state: 'visible' })
-  assert.ok(await lens.locator('.lg-surface').count() > 0, 'lg-surface is present')
-  assert.ok(await lens.locator('.lg-light').count() > 0, 'lg-light is present')
-  assert.ok(await lens.locator('.lg-sheen').count() > 0, 'lg-sheen is present')
-  assert.ok(await lens.locator('.lg-content').count() > 0, 'lg-content is present')
+    for (const selector of ['.sidebar-material', '.header-material', '.theme-material-preview']) {
+      const host = page.locator(selector)
+      await host.waitFor()
+      assert.equal(await host.getAttribute('data-glass-active'), 'true')
+      assert.equal(await host.locator(':scope > .lg-surface').count(), 1)
+      assert.equal(await host.locator(':scope > .lg-light').count(), 1)
+      assert.equal(await host.locator(':scope > .lg-sheen').count(), 1)
+      assert.equal(await host.locator(':scope > .lg-content').count(), 1)
+    }
 
-  // Foreground content inside lens is sharp and readable
-  const word = await lens.locator('.lgw-lens-word').textContent()
-  assert.equal(word?.trim(), 'Transparent.')
+    await page.waitForFunction(() => document.querySelector('.header-material')?.dataset.glassRenderer === 'svg')
+    assert.equal(await page.locator('.header-material').getAttribute('data-glass-renderer'), 'svg')
 
-  // Verify status badge
-  const status = page.locator('.lgw-status')
-  await status.waitFor({ state: 'visible' })
-  const statusText = await status.textContent()
-  assert.ok(statusText.includes('折射') || statusText.includes('毛玻璃') || statusText.includes('模式'))
+    assert.equal(await page.locator('.material-token-card').count(), 10)
+    await page.getByText('折射 47 · 斜面 19 · 色散 0.9', { exact: true }).waitFor()
 
-  // Verify SVG defs exist for displacement when in Chromium
-  const svgDefs = await page.locator('svg[data-lg-defs]').count()
-  assert.ok(svgDefs > 0, 'SVG defs created in DOM')
+    await page.locator('.el-radio-button', { hasText: '兼容毛玻璃' }).click()
+    await page.waitForFunction(() => document.querySelector('.theme-material-preview')?.dataset.glassRenderer === 'css')
+    assert.equal(await page.locator('.theme-material-preview').getAttribute('data-glass-renderer'), 'css')
+    await page.screenshot({ path: `${output}desktop.png`, fullPage: true, animations: 'disabled' })
 
-  // 2. Test backdrop switching
-  const gridBtn = page.locator('.lgw-toolbar button:has-text("网格")')
-  await gridBtn.click()
-  const stage = page.locator('.lgw-stage')
-  assert.equal(await stage.getAttribute('data-backdrop'), 'grid')
-
-  const textBtn = page.locator('.lgw-toolbar button:has-text("文字")')
-  await textBtn.click()
-  assert.equal(await stage.getAttribute('data-backdrop'), 'text')
-
-  // 3. Test lens shape changes
-  const pillBtn = page.locator('.lgw-inspector button:has-text("胶囊")')
-  await pillBtn.click()
-  assert.equal(await lens.getAttribute('data-shape'), 'pill')
-
-  const circleBtn = page.locator('.lgw-inspector button:has-text("圆形")')
-  await circleBtn.click()
-  assert.equal(await lens.getAttribute('data-shape'), 'circle')
-
-  const cardBtn = page.locator('.lgw-inspector button:has-text("卡片")')
-  await cardBtn.click()
-  assert.equal(await lens.getAttribute('data-shape'), 'card')
-
-  // 4. Test keyboard movement (Arrow keys & Home)
-  await lens.focus()
-  const initialTransform = await lens.evaluate((el) => el.style.transform)
-  await page.keyboard.press('ArrowRight')
-  await page.waitForTimeout(50)
-  const movedTransform = await lens.evaluate((el) => el.style.transform)
-  assert.notEqual(initialTransform, movedTransform, 'Lens moves on arrow key navigation')
-
-  await page.keyboard.press('Home')
-  await page.waitForTimeout(50)
-
-  // 5. Test semantic controls in the gallery
-  // Button
-  const smBtn = page.locator('.lg-button[data-size="sm"] button')
-  await smBtn.click()
-
-  // Switch
-  const glassSwitch = page.locator('.lg-switch')
-  const initialChecked = await glassSwitch.getAttribute('aria-checked')
-  await glassSwitch.click()
-  const newChecked = await glassSwitch.getAttribute('aria-checked')
-  assert.notEqual(initialChecked, newChecked, 'GlassSwitch toggles aria-checked state')
-
-  // Segmented
-  const savedSegment = page.locator('.lg-segmented button:has-text("收藏")')
-  await savedSegment.click()
-  assert.equal(await savedSegment.getAttribute('aria-checked'), 'true')
-
-  // Chips
-  const devChip = page.locator('.lg-chip button:has-text("开发")')
-  const chipPressedBefore = await devChip.getAttribute('aria-pressed')
-  await devChip.click()
-  const chipPressedAfter = await devChip.getAttribute('aria-pressed')
-  assert.notEqual(chipPressedBefore, chipPressedAfter, 'GlassChip toggles aria-pressed')
-
-  // 6. Test applying liquid glass theme
-  const applyThemeBtn = page.locator('.lgw-apply-theme-btn')
-  await applyThemeBtn.click()
-  const themeDataset = await page.evaluate(() => document.documentElement.dataset.theme)
-  assert.equal(themeDataset, 'liquid-glass', 'Applies liquid-glass theme to html root')
-  const hasThemeClass = await page.evaluate(() => document.documentElement.classList.contains('theme-liquid-glass'))
-  assert.ok(hasThemeClass, 'Sets theme-liquid-glass class on html root')
-
-  assert.equal(errors.length, 0, `No unexpected errors: ${errors.join(', ')}`)
-  await context.close()
+    assert.deepEqual(errors, [])
+    assert.deepEqual(unexpected, [])
+  } finally {
+    await context.close()
+  }
 })
 
-test('liquid glass workbench is responsive across viewport widths without overflow', async (t) => {
-  const widths = [1440, 1024, 768, 390, 320]
-  for (const w of widths) {
-    const context = await browser.newContext({ viewport: { width: w, height: 800 } })
-    const page = await context.newPage()
-    await page.goto(`${base}/__liquid_glass_test`)
-    await page.waitForSelector('.lgw-shell')
+test('global liquid-glass theme remains within responsive viewports', async () => {
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    const fixture = await openFixture({ width, height: width <= 390 ? 844 : 900 })
+    const { context, page, errors, unexpected } = fixture
+    try {
+      const geometry = await page.evaluate(() => ({
+        viewport: document.documentElement.clientWidth,
+        document: document.documentElement.scrollWidth,
+        body: document.body.scrollWidth
+      }))
+      assert.ok(geometry.document <= geometry.viewport + 2, `${width}px document overflow: ${JSON.stringify(geometry)}`)
+      assert.ok(geometry.body <= geometry.viewport + 2, `${width}px body overflow: ${JSON.stringify(geometry)}`)
+      if (width === 390) {
+        await page.screenshot({ path: `${output}mobile-390.png`, fullPage: true, animations: 'disabled' })
+      }
+      assert.deepEqual(errors, [], `${width}px has no page errors`)
+      assert.deepEqual(unexpected, [], `${width}px makes no unexpected requests`)
+    } finally {
+      await context.close()
+    }
+  }
+})
 
-    const hasOverflow = await page.evaluate(() => {
-      return document.documentElement.scrollWidth > document.documentElement.clientWidth + 2
-    })
-    assert.ok(!hasOverflow, `Viewport width ${w}px does not horizontally overflow`)
+test('forced colors routes global optics to the solid accessibility renderer', async () => {
+  const fixture = await openFixture({ width: 1024, height: 768 }, { forcedColors: 'active' })
+  const { context, page, errors, unexpected } = fixture
+  try {
+    await page.waitForFunction(() => document.querySelector('.header-material')?.dataset.glassRenderer === 'solid')
+    assert.equal(await page.locator('.header-material').getAttribute('data-glass-renderer'), 'solid')
+    assert.equal(await page.locator('.theme-material-preview').getAttribute('data-glass-renderer'), 'solid')
+    assert.deepEqual(errors, [])
+    assert.deepEqual(unexpected, [])
+  } finally {
     await context.close()
   }
 })

@@ -29,7 +29,7 @@ export function updateVariable(data) {
 }
 
 /**
- * 原子批量更新主题颜色变量
+ * 原子批量更新主题颜色与材质变量
  */
 export function updateThemeVariables(data) {
   return request({
@@ -112,7 +112,7 @@ export function getVariableTypes() {
 }
 
 /**
- * 获取客户端可用的主题颜色变量（公开只读）
+ * 获取客户端可用的主题颜色与材质变量（公开只读）
  */
 export function getThemeVariables() {
   return request({

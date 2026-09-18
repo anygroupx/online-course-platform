@@ -4,6 +4,7 @@
     ref="hostRef"
     class="lg"
     :data-focus-ring="focusRing"
+    :data-glass-active="enabled ? 'true' : 'false'"
     :style="computedStyle"
   >
     <span class="lg-surface" aria-hidden="true"></span>
@@ -25,6 +26,10 @@ import { mountLiquidGlass, setLiquidGlassPosition } from './glass-engine.js'
 import './liquid-glass.css'
 
 const props = defineProps({
+  enabled: {
+    type: Boolean,
+    default: true
+  },
   radius: {
     type: Number,
     default: 40
@@ -48,6 +53,14 @@ const props = defineProps({
   tint: {
     type: String,
     default: 'rgba(255,255,255,.018)'
+  },
+  fallbackBlur: {
+    type: Number,
+    default: 16
+  },
+  saturation: {
+    type: Number,
+    default: 1.08
   },
   mode: {
     type: String,
@@ -84,7 +97,8 @@ const computedStyle = computed(() => {
   }
 })
 
-onMounted(() => {
+const mountController = () => {
+  if (!props.enabled || controller) return
   if (!hostRef.value) return
   controller = mountLiquidGlass(hostRef.value, {
     radius: props.radius,
@@ -93,15 +107,44 @@ onMounted(() => {
     blur: props.blur,
     dispersion: props.dispersion,
     tint: props.tint,
+    fallbackBlur: props.fallbackBlur,
+    saturation: props.saturation,
     mode: props.mode
   })
   if (controller) {
     currentRenderer.value = controller.renderer
   }
-})
+}
+
+const destroyController = () => {
+  if (!controller) return
+  controller.destroy()
+  controller = null
+  currentRenderer.value = 'css'
+}
+
+onMounted(mountController)
 
 watch(
-  () => [props.radius, props.refraction, props.bevel, props.blur, props.dispersion, props.tint, props.mode],
+  () => props.enabled,
+  (enabled) => {
+    if (enabled) mountController()
+    else destroyController()
+  }
+)
+
+watch(
+  () => [
+    props.radius,
+    props.refraction,
+    props.bevel,
+    props.blur,
+    props.dispersion,
+    props.tint,
+    props.fallbackBlur,
+    props.saturation,
+    props.mode
+  ],
   () => {
     if (!controller) return
     controller.update({
@@ -111,6 +154,8 @@ watch(
       blur: props.blur,
       dispersion: props.dispersion,
       tint: props.tint,
+      fallbackBlur: props.fallbackBlur,
+      saturation: props.saturation,
       mode: props.mode
     })
     currentRenderer.value = controller.renderer
@@ -118,10 +163,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  if (controller) {
-    controller.destroy()
-    controller = null
-  }
+  destroyController()
 })
 
 const refresh = () => {
