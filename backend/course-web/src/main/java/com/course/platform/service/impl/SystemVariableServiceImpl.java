@@ -112,7 +112,7 @@ public class SystemVariableServiceImpl implements SystemVariableService {
         if (requests == null || requests.isEmpty()) {
             throw new BusinessException("主题变量更新列表不能为空");
         }
-        if (requests.size() > ThemeVariableCatalog.DEFINITIONS.size()) {
+        if (requests.size() > ThemeVariableCatalog.maxDefinitionsPerType()) {
             throw new BusinessException("一次更新的主题变量数量超出限制");
         }
         for (SystemVariableUpdateRequest request : requests) {
@@ -132,7 +132,7 @@ public class SystemVariableServiceImpl implements SystemVariableService {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "系统变量不存在");
         }
         if (isThemeVariable(variable)) {
-            throw new BusinessException("系统内置主题变量不能删除，可通过禁用恢复前端默认色");
+            throw new BusinessException("系统内置主题变量不能删除，可通过禁用恢复前端默认值");
         }
         if (variable.getIsDefault() == 1) {
             throw new BusinessException("默认变量不能删除");
@@ -191,6 +191,7 @@ public class SystemVariableServiceImpl implements SystemVariableService {
         Map<String, Map<String, String>> result = new LinkedHashMap<>();
         result.put("light", new LinkedHashMap<>());
         result.put("dark", new LinkedHashMap<>());
+        result.put("liquid-glass", new LinkedHashMap<>());
 
         List<SystemVariable> variables = systemVariableMapper.selectList(new LambdaQueryWrapper<SystemVariable>()
                 .in(SystemVariable::getVariableType, ThemeVariableCatalog.types())
@@ -199,12 +200,17 @@ public class SystemVariableServiceImpl implements SystemVariableService {
                 .orderByAsc(SystemVariable::getId));
 
         for (SystemVariable variable : variables) {
-            if (!ThemeVariableCatalog.isKnownKey(variable.getVariableKey())
-                    || !ThemeVariableCatalog.isSupportedColor(variable.getVariableValue())) {
+            if (!ThemeVariableCatalog.isKnownKey(variable.getVariableType(), variable.getVariableKey())
+                    || !ThemeVariableCatalog.isSupportedValue(
+                            variable.getVariableType(), variable.getVariableKey(), variable.getVariableValue())) {
                 log.warn("忽略无效主题变量：type={}, key={}", variable.getVariableType(), variable.getVariableKey());
                 continue;
             }
-            String mode = ThemeVariableCatalog.DARK_TYPE.equals(variable.getVariableType()) ? "dark" : "light";
+            String mode = switch (variable.getVariableType()) {
+                case ThemeVariableCatalog.DARK_TYPE -> "dark";
+                case ThemeVariableCatalog.LIQUID_GLASS_TYPE -> "liquid-glass";
+                default -> "light";
+            };
             result.get(mode).put(variable.getVariableKey(), variable.getVariableValue().trim());
         }
         return result;
@@ -235,7 +241,7 @@ public class SystemVariableServiceImpl implements SystemVariableService {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "系统变量不存在");
         }
         if (isThemeVariable(variable)) {
-            throw new BusinessException("主题颜色不使用默认选项，请使用恢复默认色功能");
+            throw new BusinessException("主题变量不使用默认选项，请使用恢复默认功能");
         }
 
         List<SystemVariable> sameTypeVariables = systemVariableMapper.selectList(new LambdaQueryWrapper<SystemVariable>()
@@ -258,11 +264,11 @@ public class SystemVariableServiceImpl implements SystemVariableService {
         if (!ThemeVariableCatalog.isThemeType(variableType)) {
             return;
         }
-        if (!ThemeVariableCatalog.isKnownKey(variableKey)) {
+        if (!ThemeVariableCatalog.isKnownKey(variableType, variableKey)) {
             throw new BusinessException("不支持的主题变量键名");
         }
-        if (!ThemeVariableCatalog.isSupportedColor(variableValue)) {
-            throw new BusinessException("主题变量值必须是有效的 HEX、RGB(A) 或 HSL(A) 颜色");
+        if (!ThemeVariableCatalog.isSupportedValue(variableType, variableKey, variableValue)) {
+            throw new BusinessException("主题变量值不符合系统定义的格式或安全范围");
         }
     }
 

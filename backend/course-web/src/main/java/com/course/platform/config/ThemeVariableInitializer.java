@@ -62,8 +62,30 @@ public class ThemeVariableInitializer implements ApplicationRunner {
             }
         }
 
+        // 液态玻璃材质参数只属于第三套主题，不向浅色/深色主题扩散无用配置。
+        for (ThemeVariableCatalog.MaterialDefinition definition : ThemeVariableCatalog.MATERIAL_DEFINITIONS) {
+            String identity = ThemeVariableCatalog.LIQUID_GLASS_TYPE + ":" + definition.key();
+            if (existingKeys.contains(identity)) {
+                continue;
+            }
+
+            SystemVariable variable = new SystemVariable();
+            variable.setVariableKey(definition.key());
+            variable.setVariableName(definition.name());
+            variable.setVariableType(ThemeVariableCatalog.LIQUID_GLASS_TYPE);
+            variable.setVariableValue(definition.defaultValue());
+            variable.setVariableLabel(definition.description());
+            variable.setSortOrder(definition.sortOrder());
+            variable.setIsDefault(0);
+            variable.setIsEnabled(1);
+            variable.setColor(null);
+            variable.setIcon(null);
+            systemVariableMapper.insert(variable);
+            inserted++;
+        }
+
         if (inserted > 0) {
-            log.info("[主题变量] 已补齐 {} 个默认主题颜色配置", inserted);
+            log.info("[主题变量] 已补齐 {} 个默认主题颜色或材质配置", inserted);
         }
     }
 }

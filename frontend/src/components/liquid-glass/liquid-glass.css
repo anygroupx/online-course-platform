@@ -57,6 +57,18 @@
   border-radius: inherit;
 }
 
+/* 非液态主题保留真实 DOM 布局，但不创建任何材质或合成层。 */
+.lg[data-glass-active="false"] {
+  border-radius: inherit;
+  box-shadow: none;
+}
+
+.lg[data-glass-active="false"] > .lg-surface,
+.lg[data-glass-active="false"] > .lg-light,
+.lg[data-glass-active="false"] > .lg-sheen {
+  display: none;
+}
+
 .lg:focus-visible,
 .lg:has(:focus-visible) {
   outline: 2px solid #3463ce;

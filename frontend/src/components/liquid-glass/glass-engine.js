@@ -12,6 +12,8 @@
  * @property {number} [blur]
  * @property {number} [dispersion]
  * @property {string} [tint]
+ * @property {number} [fallbackBlur]
+ * @property {number} [saturation]
  * @property {GlassMode} [mode]
  */
 /**
@@ -45,6 +47,8 @@ export const GLASS_DEFAULTS = {
   blur: 0.35,
   dispersion: 1.2,
   tint: 'rgba(255,255,255,.018)',
+  fallbackBlur: 16,
+  saturation: 1.08,
   mode: 'auto'
 };
 
@@ -63,6 +67,8 @@ function normalize(v = {}) {
     blur: number(v.blur, d.blur, 0, 24),
     dispersion: number(v.dispersion, d.dispersion, 0, 5),
     tint: v.tint ?? d.tint,
+    fallbackBlur: number(v.fallbackBlur, d.fallbackBlur, 5, 32),
+    saturation: number(v.saturation, d.saturation, 0.8, 1.6),
     mode: v.mode === 'svg' || v.mode === 'css' ? v.mode : 'auto'
   };
 }
@@ -452,7 +458,11 @@ export function mountLiquidGlass(host, initial = {}) {
       wantedGeometry = '';
     }
     if (renderer === 'svg' && !map.getAttribute('href')) renderer = 'css';
-    const value = renderer === 'solid' ? 'none' : renderer === 'svg' ? `url("#${id}")` : `blur(${Math.max(options.blur, 5)}px) saturate(1.08)`;
+    const value = renderer === 'solid'
+      ? 'none'
+      : renderer === 'svg'
+        ? `url("#${id}")`
+        : `blur(${options.fallbackBlur}px) saturate(${options.saturation})`;
     if (value !== appliedBackdrop) {
       surface.style.backdropFilter = value;
       surface.style.setProperty('-webkit-backdrop-filter', value);

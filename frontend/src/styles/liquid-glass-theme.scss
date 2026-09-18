@@ -1,50 +1,76 @@
 /* ==========================================================================
-   Liquid Glass System Theme
-   Adheres to zsio/liquid-glass visual language:
-   - Cool-neutral shell (#f5f6f8, #252b35, #717a88, #cdd2db)
-   - Translucent surfaces with live backdrop refraction
-   - Solid hierarchy for control inspectors / dialogs
-   - Soft slate shadows, zero neon glow
-   - Semantic controls outside optical filters
+   全局液态玻璃主题
+   真实折射只挂载到主壳层；高频业务表面使用同一参数驱动的 CSS 降级材质。
    ========================================================================== */
 
 html[data-theme="liquid-glass"],
 html.theme-liquid-glass {
-  background-color: #f5f6f8;
-  background-image:
-    radial-gradient(120% 100% at 50% 0%, rgba(220, 228, 242, 0.45) 0%, transparent 60%),
-    radial-gradient(80% 80% at 100% 100%, rgba(200, 215, 235, 0.3) 0%, transparent 50%),
-    radial-gradient(70% 70% at 0% 100%, rgba(215, 230, 245, 0.3) 0%, transparent 50%);
-  background-attachment: fixed;
+  --glass-radius: 24px;
+  --glass-tint: rgba(255, 255, 255, 0.018);
+  --glass-surface-opacity: 0.65;
+  --glass-backdrop-blur: 16px;
+  --glass-saturation: 108%;
+
+  color-scheme: light;
   color: var(--text-primary);
+  background-color: var(--bg-body, #f5f6f8);
+  background-image:
+    radial-gradient(110% 88% at 50% -12%, color-mix(in srgb, var(--brand-primary) 13%, transparent), transparent 64%),
+    radial-gradient(72% 72% at 100% 100%, color-mix(in srgb, var(--brand-cyan) 12%, transparent), transparent 58%),
+    radial-gradient(66% 70% at 0% 96%, color-mix(in srgb, var(--brand-violet) 9%, transparent), transparent 60%);
+  background-attachment: fixed;
 
-  body {
+  body,
+  #app,
+  .main-container {
+    color: var(--text-regular);
     background: transparent;
-    color: var(--text-primary);
   }
 
-  /* Main layout header with frosted glass refraction */
-  .layout-header,
-  header.main-header,
-  .el-header {
-    background: rgba(245, 246, 248, 0.78) !important;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-bottom: 1px solid rgba(205, 210, 219, 0.55) !important;
-    box-shadow: 0 4px 16px -8px rgba(31, 42, 58, 0.08);
+  /* 光学主壳层由 LiquidGlass 控制器负责，不在宿主上叠加 filter/opacity。 */
+  .sidebar,
+  .header {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
-  /* Main layout sidebar */
-  .layout-sidebar,
-  aside.main-sidebar,
-  .el-aside {
-    background: rgba(245, 246, 248, 0.72) !important;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-right: 1px solid rgba(205, 210, 219, 0.5) !important;
+  .sidebar-material,
+  .header-material {
+    --lg-solid: var(--surface-solid);
+    --lg-tint: var(--glass-tint);
+    border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+    box-shadow:
+      0 24px 36px -20px rgba(31, 42, 58, 0.23),
+      0 8px 16px -10px rgba(31, 42, 58, 0.14);
   }
 
-  /* Cards with liquid glass translucent styling */
+  .sidebar-material {
+    border-width: 0 1px 0 0;
+  }
+
+  .header-material {
+    border-width: 0 0 1px;
+  }
+
+  .sidebar-material > .lg-surface,
+  .header-material > .lg-surface {
+    background: var(--glass-tint);
+  }
+
+  .main-content {
+    background: transparent !important;
+  }
+
+  .tags-view-container {
+    background: rgb(255 255 255 / calc(var(--glass-surface-opacity) - 0.08)) !important;
+    backdrop-filter: blur(var(--glass-backdrop-blur)) saturate(var(--glass-saturation));
+    -webkit-backdrop-filter: blur(var(--glass-backdrop-blur)) saturate(var(--glass-saturation));
+    border-bottom-color: var(--border-color-light) !important;
+    box-shadow: 0 5px 16px -12px rgba(31, 42, 58, 0.24);
+  }
+
+  /* 普通业务表面共享材质参数，但不为每张卡片创建 SVG/Worker 实例。 */
   .el-card,
   .spatial-card,
   .fluent-card,
@@ -54,102 +80,131 @@ html.theme-liquid-glass {
   .table-card,
   .data-card,
   .chart-card {
-    background: rgba(255, 255, 255, 0.65) !important;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(205, 210, 219, 0.68) !important;
-    border-radius: var(--radius-lg, 16px);
+    background: rgb(255 255 255 / var(--glass-surface-opacity)) !important;
+    backdrop-filter: blur(var(--glass-backdrop-blur)) saturate(var(--glass-saturation));
+    -webkit-backdrop-filter: blur(var(--glass-backdrop-blur)) saturate(var(--glass-saturation));
+    border: 1px solid var(--border-color) !important;
+    border-radius: min(var(--glass-radius), 24px);
     box-shadow:
       0 8px 24px -10px rgba(31, 42, 58, 0.12),
       0 2px 6px rgba(31, 42, 58, 0.04),
-      inset 0 1px 0 rgba(255, 255, 255, 0.9);
-    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+      inset 0 1px 0 var(--stroke-highlight);
+    transition:
+      transform var(--motion-fast) ease,
+      box-shadow var(--motion-fast) ease,
+      background-color var(--motion-fast) ease;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.78) !important;
+      background: rgb(255 255 255 / calc(var(--glass-surface-opacity) + 0.1)) !important;
       box-shadow:
         0 14px 32px -12px rgba(31, 42, 58, 0.16),
         0 4px 12px rgba(31, 42, 58, 0.06),
-        inset 0 1px 0 rgba(255, 255, 255, 0.95);
+        inset 0 1px 0 var(--stroke-highlight);
     }
 
     .el-card__header {
-      border-bottom: 1px solid rgba(205, 210, 219, 0.45);
+      border-bottom-color: var(--border-color-light);
     }
   }
 
-  /* Solid inspector hierarchy beside glass surfaces */
+  /* 输入、检查器和高信息密度表格保持较实，形成透明度层级。 */
   .glass-inspector,
-  .inspector-solid {
-    background: #ffffff !important;
-    border: 1px solid #dfe2e7 !important;
-    box-shadow: 0 4px 20px -6px rgba(31, 42, 58, 0.10);
-    border-radius: 21px;
+  .inspector-solid,
+  .el-input__wrapper,
+  .el-select__wrapper,
+  .el-textarea__inner,
+  .el-input-number,
+  .el-date-editor {
+    background-color: color-mix(in srgb, var(--surface-solid) 92%, transparent) !important;
   }
 
-  /* Dialogs and drawers */
+  .glass-inspector,
+  .inspector-solid {
+    border: 1px solid var(--border-color) !important;
+    border-radius: min(var(--glass-radius), 21px);
+    box-shadow: 0 4px 20px -6px rgba(31, 42, 58, 0.1);
+  }
+
+  /* 材质预览自身需要采样背景，外层检查器必须保持实色且不建立嵌套 backdrop root。 */
+  .theme-preview-card {
+    background: var(--surface-solid) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
   .el-dialog,
-  .el-drawer {
-    background: rgba(255, 255, 255, 0.92) !important;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(205, 210, 219, 0.75);
-    border-radius: var(--radius-xl, 24px);
+  .el-drawer,
+  .el-message-box {
+    background: rgb(255 255 255 / calc(var(--glass-surface-opacity) + 0.27)) !important;
+    backdrop-filter: blur(var(--glass-backdrop-blur)) saturate(var(--glass-saturation));
+    -webkit-backdrop-filter: blur(var(--glass-backdrop-blur)) saturate(var(--glass-saturation));
+    border: 1px solid var(--border-color) !important;
+    border-radius: min(var(--glass-radius), 24px) !important;
     box-shadow:
       0 24px 48px -18px rgba(31, 42, 58, 0.25),
       0 8px 16px -8px rgba(31, 42, 58, 0.12);
   }
 
-  /* Tables */
+  .el-overlay,
+  .el-loading-mask {
+    background-color: color-mix(in srgb, var(--bg-overlay) 88%, transparent) !important;
+    backdrop-filter: blur(calc(var(--glass-backdrop-blur) / 2));
+    -webkit-backdrop-filter: blur(calc(var(--glass-backdrop-blur) / 2));
+  }
+
   .el-table {
-    background: transparent !important;
     --el-table-bg-color: transparent;
     --el-table-tr-bg-color: transparent;
-    --el-table-header-bg-color: rgba(245, 247, 250, 0.75);
-    --el-table-row-hover-bg-color: rgba(255, 255, 255, 0.65);
-    --el-table-border-color: rgba(205, 210, 219, 0.45);
+    --el-table-expanded-cell-bg-color: transparent;
+    --el-table-header-bg-color: color-mix(in srgb, var(--surface-solid) 76%, transparent);
+    --el-table-row-hover-bg-color: color-mix(in srgb, var(--surface-solid) 64%, transparent);
+    --el-table-border-color: var(--border-color-light);
+    background: transparent !important;
 
     th.el-table__cell {
-      background: rgba(245, 247, 250, 0.8) !important;
       color: var(--text-secondary);
+      background: color-mix(in srgb, var(--surface-solid) 78%, transparent) !important;
       font-size: 12px;
       font-weight: 600;
     }
 
     td.el-table__cell {
-      border-bottom: 1px solid rgba(205, 210, 219, 0.35);
+      border-bottom-color: var(--border-color-light);
     }
   }
 
-  /* Form controls */
   .el-input__wrapper,
-  .el-select__wrapper {
-    background-color: rgba(255, 255, 255, 0.75) !important;
-    border-radius: var(--radius-sm, 8px);
-    box-shadow: 0 0 0 1px rgba(205, 210, 219, 0.8) inset !important;
-    transition: box-shadow 0.2s ease, background 0.2s ease;
+  .el-select__wrapper,
+  .el-textarea__inner {
+    border-radius: min(var(--radius-sm), 12px);
+    box-shadow: inset 0 0 0 1px var(--border-color) !important;
+    transition: box-shadow var(--motion-fast) ease, background-color var(--motion-fast) ease;
 
     &:hover {
-      box-shadow: 0 0 0 1px var(--brand-primary) inset !important;
-      background-color: #ffffff !important;
+      background-color: var(--surface-solid) !important;
+      box-shadow: inset 0 0 0 1px var(--brand-primary) !important;
     }
 
-    &.is-focus {
-      box-shadow: 0 0 0 2px var(--brand-primary) inset !important;
-      background-color: #ffffff !important;
+    &.is-focus,
+    &:focus-within {
+      background-color: var(--surface-solid) !important;
+      box-shadow: inset 0 0 0 2px var(--brand-primary) !important;
     }
   }
 
-  /* Buttons */
   .el-button {
-    border-radius: var(--radius-sm, 8px);
-    transition: all 0.18s ease;
+    border-radius: min(var(--radius-sm), 12px);
+    transition:
+      transform var(--motion-fast) ease,
+      color var(--motion-fast) ease,
+      background-color var(--motion-fast) ease,
+      border-color var(--motion-fast) ease;
 
     &.el-button--primary {
+      color: var(--text-on-brand) !important;
       background: var(--brand-primary) !important;
       border-color: var(--brand-primary) !important;
-      color: #ffffff !important;
-      box-shadow: 0 4px 12px -4px rgba(52, 99, 206, 0.4);
+      box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--brand-primary) 44%, transparent);
 
       &:hover {
         background: var(--brand-primary-hover) !important;
@@ -164,109 +219,144 @@ html.theme-liquid-glass {
     }
 
     &.el-button--default {
-      background: rgba(255, 255, 255, 0.8) !important;
-      border-color: rgba(205, 210, 219, 0.8) !important;
       color: var(--text-primary) !important;
+      background: color-mix(in srgb, var(--surface-solid) 84%, transparent) !important;
+      border-color: var(--border-color) !important;
 
       &:hover {
-        background: #ffffff !important;
-        border-color: var(--brand-primary) !important;
         color: var(--brand-primary) !important;
+        background: var(--surface-solid) !important;
+        border-color: var(--brand-primary) !important;
       }
     }
   }
 
-  /* Tags */
   .el-tag {
-    border-radius: 99px;
-    background: rgba(255, 255, 255, 0.55);
-    border: 1px solid rgba(205, 210, 219, 0.6);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface-solid) 58%, transparent);
+    border-color: var(--border-color-light);
   }
 
-  /* Dropdown menus and popovers */
   .el-dropdown-menu,
-  .el-popover.el-popper {
-    background: rgba(255, 255, 255, 0.95) !important;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(205, 210, 219, 0.65) !important;
-    border-radius: var(--radius-md, 12px);
+  .el-popover.el-popper,
+  .el-select__popper,
+  .el-picker__popper {
+    background: rgb(255 255 255 / calc(var(--glass-surface-opacity) + 0.3)) !important;
+    backdrop-filter: blur(var(--glass-backdrop-blur)) saturate(var(--glass-saturation));
+    -webkit-backdrop-filter: blur(var(--glass-backdrop-blur)) saturate(var(--glass-saturation));
+    border-color: var(--border-color) !important;
+    border-radius: min(var(--glass-radius), 14px);
     box-shadow: 0 12px 32px -10px rgba(31, 42, 58, 0.18);
   }
 
-  /* Breadcrumbs */
-  .el-breadcrumb {
-    .el-breadcrumb__inner {
-      color: var(--text-secondary) !important;
-      font-weight: 500;
-      &.is-link:hover {
-        color: var(--brand-primary) !important;
-      }
-    }
-    .el-breadcrumb__item:last-child .el-breadcrumb__inner {
-      color: var(--text-primary) !important;
-      font-weight: 600;
+  .el-breadcrumb__inner {
+    color: var(--text-secondary) !important;
+    font-weight: 500;
+
+    &.is-link:hover {
+      color: var(--brand-primary) !important;
     }
   }
 
-  /* Tabs */
+  .el-breadcrumb__item:last-child .el-breadcrumb__inner {
+    color: var(--text-primary) !important;
+    font-weight: 600;
+  }
+
   .el-tabs--border-card {
-    background: rgba(255, 255, 255, 0.7) !important;
-    border: 1px solid rgba(205, 210, 219, 0.6) !important;
-    border-radius: var(--radius-md, 12px);
     overflow: hidden;
+    background: rgb(255 255 255 / var(--glass-surface-opacity)) !important;
+    border-color: var(--border-color) !important;
+    border-radius: min(var(--glass-radius), 16px);
 
     .el-tabs__header {
-      background: rgba(245, 247, 250, 0.75) !important;
-      border-bottom: 1px solid rgba(205, 210, 219, 0.5) !important;
+      background: color-mix(in srgb, var(--surface-solid) 72%, transparent) !important;
+      border-bottom-color: var(--border-color-light) !important;
     }
 
     .el-tabs__item.is-active {
-      background: rgba(255, 255, 255, 0.9) !important;
       color: var(--brand-primary) !important;
-      border-right-color: rgba(205, 210, 219, 0.5) !important;
-      border-left-color: rgba(205, 210, 219, 0.5) !important;
+      background: color-mix(in srgb, var(--surface-solid) 92%, transparent) !important;
+      border-color: var(--border-color-light) !important;
     }
   }
 
-  /* Pagination */
-  .el-pagination {
-    button {
-      background: rgba(255, 255, 255, 0.7) !important;
-      border-radius: var(--radius-xs, 6px);
-      &:disabled {
-        background: rgba(245, 247, 250, 0.5) !important;
-      }
-    }
-    .el-pager li {
-      background: rgba(255, 255, 255, 0.7) !important;
-      border-radius: var(--radius-xs, 6px);
-      transition: all 0.15s ease;
-      &.is-active {
-        background: var(--brand-primary) !important;
-        color: #ffffff !important;
-      }
-      &:hover:not(.is-active) {
-        color: var(--brand-primary);
-        background: #ffffff !important;
-      }
-    }
+  .el-pagination button,
+  .el-pagination .el-pager li {
+    background: color-mix(in srgb, var(--surface-solid) 74%, transparent) !important;
+    border-radius: var(--radius-xs);
   }
 
-  /* Loading Mask */
-  .el-loading-mask {
-    background-color: rgba(245, 246, 248, 0.68) !important;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+  .el-pagination .el-pager li.is-active {
+    color: var(--text-on-brand) !important;
+    background: var(--brand-primary) !important;
   }
+}
 
-  /* Message Box */
-  .el-message-box {
-    background: rgba(255, 255, 255, 0.92) !important;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(205, 210, 219, 0.75) !important;
-    border-radius: var(--radius-xl, 20px) !important;
-    box-shadow: 0 20px 48px -16px rgba(31, 42, 58, 0.22) !important;
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html.theme-liquid-glass {
+    .el-card,
+    .el-dialog,
+    .el-drawer,
+    .el-message-box,
+    .el-dropdown-menu,
+    .el-popover.el-popper {
+      background: var(--surface-solid) !important;
+    }
+  }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  html.theme-liquid-glass {
+    .el-card,
+    .el-dialog,
+    .el-drawer,
+    .el-message-box,
+    .el-dropdown-menu,
+    .el-popover.el-popper,
+    .tags-view-container,
+    .el-input__wrapper,
+    .el-select__wrapper,
+    .el-textarea__inner {
+      background: var(--surface-solid) !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+  }
+}
+
+@media (forced-colors: active) {
+  html.theme-liquid-glass {
+    background: Canvas;
+
+    .el-card,
+    .el-dialog,
+    .el-drawer,
+    .el-message-box,
+    .el-dropdown-menu,
+    .el-popover.el-popper {
+      color: CanvasText !important;
+      background: Canvas !important;
+      border: 1px solid CanvasText !important;
+      box-shadow: none !important;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-liquid-glass {
+    .el-card,
+    .el-button,
+    .el-input__wrapper,
+    .el-select__wrapper,
+    .el-textarea__inner {
+      transition: none !important;
+    }
+  }
+}
+
+@media (pointer: coarse) {
+  html.theme-liquid-glass .el-button {
+    min-height: 44px;
   }
 }

@@ -6,6 +6,10 @@ import {
   THEME_VARIABLE_TYPES,
   THEME_MODE_LABELS,
   THEME_COLOR_TOKENS,
+  LIQUID_GLASS_MATERIAL_TOKENS,
+  isValidMaterialValue,
+  materialToCssVariables,
+  materialToEngineOptions,
   isCssColor,
   buildPrimaryGradient
 } from '../src/config/themeVariableConfig.js'
@@ -43,6 +47,43 @@ test('liquid-glass theme variable configuration is complete and valid', () => {
 
   const gradient = buildPrimaryGradient(liquidGlassTheme)
   assert.ok(gradient.includes('linear-gradient'), 'builds valid primary gradient')
+})
+
+test('liquid-glass material parameters drive engine and CSS fallback values', () => {
+  assert.equal(LIQUID_GLASS_MATERIAL_TOKENS.length, 10)
+  for (const definition of LIQUID_GLASS_MATERIAL_TOKENS) {
+    assert.equal(isValidMaterialValue(definition, definition.defaultValue), true, definition.key)
+  }
+
+  const values = {
+    glass_renderer_mode: 'css',
+    glass_refraction: '48',
+    glass_bevel: '18',
+    glass_blur: '0.5',
+    glass_dispersion: '0.8',
+    glass_radius: '20',
+    glass_tint: 'rgba(255,255,255,0.02)',
+    glass_surface_opacity: '0.6',
+    glass_backdrop_blur: '14',
+    glass_saturation: '115'
+  }
+  const engine = materialToEngineOptions(values)
+  const css = materialToCssVariables(values)
+
+  assert.deepEqual(engine, {
+    mode: 'css',
+    refraction: 48,
+    bevel: 18,
+    blur: 0.5,
+    dispersion: 0.8,
+    radius: 20,
+    tint: 'rgba(255,255,255,0.02)',
+    fallbackBlur: 14,
+    saturation: 1.15
+  })
+  assert.equal(css['--glass-radius'], '20px')
+  assert.equal(css['--glass-backdrop-blur'], '14px')
+  assert.equal(css['--glass-saturation'], '115%')
 })
 
 test('liquid-glass semantic control presets match audited reference', () => {

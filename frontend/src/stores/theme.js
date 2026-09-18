@@ -1,11 +1,14 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { getThemeVariables } from '@/api/variable'
 import { themes } from '@/styles/themes'
 import {
   THEME_COLOR_TOKENS,
   buildPrimaryGradient,
-  isCssColor
+  isCssColor,
+  materialToCssVariables,
+  materialToEngineOptions,
+  normalizeLiquidGlassMaterial
 } from '@/config/themeVariableConfig'
 
 const EMPTY_THEME_OVERRIDES = () => ({ light: {}, dark: {}, 'liquid-glass': {} })
@@ -13,8 +16,12 @@ const EMPTY_THEME_OVERRIDES = () => ({ light: {}, dark: {}, 'liquid-glass': {} }
 export const useThemeStore = defineStore('theme', () => {
   const currentThemeName = ref('light')
   const serverOverrides = ref(EMPTY_THEME_OVERRIDES())
+  const materialOverrides = ref({})
   const loadingThemeVariables = ref(false)
   const themeVariablesLoaded = ref(false)
+
+  const liquidGlassMaterial = computed(() => normalizeLiquidGlassMaterial(materialOverrides.value))
+  const liquidGlassOptions = computed(() => materialToEngineOptions(liquidGlassMaterial.value))
 
   const composeTheme = (themeName) => {
     const normalizedTheme = themes[themeName] ? themeName : 'light'
@@ -30,7 +37,12 @@ export const useThemeStore = defineStore('theme', () => {
     const normalizedTheme = themes[themeName] ? themeName : 'light'
     const root = document.documentElement
 
-    Object.entries(composeTheme(normalizedTheme)).forEach(([key, value]) => {
+    const cssVariables = {
+      ...composeTheme(normalizedTheme),
+      ...materialToCssVariables(liquidGlassMaterial.value)
+    }
+
+    Object.entries(cssVariables).forEach(([key, value]) => {
       root.style.setProperty(key, value)
     })
 
@@ -58,11 +70,13 @@ export const useThemeStore = defineStore('theme', () => {
     loadingThemeVariables.value = true
     try {
       const response = await getThemeVariables()
+      const liquidGlassValues = response.data?.['liquid-glass'] || response.data?.liquid_glass || {}
       serverOverrides.value = {
         light: normalizeServerTheme(response.data?.light),
         dark: normalizeServerTheme(response.data?.dark),
-        'liquid-glass': normalizeServerTheme(response.data?.['liquid-glass'] || response.data?.liquid_glass)
+        'liquid-glass': normalizeServerTheme(liquidGlassValues)
       }
+      materialOverrides.value = normalizeLiquidGlassMaterial(liquidGlassValues)
       themeVariablesLoaded.value = true
       applyTheme(currentThemeName.value, false)
       return true
@@ -104,6 +118,9 @@ export const useThemeStore = defineStore('theme', () => {
   return {
     currentThemeName,
     serverOverrides,
+    materialOverrides,
+    liquidGlassMaterial,
+    liquidGlassOptions,
     loadingThemeVariables,
     themeVariablesLoaded,
     composeTheme,
@@ -115,4 +132,3 @@ export const useThemeStore = defineStore('theme', () => {
     initTheme
   }
 })
-
