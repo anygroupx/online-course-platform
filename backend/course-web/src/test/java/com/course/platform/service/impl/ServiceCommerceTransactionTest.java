@@ -73,13 +73,14 @@ class ServiceCommerceTransactionTest {
                         "019_internship_service_plans.sql",
                         "020_service_account_sessions.sql",
                         "029_native_service_price_precision.sql",
-                        "030_native_service_status_refresh.sql")) {
+                        "030_native_service_status_refresh.sql",
+                        "034_heisha_self_operated_fulfillment.sql")) {
             String migration =
                     Files.readString(root.resolve("database/migrations/" + name))
                             .replaceAll("(?m)^--.*$", "")
                             .replaceAll("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", "");
             for (String statement : migration.split(";"))
-                if (!statement.isBlank()) jdbc.execute(statement);
+                if (!statement.isBlank() && !statement.stripLeading().startsWith("INSERT")) jdbc.execute(statement);
         }
         jdbc.execute(
                 "CREATE TABLE sys_user(id BIGINT PRIMARY KEY,balance DECIMAL(14,2),total_recharge"
@@ -98,6 +99,7 @@ class ServiceCommerceTransactionTest {
                         ServiceProductMapper.class,
                         ServiceOrderMapper.class,
                         ServiceOperationMapper.class,
+                        ServiceOrderFulfillmentMapper.class,
                         ServiceAccountSessionMapper.class,
                         UserMapper.class,
                         AccountLedgerMapper.class)) config.addMapper(mapper);
@@ -163,6 +165,7 @@ class ServiceCommerceTransactionTest {
                         products,
                         orders,
                         operations,
+                        session.getMapper(ServiceOrderFulfillmentMapper.class),
                         providerMapper,
                         providerService,
                         new PluginConnectorRegistry(List.of(catalog)),
@@ -171,7 +174,8 @@ class ServiceCommerceTransactionTest {
                                 com.course.platform.application.service.servicecommerce
                                         .ServiceAccountSessions.class),
                         ledger,
-                        new DataSourceTransactionManager(ds));
+                        new DataSourceTransactionManager(ds),
+                        mock(com.course.platform.application.service.security.SecurityAuditService.class));
         ReflectionTestUtils.setField(service, "enabled", true);
         ReflectionTestUtils.setField(service, "cryptoSecret", "test-service-master-key");
         auth(7, "api-provider:update", "payment:reconcile");
@@ -2496,6 +2500,217 @@ class ServiceCommerceTransactionTest {
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM service_order", Integer.class));
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
         verify(gateway, times(1)).execute(any(), any(), any(), eq("CREATE"), any());
+    }
+
+    Long heishaProduct(String mode) {
+        jdbc.update("DELETE FROM service_product");
+        provider.setProviderType("heisha");
+        PluginReadOnlyConnector heishaCatalog = mock(PluginReadOnlyConnector.class);
+        when(heishaCatalog.getProviderType()).thenReturn("heisha");
+        when(heishaCatalog.fetchCatalog(any(), any())).thenReturn(
+                List.of(new PluginProduct("1", "黑鲨", new BigDecimal("0.10"), "元/公里")));
+        ReflectionTestUtils.setField(service, "catalogs", new PluginConnectorRegistry(List.of(heishaCatalog)));
+        doAnswer(a -> {
+            OrderForm input = a.getArgument(2);
+            return new PreparedOrder(Map.of("phone", "13800138000", "password", "local-password-secret",
+                    "plan_option_id", "plan-1", "run_time", "08:00", "face_token", "discard-face-secret",
+                    "run_preflight_token", "discard-preflight-secret"), input.quantity(), input.distance(), input.distance(), "13***00");
+        }).when(gateway).prepare(any(), any(), any());
+        auth(7, "api-provider:update");
+        Long id = service.saveProduct(null, new ProductCommand(9L, "default", "1", "黑鲨", "", new BigDecimal("0.25"), true, mode, null, null)).id();
+        auth(7, "ROLE_USER");
+        return id;
+    }
+
+    @Test
+    void selfOperatedProductValidationPricingAndHistoricalSnapshot() {
+        assertEquals("UPSTREAM", products.selectById(1L).getFulfillmentMode());
+        auth(7, "api-provider:update");
+        assertThrows(BusinessException.class, () -> service.saveProduct(null,
+                new ProductCommand(9L, "default", "1", "非法", "", BigDecimal.ONE, true, "SELF_OPERATED", null, null)));
+        Long id = heishaProduct("SELF_OPERATED");
+        // A self-operated sale does not need a matching catalog price.
+        ReflectionTestUtils.setField(service, "catalogs", new PluginConnectorRegistry(List.of()));
+        var quote = service.quote(id, form());
+        assertEquals("5.00", quote.amount());
+        var created = service.confirm(quote.id());
+        auth(7, "api-provider:update");
+        var changed = service.saveProduct(id, new ProductCommand(9L, "default", "1", "黑鲨", "", BigDecimal.ONE, false, "UPSTREAM", 0L, null));
+        assertEquals(1L, changed.version());
+        assertEquals("UPSTREAM", changed.fulfillmentMode());
+        auth(7, "ROLE_USER");
+        assertEquals("SELF_OPERATED", service.order(created.orderId()).fulfillmentMode());
+        assertEquals("PENDING", service.sync(created.orderId()).status());
+        verify(gateway, never()).sync(any(), any());
+    }
+
+    @Test
+    void concurrentSelfOperatedConfirmCreatesOneEncryptedPayloadAndOneDebit() throws Exception {
+        var preview = service.quote(heishaProduct("SELF_OPERATED"), form());
+        CountDownLatch start = new CountDownLatch(1);
+        Callable<QuoteView> confirm = () -> { auth(7, "ROLE_USER"); start.await(); return service.confirm(preview.id()); };
+        var first = threads.submit(confirm); var second = threads.submit(confirm); start.countDown();
+        assertEquals("SUCCEEDED", first.get(10, TimeUnit.SECONDS).state());
+        assertEquals("SUCCEEDED", second.get(10, TimeUnit.SECONDS).state());
+        service.confirm(preview.id());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM service_order", Integer.class));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM service_order_fulfillment", Integer.class));
+        money("95.00");
+        var view = service.order(service.operation(preview.id()).orderId());
+        assertEquals("PENDING", view.status()); assertEquals("SELF_OPERATED", view.fulfillmentMode());
+        var stored = orders.selectById(view.id());
+        assertNull(stored.getExternalOrderNo()); assertNull(stored.getPendingOperationId());
+        assertNull(operations.selectById(preview.id()).getPayloadEncrypted());
+        String encrypted = jdbc.queryForObject("SELECT payload_encrypted FROM service_order_fulfillment", String.class);
+        assertFalse(encrypted.contains("local-password-secret"));
+        var json = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+        assertFalse(json.writeValueAsString(view).contains("local-password-secret"));
+        assertFalse(json.writeValueAsString(stored).contains("local-password-secret"));
+        auth(8, "service-order:fulfill");
+        var details = service.fulfillmentDetails(view.id());
+        assertEquals("local-password-secret", details.fields().get("password"));
+        assertFalse(details.fields().containsKey("face_token"));
+        assertFalse(details.fields().containsKey("run_preflight_token"));
+        assertFalse(details.toString().contains("local-password-secret"));
+        var securityAudit = (com.course.platform.application.service.security.SecurityAuditService)
+                ReflectionTestUtils.getField(service, "securityAudit");
+        verify(securityAudit).recordFulfillmentRead(8L, view.id());
+        doThrow(new BusinessException("审计不可用")).when(securityAudit).recordFulfillmentRead(8L, view.id());
+        assertThrows(BusinessException.class, () -> service.fulfillmentDetails(view.id()));
+        verify(gateway, never()).execute(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void selfOperatedFaceCheckoutPreservesAuthorizationAndConsumesSessionWithoutDispatch() {
+        Long id = setupHeishaAuthorization();
+        ServiceProduct product = products.selectById(id);
+        product.setFulfillmentMode("SELF_OPERATED");
+        products.updateById(product);
+        var session = preflightFace(id);
+        assertThrows(BusinessException.class, () -> service.quote(id, faceOrder(session.id())));
+        accountSessions.collectFace(session.id(), new FaceConsentForm(true));
+        accountSessions.checkFace(session.id());
+        var quote = service.quote(id, faceOrder(session.id()));
+        var confirmed = service.confirm(quote.id());
+        assertEquals("SUCCEEDED", confirmed.state());
+        assertEquals("PENDING", service.order(confirmed.orderId()).status());
+        assertEquals("USED", accountSessions.get(session.id()).state());
+        assertNull(accountSessionMapper.selectById(session.id()).getSnapshotEncrypted());
+        auth(8, "service-order:fulfill");
+        var fields = service.fulfillmentDetails(confirmed.orderId()).fields();
+        assertEquals("private-password", fields.get("password"));
+        assertFalse(fields.containsKey("face_token"));
+        verify(gateway, never()).execute(any(), any(), any(), any(), any());
+        money("99.5");
+    }
+
+    @Test
+    void selfOperatedFailuresRollbackDebitOrderAndPayloadAndRejectStaleProductQuote() {
+        Long id = heishaProduct("SELF_OPERATED");
+        var quote = service.quote(id, form());
+        jdbc.update("UPDATE sys_user SET balance=0 WHERE id=7");
+        assertThrows(BusinessException.class, () -> service.confirm(quote.id()));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM service_order", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM service_order_fulfillment", Integer.class));
+        jdbc.update("UPDATE sys_user SET balance=100 WHERE id=7");
+        var mapper = mock(ServiceOrderFulfillmentMapper.class);
+        when(mapper.insert(any(ServiceOrderFulfillment.class))).thenThrow(new IllegalStateException("simulated persistence failure"));
+        Object real = ReflectionTestUtils.getField(service, "fulfillmentMapper");
+        ReflectionTestUtils.setField(service, "fulfillmentMapper", mapper);
+        assertThrows(IllegalStateException.class, () -> service.confirm(quote.id()));
+        money("100");
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM service_order", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+        assertEquals("READY", service.operation(quote.id()).state());
+        ReflectionTestUtils.setField(service, "fulfillmentMapper", real);
+        auth(7, "api-provider:update");
+        service.saveProduct(id, new ProductCommand(9L, "default", "1", "黑鲨", "", BigDecimal.ONE, true, "UPSTREAM", 0L, null));
+        auth(7, "ROLE_USER");
+        assertThrows(BusinessException.class, () -> service.confirm(quote.id()));
+        money("100");
+        verify(gateway, never()).execute(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void upstreamHeishaStillExecutesAndSyncs() {
+        var quote = service.quote(heishaProduct("UPSTREAM"), form());
+        service.confirm(quote.id()); service.confirm(quote.id());
+        var order = orders.selectById(service.operation(quote.id()).orderId());
+        assertEquals("UPSTREAM", order.getFulfillmentMode()); assertNotNull(order.getExternalOrderNo());
+        auth(7, "api-provider:update");
+        service.saveProduct(order.getProductId(), new ProductCommand(9L, "default", "1", "黑鲨", "", BigDecimal.ONE, true, "SELF_OPERATED", 0L, null));
+        auth(7, "ROLE_USER");
+        assertEquals("UPSTREAM", service.order(order.getId()).fulfillmentMode());
+        when(gateway.sync(any(), any())).thenReturn(new RemoteResult(order.getExternalOrderNo(), "ACTIVE", 2, null));
+        assertEquals(2, service.sync(order.getId()).completed());
+        verify(gateway, times(1)).execute(any(), any(), any(), eq("CREATE"), any());
+        verify(gateway, times(1)).sync(any(), any());
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM service_order_fulfillment", Integer.class));
+    }
+
+    @Test
+    void selfOperatedWorkerIsExcludedInSqlEvenWithRemoteIdentifier() {
+        var created = service.confirm(service.quote(heishaProduct("SELF_OPERATED"), form()).id());
+        jdbc.update("UPDATE service_order SET status='ACTIVE', external_order_no='legacy-invalid' WHERE id=?", created.orderId());
+        ReflectionTestUtils.setField(service, "statusRefreshEnabled", true);
+        assertFalse(orders.dueStatusChecks(ServiceTime.now(), 10).contains(created.orderId()));
+        assertEquals(0, service.refreshDueStatuses());
+        service.sync(created.orderId());
+        verify(gateway, never()).sync(any(), any());
+    }
+
+    @Test
+    void selfOperatedLifecycleAuthorizationProgressAuditAndTerminalSafety() throws Exception {
+        var created = service.confirm(service.quote(heishaProduct("SELF_OPERATED"), form()).id());
+        String id = created.orderId();
+        assertThrows(BusinessException.class, () -> service.manageFulfillment(id, new LocalFulfillmentForm("START", 0L, null, null)));
+        assertThrows(BusinessException.class, () -> service.fulfillmentDetails(id));
+        auth(8, "api-provider:update", "payment:reconcile");
+        assertThrows(BusinessException.class, () -> service.fulfillmentDetails(id));
+        auth(8, "service-order:fulfill");
+        assertThrows(BusinessException.class, () -> service.manageFulfillment(id, new LocalFulfillmentForm("COMPLETE", 0L, null, null)));
+        assertThrows(BusinessException.class, () -> service.manageFulfillment(id, new LocalFulfillmentForm("ATTENTION", 0L, null, " ")));
+        service.manageFulfillment(id, new LocalFulfillmentForm("ATTENTION", 0L, null, "待检查"));
+        assertThrows(BusinessException.class, () -> service.manageFulfillment(id, new LocalFulfillmentForm("RESUME", 1L, null, null)));
+        service.manageFulfillment(id, new LocalFulfillmentForm("RESUME", 1L, null, "已检查"));
+        service.manageFulfillment(id, new LocalFulfillmentForm("PROGRESS", 2L, 2, null));
+        assertThrows(BusinessException.class, () -> service.manageFulfillment(id, new LocalFulfillmentForm("PROGRESS", 3L, 1, null)));
+        assertThrows(BusinessException.class, () -> service.manageFulfillment(id, new LocalFulfillmentForm("PROGRESS", 3L, 11, null)));
+        assertThrows(BusinessException.class, () -> service.manageFulfillment(id, new LocalFulfillmentForm("ATTENTION", 3L, null, "local-password-secret")));
+        service.manageFulfillment(id, new LocalFulfillmentForm("ATTENTION", 3L, null, "需要复查"));
+        service.manageFulfillment(id, new LocalFulfillmentForm("RESUME", 4L, null, "已恢复"));
+        var completed = service.manageFulfillment(id, new LocalFulfillmentForm("COMPLETE", 5L, null, null));
+        assertEquals("COMPLETED", completed.status()); assertEquals(completed.quantity(), completed.completed());
+        assertThrows(BusinessException.class, () -> service.manageFulfillment(id, new LocalFulfillmentForm("COMPLETE", 6L, null, null)));
+        assertEquals(7, jdbc.queryForObject("SELECT COUNT(*) FROM service_order_operation WHERE order_id=?", Integer.class, id));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
+        assertEquals(6, jdbc.queryForObject("SELECT COUNT(*) FROM service_order_operation WHERE order_id=? AND resolved_by=8 AND previous_status IS NOT NULL AND resulting_status IS NOT NULL AND completed_snapshot IS NOT NULL", Integer.class, id));
+        auth(7, "ROLE_USER");
+        assertThrows(BusinessException.class, () -> service.quoteAction(id, new ActionForm("LOCAL_START", 0)));
+        assertFalse(new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules().writeValueAsString(service.events(id)).contains("local-password-secret"));
+    }
+
+    @Test
+    void selfOperatedConcurrentProgressOnlyOneVersionWins() throws Exception {
+        var created = service.confirm(service.quote(heishaProduct("SELF_OPERATED"), form()).id());
+        auth(8, "service-order:fulfill");
+        service.manageFulfillment(created.orderId(), new LocalFulfillmentForm("START", 0L, null, null));
+        service.manageFulfillment(created.orderId(), new LocalFulfillmentForm("PROGRESS", 1L, 2, null));
+        CountDownLatch start = new CountDownLatch(1);
+        Callable<Boolean> firstUpdate = () -> localProgressAttempt(created.orderId(), 3, start);
+        Callable<Boolean> secondUpdate = () -> localProgressAttempt(created.orderId(), 4, start);
+        var first = threads.submit(firstUpdate); var second = threads.submit(secondUpdate); start.countDown();
+        assertNotEquals(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS));
+        assertEquals(3L, orders.selectById(created.orderId()).getVersion());
+        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM service_order_operation WHERE action='LOCAL_PROGRESS'", Integer.class));
+    }
+
+    boolean localProgressAttempt(String id, int completed, CountDownLatch start) throws Exception {
+        auth(8, "service-order:fulfill"); start.await();
+        try { service.manageFulfillment(id, new LocalFulfillmentForm("PROGRESS", 2L, completed, null)); return true; }
+        catch (BusinessException expected) { assertFalse(expected.getMessage().contains("local-password-secret")); return false; }
     }
 
 }

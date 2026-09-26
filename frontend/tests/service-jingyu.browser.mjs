@@ -445,7 +445,7 @@ try {
   await navigate("/providers"); await page.getByRole("button", { name: "添加接口", exact: true }).click();
   const provider = page.locator(".el-dialog:visible"); await provider.locator(".el-select").first().click();
   await page.getByRole("option", { name: "鲸鱼运动服务", exact: true }).click();
-  await provider.getByText(/不要添加 jingyu 或 api.php/).waitFor(); await provider.locator(".el-dialog__headerbtn").click();
+  await provider.getByText("填写已授权的 HTTPS 服务根地址，不要添加 /jingyu 或 /api.php。", { exact: false }).waitFor(); await provider.locator(".el-dialog__headerbtn").click();
   check("admin configuration and publishing only expose verified projects with correct price units");
 
   await page.setViewportSize({ width: 390, height: 844 }); await page.evaluate(() => document.documentElement.classList.add("dark"));

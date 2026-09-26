@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.course.platform.application.service.platform.ApiProviderService;
+import com.course.platform.application.service.security.SecurityAuditService;
 import com.course.platform.application.service.servicecommerce.*;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
@@ -47,6 +48,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
     private final ServiceProductMapper productMapper;
     private final ServiceOrderMapper orderMapper;
     private final ServiceOperationMapper operationMapper;
+    private final ServiceOrderFulfillmentMapper fulfillmentMapper;
     private final ApiProviderMapper providerMapper;
     private final ApiProviderService providers;
     private final PluginConnectorRegistry catalogs;
@@ -54,6 +56,8 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
     private final ServiceAccountSessions accounts;
     private final AccountLedgerServiceImpl ledger;
     private final PlatformTransactionManager transactions;
+
+    private final SecurityAuditService securityAudit;
 
     @Value("${app.crypto.secret}")
     private String cryptoSecret;
@@ -100,6 +104,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                 || c.providerId() == null
                 || c.project() == null
                 || c.remoteProductId() == null) throw bad("商品参数不完整");
+        String fulfillmentMode = FulfillmentMode.normalize(c.fulfillmentMode());
         if (id != null && !c.enabled())
             return tx(
                     () -> {
@@ -110,7 +115,9 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                                 || !stored.getProject().equals(c.project())
                                 || !stored.getRemoteProductId().equals(c.remoteProductId()))
                             throw bad("商品版本或绑定已变化");
+                        requireFulfillmentMode(stored.getProviderType(), fulfillmentMode);
                         stored.setEnabled(false);
+                        stored.setFulfillmentMode(fulfillmentMode);
                         stored.setVersion(stored.getVersion() + 1);
                         stamp(stored);
                         requireWrite(productMapper.updateById(stored));
@@ -133,13 +140,17 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
         candidate.setProviderType(provider.getProviderType());
         candidate.setProject(c.project());
         candidate.setRemoteProductId(c.remoteProductId());
+        candidate.setFulfillmentMode(fulfillmentMode);
+        requireFulfillmentMode(candidate.getProviderType(), fulfillmentMode);
         if (c.enabled()
                 && PhpNativeServiceGateway.isHeishaFace(candidate)
                 && !accounts.faceCollectionConfigured()) throw bad("上架人脸商品前必须配置已批准的官方 HTTPS 采集域名");
         if (daily(candidate)) attestContract(candidate, provider, c.contractPrice());
         else if (c.contractPrice() != null) throw bad("该服务须使用目录报价，不接受合同价替代");
-        BigDecimal cost = catalogPrice(candidate, provider);
-        if (c.unitPrice().compareTo(cost) < 0) throw bad("售价不能低于已读取的成本单价");
+        if (!FulfillmentMode.selfOperated(candidate)) {
+            BigDecimal cost = catalogPrice(candidate, provider);
+            if (c.unitPrice().compareTo(cost) < 0) throw bad("售价不能低于已读取的成本单价");
+        }
         ServiceProduct result =
                 tx(
                         () -> {
@@ -164,6 +175,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                             p.setDescription(c.description());
                             p.setUnitPrice(c.unitPrice());
                             p.setEnabled(c.enabled());
+                            p.setFulfillmentMode(fulfillmentMode);
                             p.setVersion(id == null ? 0 : p.getVersion() + 1);
                             stamp(p);
                             if (id == null) requireWrite(productMapper.insert(p));
@@ -202,12 +214,13 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
         ServiceProduct p = forSale(productId);
         validateOrderForm(form, p);
         ApiProvider provider = active(p.getProviderId(), p.getProviderType(), null);
-        BigDecimal cost = catalogPrice(p, provider);
+        BigDecimal cost = FulfillmentMode.selfOperated(p) ? null : catalogPrice(p, provider);
         var authorization =
                 form.accountSessionId() == null ? null : accounts.prepare(p, provider, form);
         PreparedOrder prepared =
                 authorization == null ? gateway.prepare(provider, p, form) : authorization.order();
-        if (cost.compareTo(p.getUnitPrice()) > 0) throw bad("商品价格待更新，暂不能下单，请联系管理员");
+        if (cost != null && cost.compareTo(p.getUnitPrice()) > 0)
+            throw bad("商品价格待更新，暂不能下单，请联系管理员");
         ServiceOperation op =
                 newOperation(
                         uid,
@@ -465,7 +478,9 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
             o.setRemoteProductId(p.getRemoteProductId());
             o.setTitle(p.getTitle());
             o.setAccountLabel(op.getAccountLabel());
-            o.setStatus("SUBMITTING");
+            o.setFulfillmentMode(FulfillmentMode.normalize(p.getFulfillmentMode()));
+            boolean local = FulfillmentMode.selfOperated(p);
+            o.setStatus(local ? "PENDING" : "SUBMITTING");
             o.setQuantity(op.getQuantity());
             o.setCompleted(0);
             o.setDistance(op.getDistance());
@@ -474,7 +489,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
             o.setPaidAmount(op.getAmount());
             o.setRefundedAmount(ZERO);
             o.setVersion(0L);
-            o.setPendingOperationId(id);
+            o.setPendingOperationId(local ? null : id);
             o.setCreateTime(ServiceTime.now());
             o.setUpdateTime(ServiceTime.now());
             requireWrite(orderMapper.insert(o));
@@ -500,6 +515,29 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                     AccountLedgerServiceImpl.BIZ_ORDER,
                     "SERVICE:" + id,
                     "服务订单确认");
+        if ("CREATE".equals(op.getAction()) && FulfillmentMode.selfOperated(p)) {
+            ServiceOrderFulfillment fulfillment = new ServiceOrderFulfillment();
+            fulfillment.setOrderId(o.getId());
+            // Keep only material needed for local processing, not remote authorization tokens.
+            Map<String, Object> prepared = decrypt(op.getPayloadEncrypted());
+            Map<String, Object> material = new LinkedHashMap<>();
+            for (String key : List.of("phone", "password", "plan_option_id", "fence_option_id",
+                    "run_time", "school_name", "plan_name", "fence_name", "single_min_distance_km",
+                    "single_max_distance_km", "time_fragments", "product_id", "times", "km_per_day")) {
+                if (prepared.containsKey(key)) material.put(key, prepared.get(key));
+            }
+            fulfillment.setPayloadEncrypted(encrypt(material));
+            fulfillment.setVersion(0L);
+            fulfillment.setCreateTime(ServiceTime.now());
+            fulfillment.setUpdateTime(ServiceTime.now());
+            requireWrite(fulfillmentMapper.insert(fulfillment));
+            op.setState("SUCCEEDED");
+            op.setPayloadEncrypted(null);
+            op.setErrorCategory(null);
+            touch(op);
+            requireWrite(operationMapper.updateById(op));
+            return null;
+        }
         op.setState("DISPATCHING");
         touch(op);
         requireWrite(operationMapper.updateById(op));
@@ -611,6 +649,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
     }
 
     private static void requireReadableRunRecord(ServiceOrder order) {
+        if (FulfillmentMode.selfOperated(order)) throw bad("自营订单请查看订单进度与操作记录");
         // A successful cancellation deletes this protocol's remote row; settlement cannot restore it.
         if (leidianRecordRemoved(order)) throw bad("订单已取消，无法读取执行记录或安排，请查看订单操作记录");
     }
@@ -707,12 +746,16 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
         String keyword = orderSearchText(f.keyword(), 100).strip();
         String type = orderSearchText(f.providerType(), 20);
         String status = orderSearchText(f.status(), 24);
+        String fulfillmentMode = orderSearchText(f.fulfillmentMode(), 20);
         String orderId = orderSearchText(f.orderId(), 36);
         if (!type.isEmpty() && !Set.of("flash", "heisha", "jiguang", "wuxin", "sxdk_tw", "appui", "leidian", "jingyu", "ssbenz_xbd").contains(type))
             throw bad("服务类型筛选不正确");
-        if (!status.isEmpty() && !Set.of("ACTIVE", "PAUSED", "COMPLETED", "REFUNDED", "CANCELLED",
+        if (!status.isEmpty() && !Set.of("PENDING", "ACTIVE", "PAUSED", "COMPLETED", "REFUNDED", "CANCELLED",
                 "CONFIRMING", "REFUND_REVIEW", "ATTENTION", "SUBMITTING", "SUBMITTED", "SUBMISSION_REVIEW").contains(status))
             throw bad("订单状态筛选不正确");
+        if (!fulfillmentMode.isEmpty()
+                && !Set.of("UPSTREAM", "SELF_OPERATED").contains(fulfillmentMode))
+            throw bad("履约方式筛选不正确");
         if (!orderId.isEmpty()) uuid(orderId);
         LocalDate from = orderSearchDate(f.createdFrom());
         LocalDate to = orderSearchDate(f.createdTo());
@@ -722,6 +765,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                 .eq(!admin, ServiceOrder::getUserId, uid)
                 .eq(admin && f.ownerId() != null, ServiceOrder::getUserId, f.ownerId())
                 .eq(!type.isEmpty(), ServiceOrder::getProviderType, type)
+                .eq(!fulfillmentMode.isEmpty(), ServiceOrder::getFulfillmentMode, fulfillmentMode)
                 .eq(!orderId.isEmpty(), ServiceOrder::getId, orderId);
         // Filter the state shown to the user, not a pre-operation status hidden by a pending write.
         if ("CONFIRMING".equals(status)) {
@@ -779,6 +823,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
             ServiceOrder current = orderMapper.lock(id);
             if (current == null || !uid.equals(current.getUserId())) throw missing();
             noPending(current);
+            if (FulfillmentMode.selfOperated(current)) return current;
             if (FINAL.contains(current.getStatus()) || cancellationReview(current)) return current;
             if (current.getExternalOrderNo() == null || current.getExternalOrderNo().isBlank())
                 throw bad("订单尚未取得可核实的编号，请联系管理员核对");
@@ -790,13 +835,119 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                 throw bad("正在更新进度，请稍后刷新订单");
             return current;
         });
-        if (FINAL.contains(order.getStatus()) || cancellationReview(order)) return orderView(order);
+        if (FulfillmentMode.selfOperated(order)
+                || FINAL.contains(order.getStatus()) || cancellationReview(order)) return orderView(order);
         try {
             return readStatus(order, token, false);
         } catch (RuntimeException ex) {
             failedStatusCheck(order, token, false);
             throw ex;
         }
+    }
+
+    @Override
+    public OrderView manageFulfillment(String id, LocalFulfillmentForm form) {
+        Long actor = fulfillmentOperator();
+        uuid(id);
+        if (form == null || form.action() == null || form.orderVersion() == null)
+            throw bad("处理参数不完整");
+        return tx(() -> {
+            ServiceOrder order = orderMapper.lock(id);
+            requireSelfOperatedHeisha(order);
+            noPending(order);
+            if (!Objects.equals(order.getVersion(), form.orderVersion()))
+                throw bad("订单状态已变化，请刷新后重试");
+            String previous = order.getStatus();
+            String note = normalizeLifecycleNote(form.note());
+            if (note != null) {
+                ServiceOrderFulfillment material = fulfillmentMapper.selectById(id);
+                if (material == null) throw bad("履约资料不存在，请核对订单记录");
+                Map<String, Object> fields = decrypt(material.getPayloadEncrypted());
+                for (String key : List.of("phone", "password")) {
+                    Object secret = fields.get(key);
+                    if (secret instanceof String value && !value.isBlank() && note.contains(value))
+                        throw bad("处理备注不能包含账号或密码");
+                }
+            }
+            String action;
+            switch (form.action()) {
+                case "START" -> {
+                    requireState(order, "PENDING");
+                    requireNoCompletedInput(form);
+                    order.setStatus("ACTIVE");
+                    action = "LOCAL_START";
+                }
+                case "PROGRESS" -> {
+                    requireState(order, "ACTIVE");
+                    if (form.completed() == null
+                            || form.completed() < order.getCompleted()
+                            || form.completed() > order.getQuantity())
+                        throw bad("完成进度必须在当前进度和订单总量之间");
+                    if (form.completed().equals(order.getCompleted()))
+                        throw bad("完成进度没有变化");
+                    order.setCompleted(form.completed());
+                    action = "LOCAL_PROGRESS";
+                }
+                case "COMPLETE" -> {
+                    requireState(order, "ACTIVE");
+                    requireNoCompletedInput(form);
+                    order.setCompleted(order.getQuantity());
+                    order.setStatus("COMPLETED");
+                    action = "LOCAL_COMPLETE";
+                }
+                case "ATTENTION" -> {
+                    if (!Set.of("PENDING", "ACTIVE").contains(order.getStatus()))
+                        throw bad("当前订单不能标记为需要处理");
+                    requireNoCompletedInput(form);
+                    requireLifecycleNote(note, "请填写需要处理的原因");
+                    order.setStatus("ATTENTION");
+                    action = "LOCAL_ATTENTION";
+                }
+                case "RESUME" -> {
+                    requireState(order, "ATTENTION");
+                    requireNoCompletedInput(form);
+                    requireLifecycleNote(note, "请填写恢复处理备注");
+                    order.setStatus("ACTIVE");
+                    action = "LOCAL_RESUME";
+                }
+                default -> throw bad("不支持的处理操作");
+            }
+            order.setVersion(order.getVersion() + 1);
+            order.setUpdateTime(ServiceTime.now());
+            requireWrite(orderMapper.updateById(order));
+            ServiceProduct product = product(order.getProductId());
+            ServiceOperation event = newOperation(
+                    order.getUserId(), product, order.getProviderVersion(), action, order.getId(),
+                    form.orderVersion());
+            event.setState("SUCCEEDED");
+            event.setQuantity(0);
+            event.setDistance(order.getDistance());
+            event.setUnitCharge(order.getUnitCharge());
+            event.setAmount(ZERO);
+            event.setAccountLabel(order.getAccountLabel());
+            event.setResolvedBy(actor);
+            event.setResolutionNote(note);
+            event.setPreviousStatus(previous);
+            event.setResultingStatus(order.getStatus());
+            event.setCompletedSnapshot(order.getCompleted());
+            event.setExpiresAt(ServiceTime.now());
+            requireWrite(operationMapper.insert(event));
+            return orderView(order);
+        });
+    }
+
+    @Override
+    public FulfillmentDetails fulfillmentDetails(String id) {
+        Long actor = fulfillmentOperator();
+        uuid(id);
+        ServiceOrder order = orderMapper.selectById(id);
+        requireSelfOperatedHeisha(order);
+        ServiceOrderFulfillment fulfillment = fulfillmentMapper.selectById(id);
+        if (fulfillment == null) throw bad("履约资料不存在，请核对订单记录");
+        Map<String, Object> fields = Collections.unmodifiableMap(
+                new LinkedHashMap<>(decrypt(fulfillment.getPayloadEncrypted())));
+        securityAudit.recordFulfillmentRead(actor, id);
+        return new FulfillmentDetails(id, fields);
     }
 
     @Override
@@ -935,7 +1086,8 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
     }
 
     private static boolean periodicEligible(ServiceOrder order) {
-        return order != null && !cancellationReview(order) && PERIODIC_TYPES.contains(order.getProviderType())
+        return order != null && !FulfillmentMode.selfOperated(order)
+                && !cancellationReview(order) && PERIODIC_TYPES.contains(order.getProviderType())
                 && PERIODIC_STATES.contains(order.getStatus()) && order.getPendingOperationId() == null
                 && order.getExternalOrderNo() != null && !order.getExternalOrderNo().isBlank();
     }
@@ -1018,7 +1170,8 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                                                         op.getErrorCategory(),
                                                         op.getCreateTime()),
                                                 op.getResolvedBy(),
-                                                op.getResolutionNote()))
+                                                op.getResolutionNote(),
+                                                op.getPreviousStatus(), op.getResultingStatus(), op.getCompletedSnapshot()))
                         .toList();
         return new OrderAuditView(
                 orderView(order),
@@ -1416,6 +1569,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                                 : "元/公里",
                 Boolean.TRUE.equals(p.getEnabled()),
                 available,
+                FulfillmentMode.normalize(p.getFulfillmentMode()),
                 p.getVersion(),
                 PhpNativeServiceGateway.capabilities(p.getProviderType()),
                 admin && daily(p)
@@ -1436,6 +1590,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                 o.getProviderType(),
                 o.getProject(),
                 o.getPendingOperationId() != null ? "CONFIRMING" : o.getStatus(),
+                FulfillmentMode.normalize(o.getFulfillmentMode()),
                 o.getQuantity(),
                 "sxdk_tw".equals(o.getProviderType()) || totalDistance(o.getProviderType())
                                 || ("flash".equals(o.getProviderType())
@@ -1454,12 +1609,14 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                         : null,
                 Set.of("sxdk_tw", "appui").contains(o.getProviderType()) ? "天" : totalDistance(o.getProviderType()) ? "单" : "次",
                 totalDistance(o.getProviderType()) ? distancePlan(o.getScheduleJson()) : null,
-                PERIODIC_TYPES.contains(o.getProviderType()) && !leidianRecordRemoved(o)
+                !FulfillmentMode.selfOperated(o)
+                                && PERIODIC_TYPES.contains(o.getProviderType()) && !leidianRecordRemoved(o)
                         ? new StatusCheckView(o.getStatusCheckedAt(), "RETRY".equals(o.getStatusCheckState())) : null);
     }
 
     private List<String> actions(ServiceOrder o) {
-        if (o.getPendingOperationId() != null
+        if (FulfillmentMode.selfOperated(o)
+                || o.getPendingOperationId() != null
                 || FINAL.contains(o.getStatus())
                 || "REFUND_REVIEW".equals(o.getStatus())
                 || o.getExternalOrderNo() == null) return List.of();
@@ -1548,6 +1705,45 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
 
     private void admin() {
         SecurityUtils.requireAuthority("api-provider:update");
+    }
+
+    private Long fulfillmentOperator() {
+        Long actor = user();
+        SecurityUtils.requireAuthority("service-order:fulfill");
+        return actor;
+    }
+
+    private static void requireFulfillmentMode(String providerType, String fulfillmentMode) {
+        if (FulfillmentMode.SELF_OPERATED.name().equals(fulfillmentMode)
+                && !"heisha".equals(providerType))
+            throw bad("平台自营履约目前仅支持黑鲨服务");
+    }
+
+    private static void requireSelfOperatedHeisha(ServiceOrder order) {
+        if (order == null) throw missing();
+        if (!"heisha".equals(order.getProviderType()) || !FulfillmentMode.selfOperated(order))
+            throw bad("该订单不是可由平台处理的自营黑鲨订单");
+    }
+
+    private static void requireState(ServiceOrder order, String expected) {
+        if (!expected.equals(order.getStatus())) throw bad("当前订单状态不支持此操作");
+    }
+
+    private static void requireNoCompletedInput(LocalFulfillmentForm form) {
+        if (form.completed() != null) throw bad("此操作不接受完成进度");
+    }
+
+    private static String normalizeLifecycleNote(String note) {
+        if (note == null) return null;
+        String normalized = note.trim();
+        if (normalized.length() > 1000
+                || normalized.codePoints().anyMatch(Character::isISOControl))
+            throw bad("处理备注格式不正确");
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private static void requireLifecycleNote(String note, String message) {
+        if (note == null) throw bad(message);
     }
 
     private void noPending(ServiceOrder o) {

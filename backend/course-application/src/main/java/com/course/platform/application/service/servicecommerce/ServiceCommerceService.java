@@ -39,6 +39,10 @@ public interface ServiceCommerceService {
 
     OrderView sync(String id);
 
+    OrderView manageFulfillment(String id, LocalFulfillmentForm form);
+
+    FulfillmentDetails fulfillmentDetails(String id);
+
     List<EventView> events(String id);
 
     RunLogPage logs(String id, int page);

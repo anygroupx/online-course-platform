@@ -16,6 +16,7 @@ public interface ServiceOrderMapper extends BaseMapper<ServiceOrder> {
     @Select("""
             SELECT o.id FROM service_order o
             WHERE o.provider_type IN ('flash','heisha','jiguang','wuxin','sxdk_tw','appui','leidian','jingyu')
+              AND o.fulfillment_mode = 'UPSTREAM'
               AND o.status IN ('ACTIVE','PAUSED','ATTENTION','REFUND_REVIEW')
               AND NOT (o.provider_type='leidian' AND o.status='REFUND_REVIEW')
               AND o.pending_operation_id IS NULL AND o.external_order_no IS NOT NULL

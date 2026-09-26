@@ -12,6 +12,11 @@ export const serviceNames = Object.freeze({
   ssbenz_xbd: "公里计划",
 });
 export const actionNames = Object.freeze({
+  LOCAL_START: "开始处理",
+  LOCAL_PROGRESS: "更新进度",
+  LOCAL_COMPLETE: "标记完成",
+  LOCAL_ATTENTION: "标记异常",
+  LOCAL_RESUME: "恢复处理",
   CREATE: "下单",
   SYNC: "更新进度",
   ADD_TIMES: "增加次数",
@@ -31,6 +36,7 @@ export const actionNames = Object.freeze({
   REPORT: "补交记录",
 });
 export function serviceActionName(action, context) {
+  if (context?.fulfillmentMode === "SELF_OPERATED" && action === "SYNC") return "刷新状态";
   if (context?.providerType === "jingyu") {
     if (action === "REFUND") return "取消并申请退款";
     if (action === "DELAY") return "延期未完成任务";
@@ -45,6 +51,7 @@ export function serviceActionName(action, context) {
   return actionNames[action] || "待核对";
 }
 export const stateNames = Object.freeze({
+  PENDING: "待处理",
   READY: "待确认",
   DISPATCHING: "正在确认",
   UNKNOWN: "待人工核对",

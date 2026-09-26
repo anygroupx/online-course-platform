@@ -2,10 +2,10 @@ import { computed, onScopeDispose, ref, shallowRef, watch } from "vue";
 import { latestRequest } from "../utils/pluginIntegrations.js";
 
 export const orderSearchTypes = Object.freeze(["flash", "heisha", "jiguang", "wuxin", "sxdk_tw", "ssbenz_xbd", "appui", "leidian", "jingyu"]);
-export const orderSearchStates = Object.freeze(["ACTIVE", "PAUSED", "COMPLETED", "CONFIRMING", "ATTENTION", "REFUND_REVIEW", "SUBMITTING", "SUBMITTED", "SUBMISSION_REVIEW", "REFUNDED", "CANCELLED"]);
+export const orderSearchStates = Object.freeze(["PENDING", "ACTIVE", "PAUSED", "COMPLETED", "CONFIRMING", "ATTENTION", "REFUND_REVIEW", "SUBMITTING", "SUBMITTED", "SUBMISSION_REVIEW", "REFUNDED", "CANCELLED"]);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const controls = /[\u0000-\u001f\u007f-\u009f]/;
-export const emptyOrderSearch = () => ({ keyword: "", providerType: "", status: "", ownerId: "", createdFrom: "", createdTo: "" });
+export const emptyOrderSearch = () => ({ keyword: "", providerType: "", status: "", fulfillmentMode: "", ownerId: "", createdFrom: "", createdTo: "" });
 
 function date(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value < "1000-01-01" || value > "9998-12-31") return false;
@@ -24,6 +24,7 @@ export function serviceOrderSearchParams(draft, admin = false, focus = "") {
   values.keyword = values.keyword.trim();
   if (values.providerType && !orderSearchTypes.includes(values.providerType)) throw new Error("FILTER");
   if (values.status && !orderSearchStates.includes(values.status)) throw new Error("FILTER");
+  if (values.fulfillmentMode && (!admin || !["UPSTREAM", "SELF_OPERATED"].includes(values.fulfillmentMode))) throw new Error("FILTER");
   if (values.ownerId && (!admin || !/^[1-9]\d{0,18}$/.test(values.ownerId) || BigInt(values.ownerId) > 9223372036854775807n)) throw new Error("OWNER");
   for (const key of ["createdFrom", "createdTo"]) if (values[key] && !date(values[key])) throw new Error("DATE");
   if (values.createdFrom && values.createdTo && values.createdFrom > values.createdTo) throw new Error("DATE_RANGE");
@@ -43,6 +44,7 @@ export function serviceOrderSearchPage(data, params) {
         !Array.isArray(row.actions) || row.actions.some((a) => typeof a !== "string") ||
         (params.orderId && row.id !== params.orderId) ||
         (params.providerType && row.providerType !== params.providerType) ||
+        (params.fulfillmentMode && row.fulfillmentMode !== params.fulfillmentMode) ||
         (params.status && row.status !== params.status)) throw new Error("RESPONSE");
     seen.add(row.id);
   }

@@ -8,17 +8,18 @@ import jakarta.validation.constraints.Size;
 public record ServiceOrderFilter(
         @Size(max = 100) String keyword,
         @Pattern(regexp = "|flash|heisha|jiguang|wuxin|sxdk_tw|appui|leidian|jingyu|ssbenz_xbd") String providerType,
-        @Pattern(regexp = "|ACTIVE|PAUSED|COMPLETED|REFUNDED|CANCELLED|CONFIRMING|REFUND_REVIEW|ATTENTION|SUBMITTING|SUBMITTED|SUBMISSION_REVIEW") String status,
+        @Pattern(regexp = "|PENDING|ACTIVE|PAUSED|COMPLETED|REFUNDED|CANCELLED|CONFIRMING|REFUND_REVIEW|ATTENTION|SUBMITTING|SUBMITTED|SUBMISSION_REVIEW") String status,
+        @Pattern(regexp = "|UPSTREAM|SELF_OPERATED") String fulfillmentMode,
         @Min(1) Long ownerId,
         @Pattern(regexp = "|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}") String orderId,
         @Pattern(regexp = "|[0-9]{4}-[0-9]{2}-[0-9]{2}") String createdFrom,
         @Pattern(regexp = "|[0-9]{4}-[0-9]{2}-[0-9]{2}") String createdTo) {
     public static ServiceOrderFilter empty() {
-        return new ServiceOrderFilter(null, null, null, null, null, null, null);
+        return new ServiceOrderFilter(null, null, null, null, null, null, null, null);
     }
 
     public boolean isEmpty() {
-        return blank(keyword) && blank(providerType) && blank(status) && ownerId == null
+        return blank(keyword) && blank(providerType) && blank(status) && blank(fulfillmentMode) && ownerId == null
                 && blank(orderId) && blank(createdFrom) && blank(createdTo);
     }
 

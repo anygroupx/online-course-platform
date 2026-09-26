@@ -45,6 +45,9 @@ public class ServiceOperation {
 
     private Long resolvedBy;
     @JsonIgnore @ToString.Exclude private String resolutionNote;
+    private String previousStatus;
+    private String resultingStatus;
+    private Integer completedSnapshot;
     private LocalDateTime expiresAt;
 
     @TableField(fill = FieldFill.INSERT)

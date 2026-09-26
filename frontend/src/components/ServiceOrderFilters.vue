@@ -17,6 +17,11 @@
           <el-option label="全部状态" value="" /><el-option v-for="state in orderSearchStates" :key="state" :label="stateLabel(state)" :value="state" />
         </el-select>
       </label>
+      <label v-if="admin"><span>履约方式</span>
+        <el-select :model-value="modelValue.fulfillmentMode" aria-label="履约方式" @update:model-value="update('fulfillmentMode', $event)">
+          <el-option label="全部" value="" /><el-option label="接口履约" value="UPSTREAM" /><el-option label="平台自营" value="SELF_OPERATED" />
+        </el-select>
+      </label>
       <label><span>创建日期 · 起始</span><input type="date" aria-label="创建日期起始" min="1000-01-01" max="9998-12-31"
         :value="modelValue.createdFrom" @input="update('createdFrom', $event.target.value)" /></label>
       <label><span>创建日期 · 截止</span><input type="date" aria-label="创建日期截止" min="1000-01-01" max="9998-12-31"

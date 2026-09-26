@@ -55,6 +55,24 @@ public class SecurityAuditServiceImpl implements SecurityAuditService {
     }
 
     @Override
+    public void recordFulfillmentRead(Long operatorId, String orderId) {
+        SecurityAuditLog entity = new SecurityAuditLog();
+        entity.setEventType("SERVICE_ORDER_FULFILLMENT_READ");
+        entity.setSeverity("INFO");
+        entity.setUserId(operatorId);
+        entity.setMessage("查看自营订单履约资料");
+        entity.setDetail("orderId=" + orderId + ",operatorId=" + operatorId);
+        entity.setTraceId(UUID.randomUUID().toString().replace("-", ""));
+        entity.setCreateTime(LocalDateTime.now());
+        try {
+            if (securityAuditLogMapper.insert(entity) != 1) throw new IllegalStateException();
+        } catch (Exception ignored) {
+            // Do not expose storage exception messages or return unaudited credentials.
+            throw new com.course.platform.common.exception.BusinessException("无法记录资料访问，请稍后重试");
+        }
+    }
+
+    @Override
     public IPage<SecurityAuditLog> query(String eventType, String severity, Integer page, Integer pageSize) {
         Page<SecurityAuditLog> p = new Page<>(page == null ? 1 : page, pageSize == null ? 20 : pageSize);
         LambdaQueryWrapper<SecurityAuditLog> qw = new LambdaQueryWrapper<>();

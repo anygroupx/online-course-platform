@@ -246,7 +246,10 @@ try {
   assert.equal(confirmations, 1);
   assert.equal(previews.length, 1);
   await page.getByRole("button", { name: "取消并退款", exact: true }).click();
-  await page.getByRole("button", { name: "确认退款", exact: true }).click();
+  await Promise.all([
+    page.waitForResponse((response) => response.url().endsWith('/service-order-operations/2d9d2c47-fec8-4f87-b8ad-cbde9e2ba036/confirm')),
+    page.getByRole("button", { name: "确认退款", exact: true }).click(),
+  ]);
   await page
     .getByRole("button", { name: "检查提交结果", exact: true })
     .last()

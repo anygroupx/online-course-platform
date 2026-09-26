@@ -100,7 +100,7 @@ class AppuiCommerceTransactionTest {
         var done=f.service.confirm(q.id()); assertEquals("SUCCEEDED",done.state()); f.money("97.50"); assertEquals(1,writes.get());
         assertEquals("已验证姓名", lastWrite.get("form[userName]"));
         assertNull(f.operations.selectById(q.id()).getPayloadEncrypted());
-        var order=f.service.orders(1,20,false,new ServiceOrderFilter(null,"appui",null,null,null,null,null)).getRecords().get(0);
+        var order=f.service.orders(1,20,false,new ServiceOrderFilter(null,"appui",null,null,null,null,null,null)).getRecords().get(0);
         assertEquals("天",order.quantityUnit()); assertNull(order.distance()); assertNull(order.schedule());
         assertEquals(10,order.quantity());
         assertEquals("SUCCEEDED",f.service.confirm(q.id()).state()); assertEquals(1,ledgerRows()); assertEquals(1,writes.get());

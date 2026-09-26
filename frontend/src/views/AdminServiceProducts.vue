@@ -31,6 +31,7 @@
         ><template #default="{ row }"
           >¥{{ row.unitPrice }} {{ row.priceUnit }}</template
         ></el-table-column
+      ><el-table-column label="履约方式" width="120"><template #default="{ row }"><el-tag>{{ row.fulfillmentMode === 'SELF_OPERATED' ? '自营' : '接口履约' }}</el-tag></template></el-table-column
       ><el-table-column label="状态" width="130"
         ><template #default="{ row }"
           ><el-tag :type="row.available ? 'success' : 'info'">{{
@@ -109,6 +110,13 @@
           </div>
           </el-form-item
         >
+        <el-form-item v-if="selectedType === 'heisha'" label="履约方式">
+          <el-select v-model="form.fulfillmentMode" aria-label="履约方式">
+            <el-option label="接口履约" value="UPSTREAM" />
+            <el-option label="平台自营" value="SELF_OPERATED" />
+          </el-select>
+          <p>{{ form.fulfillmentMode === 'SELF_OPERATED' ? '付款后等待管理员处理，可在订单中查看进度。' : '付款后自动提交服务申请，并持续更新订单进度。' }}</p>
+        </el-form-item>
         <el-form-item v-if="selectedType === 'flash'" label="项目"
           ><el-select
             v-model="form.project"
@@ -166,7 +174,7 @@
                 v-for="p in remoteProducts"
                 :key="p.id"
                 :value="p.id"
-                :label="`${p.name} · 成本 ¥${p.unitPrice}`" /></el-select
+                :label="form.fulfillmentMode === 'SELF_OPERATED' ? p.name : `${p.name} · 成本 ¥${p.unitPrice}`" /></el-select
             ><el-button
               :loading="reading"
               :disabled="!selectedProviderReady || !!editing"
@@ -198,7 +206,7 @@
           ><el-input
             v-model="form.unitPrice"
             inputmode="decimal"
-            placeholder="例如 0.25；不能低于成本价" /></el-form-item
+            :placeholder="form.fulfillmentMode === 'SELF_OPERATED' ? '填写销售单价，例如 0.25' : '例如 0.25；不能低于成本价'" /></el-form-item
         ><template v-if="selectedType === 'sxdk_tw'">
           <el-alert
             title="当前服务没有可验证的实时报价，不使用预设价格。"
@@ -293,6 +301,7 @@ const blank = () => ({
   description: "",
   unitPrice: "",
   enabled: false,
+  fulfillmentMode: "UPSTREAM",
   version: null,
 });
 const form = ref(blank());
@@ -416,6 +425,7 @@ function open(row, preset = null, requested = null) {
         description: row.description || "",
         unitPrice: row.unitPrice,
         enabled: row.enabled,
+        fulfillmentMode: row.fulfillmentMode || "UPSTREAM",
         version: row.version,
       }
     : blank();
@@ -475,6 +485,7 @@ function projectChanged() {
   form.value.remoteProductId = "";
 }
 function providerChanged() {
+  form.value.fulfillmentMode = "UPSTREAM";
   projectChanged();
   if (selectedType.value === "sxdk_tw") {
     form.value.project = "zxjy";

@@ -80,7 +80,7 @@ class ServiceOrderSearchTest {
     }
 
     private ServiceOrderFilter keyword(String text) {
-        return new ServiceOrderFilter(text, null, null, null, null, null, null);
+        return new ServiceOrderFilter(text, null, null, null, null, null, null, null);
     }
 
     private List<String> ids(ServiceOrderFilter filter) {
@@ -95,7 +95,7 @@ class ServiceOrderSearchTest {
         seal();
         assertEquals(List.of(own), ids(keyword("needle")));
         assertTrue(ids(keyword(otherId)).isEmpty());
-        assertTrue(ids(new ServiceOrderFilter(null, null, null, null, otherId, null, null)).isEmpty());
+        assertTrue(ids(new ServiceOrderFilter(null, null, null, null, null, otherId, null, null)).isEmpty());
         assertEquals(List.of(own), ids(keyword("13***07")));
     }
 
@@ -124,7 +124,7 @@ class ServiceOrderSearchTest {
         row(2, 7, "jiguang".equals(type) ? "flash" : "jiguang", "ACTIVE", "测试服务", "13***07", CREATED, null);
         row(3, 8, type, "ACTIVE", "测试服务", "13***08", CREATED, null);
         seal();
-        assertEquals(List.of(match), ids(new ServiceOrderFilter(null, type, null, null, null, null, null)));
+        assertEquals(List.of(match), ids(new ServiceOrderFilter(null, type, null, null, null, null, null, null)));
     }
 
     @Test
@@ -134,7 +134,7 @@ class ServiceOrderSearchTest {
         row(1, 7, "其他服务", "13***07");
         seal();
         var records = fixture.service.orders(1, 20, false,
-                new ServiceOrderFilter(null, "sxdk_tw", null, null, null, null, null)).getRecords();
+                new ServiceOrderFilter(null, "sxdk_tw", null, null, null, null, null, null)).getRecords();
         assertEquals(List.of(match), records.stream().map(OrderView::id).toList());
         assertNotNull(records.get(0).schedule());
     }
@@ -148,7 +148,7 @@ class ServiceOrderSearchTest {
         row(3, 8, "jiguang", state, "测试服务", "13***08", CREATED, null);
         seal();
         var data = fixture.service.orders(1, 20, false,
-                new ServiceOrderFilter(null, null, state, null, null, null, null));
+                new ServiceOrderFilter(null, null, state, null, null, null, null, null));
         assertEquals(List.of(match), data.getRecords().stream().map(OrderView::id).toList());
         assertTrue(data.getRecords().stream().allMatch(o -> state.equals(o.status())));
     }
@@ -162,7 +162,7 @@ class ServiceOrderSearchTest {
         row(5, 7, "jiguang", "CONFIRMING", "匹配", "13***07", CREATED, null);
         seal();
         var found = fixture.service.orders(1, 20, false,
-                new ServiceOrderFilter("匹配", "flash", "CONFIRMING", null, null, null, null));
+                new ServiceOrderFilter("匹配", "flash", "CONFIRMING", null, null, null, null, null));
         assertEquals(List.of(stored, pending), found.getRecords().stream().map(OrderView::id).toList());
         assertTrue(found.getRecords().stream().allMatch(o -> "CONFIRMING".equals(o.status())));
     }
@@ -174,10 +174,10 @@ class ServiceOrderSearchTest {
         String end = row(3, 7, "jiguang", "ACTIVE", "服务", "c", CREATED.toLocalDate().atTime(23, 59, 59), null);
         row(4, 7, "jiguang", "ACTIVE", "服务", "d", CREATED.toLocalDate().plusDays(1).atStartOfDay(), null);
         seal();
-        assertEquals(List.of(end, start), ids(new ServiceOrderFilter(null, null, null, null, null, "2026-09-12", "2026-09-12")));
-        assertEquals(3, ids(new ServiceOrderFilter(null, null, null, null, null, "2026-09-12", null)).size());
-        assertEquals(3, ids(new ServiceOrderFilter(null, null, null, null, null, null, "2026-09-12")).size());
-        assertTrue(ids(new ServiceOrderFilter(null, null, null, null, null, "2024-02-29", "2024-02-29")).isEmpty());
+        assertEquals(List.of(end, start), ids(new ServiceOrderFilter(null, null, null, null, null, null, "2026-09-12", "2026-09-12")));
+        assertEquals(3, ids(new ServiceOrderFilter(null, null, null, null, null, null, "2026-09-12", null)).size());
+        assertEquals(3, ids(new ServiceOrderFilter(null, null, null, null, null, null, null, "2026-09-12")).size());
+        assertTrue(ids(new ServiceOrderFilter(null, null, null, null, null, null, "2024-02-29", "2024-02-29")).isEmpty());
     }
 
     @Test
@@ -193,44 +193,59 @@ class ServiceOrderSearchTest {
         }
         assertEquals(expected, actual);
         String focus = expected.get(42);
-        assertEquals(List.of(focus), ids(new ServiceOrderFilter(null, null, null, null, focus, null, null)));
+        assertEquals(List.of(focus), ids(new ServiceOrderFilter(null, null, null, null, null, focus, null, null)));
         assertTrue(fixture.service.orders(4, 20, false).getRecords().isEmpty());
         assertTrue(fixture.service.orders(10000, 100, false).getRecords().isEmpty());
+    }
+
+    @Test
+    void administrativeFulfillmentFilterUsesOrderSnapshotAndCombinesWithPendingState() {
+        String local = row(1, 7, "heisha", "PENDING", "自营服务", "13***07", CREATED, null);
+        String upstream = row(2, 7, "heisha", "ACTIVE", "接口服务", "13***07", CREATED, null);
+        fixture.jdbc.update("UPDATE service_order SET fulfillment_mode='SELF_OPERATED' WHERE id=?", local);
+        seal();
+        fixture.auth(7, "api-provider:update");
+        assertEquals(List.of(local), fixture.service.orders(1, 20, true,
+                new ServiceOrderFilter(null, "heisha", "PENDING", "SELF_OPERATED", null, null, null, null))
+                .getRecords().stream().map(OrderView::id).toList());
+        assertEquals(List.of(upstream), fixture.service.orders(1, 20, true,
+                new ServiceOrderFilter(null, "heisha", null, "UPSTREAM", null, null, null, null))
+                .getRecords().stream().map(OrderView::id).toList());
     }
 
     @Test
     void administrativeOwnerScopeRequiresPermissionAndCannotBroadenTheUserEndpoint() {
         String own = row(1, 7, "服务", "13***07"), other = row(2, 8, "服务", "13***08");
         seal();
-        var filter = new ServiceOrderFilter(null, null, null, 8L, null, null, null);
+        var filter = new ServiceOrderFilter(null, null, null, null, 8L, null, null, null);
         assertThrows(BusinessException.class, () -> fixture.service.orders(1, 20, true, filter));
         assertThrows(BusinessException.class, () -> fixture.service.orders(1, 20, false, filter));
         assertThrows(BusinessException.class, () -> fixture.service.orders(1, 20, false,
-                new ServiceOrderFilter(null, null, null, 7L, null, null, null)));
+                new ServiceOrderFilter(null, null, null, null, 7L, null, null, null)));
         fixture.auth(7, "api-provider:update");
         assertEquals(List.of(other), fixture.service.orders(1, 20, true, filter).getRecords().stream().map(OrderView::id).toList());
         assertEquals(2, fixture.service.orders(1, 20, true).getTotal());
         assertEquals(List.of(own), ids(ServiceOrderFilter.empty()), "admin on the user URL still sees only their own orders");
         assertEquals(0, fixture.service.orders(1, 20, true,
-                new ServiceOrderFilter(null, null, null, Long.MAX_VALUE, null, null, null)).getTotal());
+                new ServiceOrderFilter(null, null, null, null, Long.MAX_VALUE, null, null, null)).getTotal());
     }
 
     @Test
     void directServiceValidationRejectsMalformedFiltersAndBounds() {
         seal();
         List<ServiceOrderFilter> invalid = new ArrayList<>(List.of(keyword("x".repeat(101)), keyword("line\nfeed"), keyword("bad\u0085")));
-        invalid.add(new ServiceOrderFilter(null, "unknown", null, null, null, null, null));
-        invalid.add(new ServiceOrderFilter(null, null, "active", null, null, null, null));
-        invalid.add(new ServiceOrderFilter(null, null, null, null, "not-a-uuid", null, null));
+        invalid.add(new ServiceOrderFilter(null, "unknown", null, null, null, null, null, null));
+        invalid.add(new ServiceOrderFilter(null, null, "active", null, null, null, null, null));
+        invalid.add(new ServiceOrderFilter(null, null, null, null, null, "not-a-uuid", null, null));
         for (String date : List.of("2026-02-29", "2026-09-31", "2026-9-01", "2026-01-01Z", "0999-12-31", "9999-01-01"))
-            invalid.add(new ServiceOrderFilter(null, null, null, null, null, date, null));
-        invalid.add(new ServiceOrderFilter(null, null, null, null, null, "2026-09-13", "2026-09-12"));
+            invalid.add(new ServiceOrderFilter(null, null, null, null, null, null, date, null));
+        invalid.add(new ServiceOrderFilter(null, null, null, null, null, null, "2026-09-13", "2026-09-12"));
         for (var filter : invalid) assertThrows(BusinessException.class, () -> fixture.service.orders(1, 20, false, filter));
         for (int[] bounds : List.of(new int[]{0, 20}, new int[]{10001, 20}, new int[]{1, 0}, new int[]{1, 101}))
             assertThrows(BusinessException.class, () -> fixture.service.orders(bounds[0], bounds[1], false));
         fixture.auth(7, "api-provider:update");
         assertThrows(BusinessException.class, () -> fixture.service.orders(1, 20, true,
-                new ServiceOrderFilter(null, null, null, 0L, null, null, null)));
+                new ServiceOrderFilter(null, null, null, null, 0L, null, null, null)));
         SecurityContextHolder.clearContext();
         assertThrows(BusinessException.class, () -> fixture.service.orders(1, 20, false));
     }

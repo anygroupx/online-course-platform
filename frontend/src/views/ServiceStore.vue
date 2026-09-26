@@ -43,13 +43,15 @@
           }}</el-tag>
         </div>
         <h2>{{ item.displayName ?? item.title }}</h2>
+        <el-tag v-if="item.fulfillmentMode === 'SELF_OPERATED'">平台自营</el-tag>
+        <p v-if="item.fulfillmentMode === 'SELF_OPERATED'">付款后由管理员处理，可在订单中查看进度。退款需联系管理员核对。</p>
         <p class="description">
           {{ item.description || "选择服务计划，确认价格后使用平台余额下单。" }}
         </p>
         <div class="service-tags">
           <span
             v-for="action in item.capabilities.filter(
-              (x) => !['CREATE', 'LOOKUP'].includes(x),
+              (x) => item.fulfillmentMode !== 'SELF_OPERATED' && !['CREATE', 'LOOKUP'].includes(x),
             )"
             :key="action"
             >{{ isTotalDistanceService(item) && action === "SYNC" ? "核对提交状态" : serviceActionName(action, item) }}</span

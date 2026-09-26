@@ -424,7 +424,7 @@ try {
     .click();
   await publish.getByPlaceholder("例如 0.25；不能低于成本价").fill("0.25");
   await publish
-    .getByPlaceholder("填写合同成本，不是原插件的默认值")
+    .getByPlaceholder("填写已核实的每服务日成本")
     .fill("0.10");
   const until = publish.getByLabel("本次价格核对有效期（最长 90 天）", {
     exact: true,

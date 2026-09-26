@@ -20,8 +20,9 @@ public final class ServiceCommerceTypes {
             @NotBlank @Size(max = 100) String title,
             @Size(max = 1000) String description,
             @NotNull @DecimalMin("0.000001") @DecimalMax("9999") @Digits(integer = 4, fraction = 6)
-                    BigDecimal unitPrice,
+            BigDecimal unitPrice,
             boolean enabled,
+            @Pattern(regexp = "UPSTREAM|SELF_OPERATED") String fulfillmentMode,
             Long version,
             @Valid ContractPriceForm contractPrice) {
         public ProductCommand(
@@ -41,8 +42,23 @@ public final class ServiceCommerceTypes {
                     description,
                     unitPrice,
                     enabled,
+                    "UPSTREAM",
                     version,
                     null);
+        }
+
+        public ProductCommand(
+                Long providerId,
+                String project,
+                String remoteProductId,
+                String title,
+                String description,
+                BigDecimal unitPrice,
+                boolean enabled,
+                Long version,
+                ContractPriceForm contractPrice) {
+            this(providerId, project, remoteProductId, title, description, unitPrice, enabled,
+                    "UPSTREAM", version, contractPrice);
         }
     }
 
@@ -187,6 +203,7 @@ public final class ServiceCommerceTypes {
             String priceUnit,
             boolean enabled,
             boolean available,
+            String fulfillmentMode,
             Long version,
             List<String> capabilities,
             ContractPriceView contractPrice) {}
@@ -198,6 +215,7 @@ public final class ServiceCommerceTypes {
             String providerType,
             String project,
             String status,
+            String fulfillmentMode,
             int quantity,
             Integer completed,
             String distance,
@@ -211,6 +229,21 @@ public final class ServiceCommerceTypes {
             String quantityUnit,
             TotalDistancePlan distancePlan,
             StatusCheckView statusCheck) {}
+
+    public record LocalFulfillmentForm(
+            @NotBlank @Pattern(regexp = "START|PROGRESS|COMPLETE|ATTENTION|RESUME") String action,
+            @NotNull @Min(0) Long orderVersion,
+            @Min(0) Integer completed,
+            @Size(max = 1000) String note) {
+        @Override public String toString() { return "LocalFulfillmentForm[REDACTED]"; }
+    }
+
+    public record FulfillmentDetails(String orderId, Map<String, Object> fields) {
+        @Override
+        public String toString() {
+            return "FulfillmentDetails[orderId=" + orderId + ", fields=REDACTED]";
+        }
+    }
 
     public record StatusCheckView(
             @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING)
@@ -267,7 +300,8 @@ public final class ServiceCommerceTypes {
             String errorCategory,
             LocalDateTime createTime) {}
 
-    public record AuditEventView(EventView operation, Long resolvedBy, String evidence) {}
+    public record AuditEventView(EventView operation, Long resolvedBy, String evidence,
+            String previousStatus, String resultingStatus, Integer completed) {}
 
     public record OrderAuditView(
             OrderView order,
