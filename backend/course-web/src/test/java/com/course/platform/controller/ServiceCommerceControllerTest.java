@@ -347,7 +347,7 @@ class ServiceCommerceControllerTest {
     @Test
     void statusChecksExposeOnlySuccessfulBeijingTimeAndGenericDelayFlag() throws Exception {
         var checked = LocalDateTime.of(2026, 9, 11, 10, 20, 30);
-        var view = new OrderView("order-id", "晨跑", "st***nt", "jiguang", "default", "ACTIVE",
+        var view = new OrderView("order-id", "晨跑", "st***nt", "jiguang", "default", "ACTIVE", "UPSTREAM",
                 10, 3, "2.00", "5.00", "0.00", null, checked.minusDays(1), 2L,
                 List.of("PAUSE"), null, "次", null, new StatusCheckView(checked, true));
         when(service.sync("order-id")).thenReturn(view);
@@ -389,7 +389,7 @@ class ServiceCommerceControllerTest {
         mvc.perform(get("/service-orders").param("keyword", "").param("providerType", "").param("createdFrom", ""))
                 .andExpect(status().isOk());
         verify(service, times(2)).orders(1, 20, false);
-        var filter = new ServiceOrderFilter("100%_!", "flash", "CONFIRMING", null,
+        var filter = new ServiceOrderFilter("100%_!", "flash", "CONFIRMING", null, null,
                 "00000000-0000-0000-0000-000000000001", "2026-09-01", "2026-09-12");
         when(service.orders(2, 20, false, filter)).thenReturn(new Page<>(2, 20));
         mvc.perform(get("/service-orders").param("page", "2").param("pageSize", "20")
@@ -407,7 +407,7 @@ class ServiceCommerceControllerTest {
         mvc.perform(get("/admin/service-orders").param("ownerId", "8")).andExpect(status().isForbidden());
         verifyNoInteractions(service);
         auth("api-provider:update");
-        var filter = new ServiceOrderFilter(null, null, null, Long.MAX_VALUE, null, null, null);
+        var filter = new ServiceOrderFilter(null, null, null, null, Long.MAX_VALUE, null, null, null);
         when(service.orders(1, 20, true, filter)).thenReturn(new Page<>(1, 20));
         mvc.perform(get("/admin/service-orders").param("ownerId", Long.toString(Long.MAX_VALUE)))
                 .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
@@ -457,6 +457,42 @@ class ServiceCommerceControllerTest {
                 .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
         verify(service).resolve(eq("op-id"), argThat(form -> "yid-451".equals(form.externalOrderNo())
                 && "17".equals(form.externalSubOrderNo()) && form.refundedUnits() == null));
+    }
+
+    @Test
+    void fulfillmentEndpointsRequireDedicatedPermissionAndNeverCache() throws Exception {
+        String id = "70fe9178-8f36-434e-8200-f4d1c9ed82d0";
+        for (String permission : List.of("ROLE_USER", "api-provider:update", "payment:reconcile", "security:event:read")) {
+            auth(permission);
+            mvc.perform(get("/admin/service-orders/" + id + "/fulfillment")).andExpect(status().isForbidden());
+            mvc.perform(post("/admin/service-orders/" + id + "/fulfillment").contentType("application/json")
+                    .content("{\"action\":\"START\",\"orderVersion\":0}")).andExpect(status().isForbidden());
+        }
+        verifyNoInteractions(service);
+        auth("service-order:fulfill");
+        when(service.fulfillmentDetails(id)).thenReturn(new FulfillmentDetails(id, Map.of("password", "authorized-secret")));
+        mvc.perform(get("/admin/service-orders/" + id + "/fulfillment"))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.data.fields.password").value("authorized-secret"));
+        mvc.perform(post("/admin/service-orders/" + id + "/fulfillment").contentType("application/json")
+                .content("{\"action\":\"START\",\"orderVersion\":0}"))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
+    }
+
+    @Test
+    void orderFormHasNoClientSelectableFulfillmentMode() throws Exception {
+        for (var component : OrderForm.class.getRecordComponents()) {
+            org.junit.jupiter.api.Assertions.assertFalse(Set.of("fulfillmentMode", "selfOperated").contains(component.getName()));
+        }
+        mvc.perform(post("/services/1/quotes").contentType("application/json")
+                        .content("{\"quantity\":1,\"distance\":2,\"fields\":{},\"authorizedAccount\":true,\"fulfillmentMode\":\"SELF_OPERATED\",\"selfOperated\":true}"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(service);
+        var tolerantMapper = new ObjectMapper().findAndRegisterModules()
+                .disable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        OrderForm form = tolerantMapper.readValue(
+                "{\"quantity\":1,\"distance\":2,\"fields\":{},\"authorizedAccount\":true,\"fulfillmentMode\":\"SELF_OPERATED\",\"selfOperated\":true}", OrderForm.class);
+        org.junit.jupiter.api.Assertions.assertEquals(new OrderForm(1, new java.math.BigDecimal("2"), Map.of(), null, true), form);
     }
 
 }

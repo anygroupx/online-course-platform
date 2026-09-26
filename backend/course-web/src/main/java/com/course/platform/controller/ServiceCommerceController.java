@@ -148,6 +148,19 @@ public class ServiceCommerceController {
                 : service.orders(page, pageSize, true, filter));
     }
 
+    @PostMapping("/admin/service-orders/{id}/fulfillment")
+    @PreAuthorize("hasAuthority('service-order:fulfill')")
+    public ResponseEntity<Result<OrderView>> manageFulfillment(
+            @PathVariable String id, @Valid @RequestBody LocalFulfillmentForm form) {
+        return ok(service.manageFulfillment(id, form));
+    }
+
+    @GetMapping("/admin/service-orders/{id}/fulfillment")
+    @PreAuthorize("hasAuthority('service-order:fulfill')")
+    public ResponseEntity<Result<FulfillmentDetails>> fulfillmentDetails(@PathVariable String id) {
+        return ok(service.fulfillmentDetails(id));
+    }
+
     @GetMapping("/admin/service-order-operations/{id}")
     @PreAuthorize("hasAuthority('api-provider:update') and hasAuthority('payment:reconcile')")
     public ResponseEntity<Result<QuoteView>> adminOperation(@PathVariable String id) {

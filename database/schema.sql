@@ -614,3 +614,143 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- 6. 字符集使用utf8mb4，支持emoji等特殊字符
 -- 7. 符合SOLID原则，表结构清晰，职责单一
 -- =============================================
+
+-- Native service commerce snapshot, including migration 034.
+-- Fresh databases only; existing installations apply numbered migrations instead.
+
+-- Native service commerce. Apply explicitly; never execute legacy supplier SQL.
+-- Existing account_ledger is reused; monetary changes and operation transitions share a transaction.
+CREATE TABLE IF NOT EXISTS service_product (
+ id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ provider_id BIGINT NOT NULL, provider_type VARCHAR(20) NOT NULL,
+ project VARCHAR(16) NOT NULL, remote_product_id VARCHAR(64) NOT NULL,
+ title VARCHAR(100) NOT NULL, description VARCHAR(1000), unit_price DECIMAL(16,6) NOT NULL,
+ enabled TINYINT NOT NULL DEFAULT 0, version BIGINT NOT NULL DEFAULT 0,
+ create_time DATETIME NOT NULL, update_time DATETIME NOT NULL,
+ UNIQUE KEY uk_service_product_binding (provider_id, project, remote_product_id),
+ CONSTRAINT fk_service_product_provider FOREIGN KEY (provider_id) REFERENCES api_provider(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS service_order (
+ id VARCHAR(36) NOT NULL PRIMARY KEY, user_id BIGINT NOT NULL, product_id BIGINT NOT NULL,
+ provider_id BIGINT NOT NULL, provider_version BIGINT NOT NULL, provider_identity CHAR(64) NOT NULL, provider_type VARCHAR(20) NOT NULL,
+ project VARCHAR(16) NOT NULL, remote_product_id VARCHAR(64) NOT NULL, external_order_no VARCHAR(64), external_sub_order_no VARCHAR(64),
+ title VARCHAR(100) NOT NULL, account_label VARCHAR(120) NOT NULL, status VARCHAR(24) NOT NULL,
+ quantity INT NOT NULL, completed INT NOT NULL DEFAULT 0, distance DECIMAL(8,2) NOT NULL,
+ unit_charge DECIMAL(16,6) NOT NULL, paid_amount DECIMAL(14,2) NOT NULL, refunded_amount DECIMAL(14,2) NOT NULL DEFAULT 0,
+ version BIGINT NOT NULL DEFAULT 0, pending_operation_id VARCHAR(36),
+ create_time DATETIME NOT NULL, update_time DATETIME NOT NULL,
+ KEY idx_service_order_owner (user_id, create_time), KEY idx_service_order_status (status, update_time),
+ UNIQUE KEY uk_service_remote_order (provider_id, project, external_order_no),
+ CONSTRAINT fk_service_order_product FOREIGN KEY (product_id) REFERENCES service_product(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS service_order_operation (
+ id VARCHAR(36) NOT NULL PRIMARY KEY, order_id VARCHAR(36) NOT NULL, user_id BIGINT NOT NULL,
+ product_id BIGINT NOT NULL, product_version BIGINT NOT NULL, provider_version BIGINT NOT NULL,
+ order_version BIGINT, action VARCHAR(20) NOT NULL, state VARCHAR(20) NOT NULL,
+ quantity INT NOT NULL, distance DECIMAL(8,2) NOT NULL, unit_charge DECIMAL(16,6) NOT NULL,
+ amount DECIMAL(14,2) NOT NULL, account_label VARCHAR(120) NOT NULL,
+ payload_encrypted MEDIUMTEXT, error_category VARCHAR(40),
+ resolved_by BIGINT, resolution_note VARCHAR(1000), expires_at DATETIME NOT NULL,
+ create_time DATETIME NOT NULL, update_time DATETIME NOT NULL,
+ KEY idx_service_operation_owner (user_id, create_time),
+ KEY idx_service_operation_order (order_id, create_time),
+ KEY idx_service_operation_state (state, update_time),
+ CONSTRAINT fk_service_operation_product FOREIGN KEY (product_id) REFERENCES service_product(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Requires migration 018. Explicitly authorize and validate against the target MySQL before applying.
+-- sxdk_tw has no verified live-price endpoint. Administrators must attest a time-limited contract price.
+ALTER TABLE service_product ADD COLUMN contract_unit_cost DECIMAL(16,6) NULL;
+ALTER TABLE service_product ADD COLUMN contract_valid_until DATE NULL;
+ALTER TABLE service_product ADD COLUMN contract_evidence VARCHAR(1000) NULL;
+ALTER TABLE service_product ADD COLUMN contract_reviewed_by BIGINT NULL;
+ALTER TABLE service_product ADD COLUMN contract_reviewed_at DATETIME NULL;
+ALTER TABLE service_product ADD COLUMN contract_provider_identity CHAR(64) NULL;
+-- Calendar snapshots contain only scheduling/paid-date data, never student credentials or addresses.
+ALTER TABLE service_order ADD COLUMN schedule_json MEDIUMTEXT NULL;
+ALTER TABLE service_order_operation ADD COLUMN schedule_json MEDIUMTEXT NULL;
+ALTER TABLE service_order MODIFY COLUMN distance DECIMAL(8,2) NULL;
+ALTER TABLE service_order_operation MODIFY COLUMN distance DECIMAL(8,2) NULL;
+
+-- Requires 018/019. Temporary account authorization; never deploy without explicit authorization.
+CREATE TABLE service_account_session (
+ id VARCHAR(36) NOT NULL PRIMARY KEY, user_id BIGINT NOT NULL, product_id BIGINT NOT NULL,
+ product_version BIGINT NOT NULL, provider_version BIGINT NOT NULL,
+ mode VARCHAR(16) NOT NULL, state VARCHAR(24) NOT NULL, account_label VARCHAR(120) NOT NULL,
+ rules_refresh_at DATETIME NULL, snapshot_encrypted MEDIUMTEXT NULL, version BIGINT NOT NULL DEFAULT 0,
+ expires_at DATETIME NOT NULL, create_time DATETIME NOT NULL, update_time DATETIME NOT NULL,
+ KEY idx_service_account_owner (user_id, expires_at),
+ KEY idx_service_account_expiry (expires_at),
+ CONSTRAINT fk_service_account_product FOREIGN KEY (product_id) REFERENCES service_product(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+ALTER TABLE service_order_operation ADD COLUMN account_session_id VARCHAR(36) NULL;
+ALTER TABLE service_order_operation ADD COLUMN account_session_version BIGINT NULL;
+
+-- Native service quotes and orders retain exact six-decimal price * two-decimal distance.
+-- Apply after 018/019/020 before enabling native services. Requires deployment authorization.
+-- Widen only: existing six-decimal snapshots and all paid/refunded/quoted amounts stay unchanged.
+-- No price backfill or repricing of historical orders/READY operations.
+ALTER TABLE service_order MODIFY COLUMN unit_charge DECIMAL(18,8) NOT NULL;
+ALTER TABLE service_order_operation MODIFY COLUMN unit_charge DECIMAL(18,8) NOT NULL;
+
+-- Read-only status checks. Apply explicitly before deploying this schema-dependent code.
+-- Existing status, money, contracts and business versions are not rewritten.
+ALTER TABLE service_order ADD COLUMN status_checked_at DATETIME NULL;
+ALTER TABLE service_order ADD COLUMN status_check_after DATETIME NULL;
+ALTER TABLE service_order ADD COLUMN status_check_attempt_at DATETIME NULL;
+ALTER TABLE service_order ADD COLUMN status_check_failures INT NOT NULL DEFAULT 0;
+ALTER TABLE service_order ADD COLUMN status_check_state VARCHAR(8) NULL;
+ALTER TABLE service_order ADD COLUMN status_check_token VARCHAR(36) NULL;
+ALTER TABLE service_order ADD COLUMN status_check_until DATETIME NULL;
+ALTER TABLE service_order ADD CONSTRAINT chk_service_status_failures CHECK (status_check_failures BETWEEN 0 AND 8);
+ALTER TABLE service_order ADD CONSTRAINT chk_service_status_check_state CHECK (status_check_state IS NULL OR status_check_state IN ('OK', 'RETRY'));
+ALTER TABLE service_order ADD CONSTRAINT chk_service_status_check_lease CHECK ((status_check_token IS NULL AND status_check_until IS NULL) OR (status_check_token IS NOT NULL AND status_check_until IS NOT NULL));
+CREATE INDEX idx_service_order_check ON service_order (provider_type, status, status_check_after, status_check_until);
+
+-- Black Shark self-operated fulfillment. Apply explicitly before deploying schema-dependent code.
+-- Existing products and orders remain upstream-routed historical records.
+ALTER TABLE service_product
+  ADD COLUMN fulfillment_mode VARCHAR(20) NOT NULL DEFAULT 'UPSTREAM' AFTER enabled;
+ALTER TABLE service_product
+  ADD CONSTRAINT chk_service_product_fulfillment
+  CHECK (fulfillment_mode IN ('UPSTREAM', 'SELF_OPERATED'));
+CREATE INDEX idx_service_product_fulfillment
+  ON service_product (provider_type, fulfillment_mode, enabled);
+
+ALTER TABLE service_order
+  ADD COLUMN fulfillment_mode VARCHAR(20) NOT NULL DEFAULT 'UPSTREAM' AFTER status;
+ALTER TABLE service_order
+  ADD CONSTRAINT chk_service_order_fulfillment
+  CHECK (fulfillment_mode IN ('UPSTREAM', 'SELF_OPERATED'));
+CREATE INDEX idx_service_order_fulfillment
+  ON service_order (fulfillment_mode, status, update_time);
+
+ALTER TABLE service_order_operation
+  ADD COLUMN previous_status VARCHAR(24) NULL AFTER resolution_note;
+ALTER TABLE service_order_operation
+  ADD COLUMN resulting_status VARCHAR(24) NULL AFTER previous_status;
+ALTER TABLE service_order_operation
+  ADD COLUMN completed_snapshot INT NULL AFTER resulting_status;
+ALTER TABLE service_order_operation
+  ADD CONSTRAINT chk_service_operation_completed_snapshot
+  CHECK (completed_snapshot IS NULL OR completed_snapshot >= 0);
+
+CREATE TABLE service_order_fulfillment (
+  order_id VARCHAR(36) NOT NULL PRIMARY KEY,
+  payload_encrypted MEDIUMTEXT NOT NULL,
+  version BIGINT NOT NULL DEFAULT 0,
+  create_time DATETIME NOT NULL,
+  update_time DATETIME NOT NULL,
+  CONSTRAINT fk_service_fulfillment_order
+    FOREIGN KEY (order_id) REFERENCES service_order(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO sys_permission (permission_code, permission_name)
+VALUES ('service-order:fulfill', '处理自营服务订单')
+ON DUPLICATE KEY UPDATE permission_name = VALUES(permission_name), enabled = 1;
+
+INSERT IGNORE INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id
+FROM sys_role r
+JOIN sys_permission p ON p.permission_code = 'service-order:fulfill'
+WHERE r.role_code IN ('SUPER_ADMIN', 'OPERATOR');

@@ -388,7 +388,7 @@ try {
   await navigate("/providers"); await page.getByRole("button", { name: "添加接口", exact: true }).click();
   const provider = page.locator(".el-dialog:visible"); await provider.locator(".el-select").first().click();
   await page.getByRole("option", { name: "雷电（四种运动项目）", exact: true }).click();
-  await provider.getByText(/不要添加 ldrun 或 api.php/).waitFor();
+  await provider.getByText("填写已授权的 HTTPS 服务根地址，不要添加 /ldrun 或 /api.php。", { exact: false }).waitFor();
   assert.equal(await provider.locator(".el-form-item").filter({ has: page.locator(".el-form-item__label", { hasText: /^密码$/ }) }).count(), 0);
   await provider.locator(".el-dialog__headerbtn").click();
 

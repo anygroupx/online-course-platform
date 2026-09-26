@@ -21,6 +21,7 @@ public class ServiceProduct {
     private String description;
     private BigDecimal unitPrice;
     private Boolean enabled;
+    private String fulfillmentMode;
     private BigDecimal contractUnitCost;
     private java.time.LocalDate contractValidUntil;
 

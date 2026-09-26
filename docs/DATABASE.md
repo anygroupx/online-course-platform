@@ -112,3 +112,24 @@ docker exec -it course-mysql mysql -uroot -p online_course
 - `SPRING_DATASOURCE_URL`
 - `SPRING_DATASOURCE_USERNAME`
 - `SPRING_DATASOURCE_PASSWORD`
+
+
+### 黑鲨双履约模式（migration 034）
+
+服务商城继续使用 `service_product → service_order_operation → service_order`；不使用 `course_order` 或 AQKS 自动任务。
+`fulfillment_mode` 支持 `UPSTREAM`（默认）和 `SELF_OPERATED`。仅黑鲨商品允许自营，订单在创建时复制模式，后续商品修改不会改变历史订单。
+
+- `UPSTREAM`：保留原有交易流程，调用黑鲨 CREATE 并绑定远端订单，使用 SYNC 更新状态。
+- `SELF_OPERATED`：仍执行必要的账号预检、规则和官方人脸授权；保留 Provider 绑定、启用/验证要求及 `HEISHA_FACE_ALLOWED_ORIGINS`。报价使用商品销售价，不校验接口目录成本。确认在同一事务内扣账、创建 PENDING 订单及加密履约资料、完成操作；不调用远端 CREATE。手动刷新返回本地状态，自动同步 SQL 排除此模式。
+
+`service_order_fulfillment` 以 `order_id` 为唯一主键，保存 `payload_encrypted`、版本及时间；使用 `SecretCrypto` / `APP_CRYPTO_SECRET`。只保留账号、密码和所选计划/区域/时间/规则等必要字段，不保留远端预检或人脸 token。普通订单和审计 DTO 不含这些资料。
+
+新增 `service-order:fulfill`，默认只授予 SUPER_ADMIN、OPERATOR。
+`GET /admin/service-orders/{id}/fulfillment` 需此权限，返回 `Cache-Control: no-store`，并记录仅含订单/操作员标识的安全事件。
+`POST /admin/service-orders/{id}/fulfillment` 接收 `action`、`orderVersion`，以及适用的 `completed`、`note`：
+START：PENDING → ACTIVE；PROGRESS：ACTIVE 单调增加进度（不超过 quantity）；COMPLETE：ACTIVE → COMPLETED 且完成全部数量；ATTENTION：PENDING/ACTIVE → ATTENTION（必填原因）；RESUME：ATTENTION → ACTIVE（必填备注）。
+每次变更增加订单版本，并在 `service_order_operation` 保存 LOCAL_* 事件、操作员、时间、旧/新状态、进度与备注。版本冲突和重复完成不产生副作用。
+
+本期不开放自助取消/退款；页面引导联系管理员财务核对。不得直接修改余额或猜测部分履约退款额，后续退款能力必须走 AccountLedger 独立资金流程。
+
+部署前须备份数据库并由授权人员在 MySQL 8 执行 `database/migrations/034_heisha_self_operated_fulfillment.sql`（已有 018–033 基础上）。历史商品/订单自动使用 UPSTREAM。新建库的 `database/schema.sql` 已包含对应服务商城结构，不应再重复执行这些建表/加列语句。保留 `APP_CRYPTO_SECRET`，并继续配置现有原生服务开关及人脸允许域名；本次没有新增环境变量。敏感资料窗口关闭、切换页面或登录权限变化时清空内存，不写入浏览器持久化。

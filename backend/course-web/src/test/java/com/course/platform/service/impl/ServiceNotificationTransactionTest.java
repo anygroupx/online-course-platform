@@ -73,12 +73,13 @@ class ServiceNotificationTransactionTest {
                         "020_service_account_sessions.sql",
                         "029_native_service_price_precision.sql",
                         "030_native_service_status_refresh.sql",
+                        "034_heisha_self_operated_fulfillment.sql",
                         "023_native_service_notifications.sql")) {
             String ddl =
                     Files.readString(root.resolve("database/migrations/" + file))
                             .replaceAll("(?m)^--.*$", "")
                             .replace("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", "");
-            for (String stmt : ddl.split(";")) if (!stmt.isBlank()) jdbc.execute(stmt);
+            for (String stmt : ddl.split(";")) if (!stmt.isBlank() && !stmt.stripLeading().startsWith("INSERT")) jdbc.execute(stmt);
         }
         jdbc.update(
                 "INSERT INTO"

@@ -358,7 +358,7 @@ class JingyuCommerceTransactionTest {
         assertEquals(1, f.service.refreshDueStatuses());
         assertEquals(1, f.orders.selectById(created.orderId()).getCompleted());
         assertEquals(1, writes.get()); assertEquals(1, ledgerRows());
-        var filter = new ServiceOrderFilter(null, "jingyu", null, null, null, null, null);
+        var filter = new ServiceOrderFilter(null, "jingyu", null, null, null, null, null, null);
         assertEquals(1, f.service.orders(1, 20, false, filter).getTotal());
     }
 }

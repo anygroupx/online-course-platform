@@ -73,3 +73,8 @@ export const checkServiceAccountFace = (sessionId) =>
   write(`/service-account-sessions/${id(sessionId)}/face-check`, {});
 export const issueServiceFaceLaunch = (sessionId) =>
   write(`/service-account-sessions/${id(sessionId)}/face-launch`, {});
+
+export const manageServiceFulfillment = (orderId, data) =>
+  write(`/admin/service-orders/${id(orderId)}/fulfillment`, data);
+export const getServiceFulfillment = (orderId, signal) =>
+  read(`/admin/service-orders/${id(orderId)}/fulfillment`, undefined, signal);

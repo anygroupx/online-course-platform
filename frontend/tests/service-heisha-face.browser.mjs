@@ -29,6 +29,7 @@ const product = {
   id: 13,
   providerId: 9,
   providerType: "heisha",
+  fulfillmentMode: "UPSTREAM",
   project: "default",
   remoteProductId: "3",
   title: "黑鲨 · 人脸日常跑",

@@ -121,6 +121,7 @@ public class SecurityConfig {
                         .requestMatchers("/customer-service/admin/**").hasAuthority("customer-service:read")
                         .requestMatchers("/customer-service/session/*/assign").hasAuthority("customer-service:assign")
                         .requestMatchers("/admin/api-providers/**").hasAuthority("api-provider:update")
+                        .requestMatchers("/admin/service-orders/*/fulfillment").hasAuthority("service-order:fulfill")
                         // Native-service controllers enforce finer, dual financial permissions at method level.
                         .requestMatchers("/admin/service-products/**", "/admin/service-orders/**", "/admin/service-order-operations/**",
                                 "/admin/plugin-integrations/**", "/admin/service-projects/**", "/admin/service-project-catalog", "/admin/project-operations/**",

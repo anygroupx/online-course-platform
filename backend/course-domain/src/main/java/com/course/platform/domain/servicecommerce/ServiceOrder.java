@@ -26,6 +26,7 @@ public class ServiceOrder {
     private String title;
     private String accountLabel;
     private String status;
+    private String fulfillmentMode;
     private Integer quantity;
     private Integer completed;
     private BigDecimal distance;

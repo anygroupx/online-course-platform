@@ -52,11 +52,13 @@
               {{ item.createTime?.replace("T", " ") }}</small
             >
             <h2>{{ item.title }}</h2>
+            <el-tag v-if="item.fulfillmentMode === 'SELF_OPERATED'">平台自营</el-tag>
           </div>
           <el-tag :type="tagType(item.status, item.providerType)">{{
             orderStateName(item)
           }}</el-tag>
         </div>
+        <p v-if="item.fulfillmentMode === 'SELF_OPERATED'">退款需联系管理员进行财务核对。</p>
         <div class="order-metrics">
           <div>
             <span>服务账号</span><strong>{{ item.accountLabel }}</strong>
@@ -174,6 +176,7 @@
               ></template
             >
             <template v-else>
+              <ServiceFulfillment :order="item" @changed="load" />
               <el-button @click="showAudit(item)">核对资料与记录</el-button>
               <el-button
                 v-if="item.pendingOperationId"
@@ -443,6 +446,11 @@
             <small v-if="entry.resolvedBy"
               >核对人 #{{ entry.resolvedBy }}</small
             >
+            <p v-if="entry.previousStatus && entry.resultingStatus">
+              {{ orderStateName({ ...audit.order, status: entry.previousStatus }) }} →
+              {{ orderStateName({ ...audit.order, status: entry.resultingStatus }) }}
+              · 已完成 {{ entry.completed }} / {{ audit.order.quantity }}
+            </p>
             <p v-if="entry.evidence" class="audit-evidence">
               {{ entry.evidence }}
             </p></el-timeline-item
@@ -623,6 +631,7 @@ import {
 } from "@/utils/serviceCommerce";
 import InternshipPlanFields from "@/components/InternshipPlanFields.vue";
 import ServiceNotifications from "@/components/ServiceNotifications.vue";
+import ServiceFulfillment from "@/components/ServiceFulfillment.vue";
 import ServiceStatusCheck from "@/components/ServiceStatusCheck.vue";
 import ServiceOrderFilters from "@/components/ServiceOrderFilters.vue";
 import { useServiceOrderSearch } from "@/composables/useServiceOrderSearch";
@@ -681,6 +690,7 @@ const filterSummary = computed(() => {
   const f = applied.value, labels = [];
   if (f.keyword) labels.push(`搜索：${f.keyword}`);
   if (f.providerType) labels.push(serviceNames[f.providerType]);
+  if (f.fulfillmentMode) labels.push(f.fulfillmentMode === "SELF_OPERATED" ? "平台自营" : "接口履约");
   if (f.status) labels.push(f.status === "COMPLETED" && !["sxdk_tw", "appui"].includes(f.providerType)
     ? "已结束 / 已完成" : orderStateName({ providerType: f.providerType, status: f.status }));
   if (f.createdFrom || f.createdTo) labels.push(`创建日期：${f.createdFrom || "不限"} 至 ${f.createdTo || "不限"}`);

@@ -183,6 +183,26 @@ class ProjectCenterHttpSecurityTest {
     }
 
     @Test
+    void fulfillmentUsesDedicatedPermissionAndNeverCachesCredentials() throws Exception {
+        String path = "/api/admin/service-orders/00000000-0000-0000-0000-000000000001/fulfillment";
+        for (String permission : List.of("ROLE_USER", "api-provider:update", "ROLE_FINANCE", "ROLE_AUDITOR")) {
+            mvc.perform(get(path).contextPath("/api").with(authentication(auth(permission))))
+                    .andExpect(status().isForbidden());
+            mvc.perform(post(path).contextPath("/api").with(authentication(auth(permission)))
+                    .contentType("application/json").content("{\"action\":\"START\",\"orderVersion\":0}"))
+                    .andExpect(status().isForbidden());
+        }
+        verifyNoInteractions(commerce);
+        mvc.perform(get(path).contextPath("/api").with(authentication(auth("service-order:fulfill"))))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
+        mvc.perform(post(path).contextPath("/api").with(authentication(auth("service-order:fulfill")))
+                .contentType("application/json").content("{\"action\":\"START\",\"orderVersion\":0}"))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
+        verify(commerce).fulfillmentDetails("00000000-0000-0000-0000-000000000001");
+        verify(commerce).manageFulfillment(eq("00000000-0000-0000-0000-000000000001"), any());
+    }
+
+    @Test
     void downstreamWebRoutesRequireLoginAndExternalKeyCannotReplaceJwt() throws Exception {
         for(String path:List.of("/project-client-tickets","/project-clients","/project-clients/catalog","/project-clients/stats","/project-client-operations","/project-api-keys/OWNER","/project-api-calls")) {
             mvc.perform(get("/api"+path).contextPath("/api").header("X-Project-Key","npo_"+"a".repeat(64))).andExpect(status().isUnauthorized());

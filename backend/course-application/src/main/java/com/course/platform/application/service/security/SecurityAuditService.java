@@ -7,5 +7,8 @@ public interface SecurityAuditService {
     void record(String eventType, String severity, Long userId, String username,
                 String path, String method, String message, String detail);
 
+    /** Must persist successfully before sensitive fulfillment data is returned. */
+    void recordFulfillmentRead(Long operatorId, String orderId);
+
     IPage<SecurityAuditLog> query(String eventType, String severity, Integer page, Integer pageSize);
 }

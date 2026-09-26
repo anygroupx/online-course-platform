@@ -81,7 +81,7 @@ try {
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.screenshot({path:`${out}/pricing-confirm-mobile-dark.png`,fullPage:true,animations:'disabled'});
   await dialog.getByRole('button',{name:'确认并下单',exact:true}).click();
-  await dialog.getByRole('button',{name:'检查提交结果',exact:true}).waitFor();
+  await dialog.locator('button:not([disabled])').filter({hasText:'检查提交结果'}).waitFor();
   assert.equal(writes.length,1);assert.equal(await dialog.getByRole('button',{name:'确认并下单',exact:true}).count(),0);
   assert.match(await dialog.locator('[aria-label="费用明细"]').innerText(),/0\.05499989/);
   await dialog.getByRole('button',{name:'检查提交结果',exact:true}).click();await dialog.waitFor({state:'hidden'});
@@ -101,7 +101,7 @@ try {
   await page.context().addCookies([{name:'course_csrf',value:'fixture-csrf',url:base}]);
   await page.evaluate(()=>window.expireAccessToken());
   await dialog.getByRole('button',{name:'确认并下单',exact:true}).click();
-  await dialog.getByRole('button',{name:'检查提交结果',exact:true}).waitFor();
+  await dialog.locator('button:not([disabled])').filter({hasText:'检查提交结果'}).waitFor();
   assert.equal(refreshes,1);assert.equal(writes.length,3);
   assert.ok(writes.at(-1).includes(ids.refresh));
   assert.equal(await dialog.getByRole('button',{name:'确认并下单',exact:true}).count(),0);

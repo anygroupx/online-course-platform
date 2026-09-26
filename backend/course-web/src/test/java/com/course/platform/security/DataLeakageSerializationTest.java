@@ -61,6 +61,21 @@ class DataLeakageSerializationTest {
         assertNoSecrets(mapper.writeValueAsString(info));
     }
 
+    @Test
+    void selfOperatedFulfillmentMaterialIsExcludedFromEntitySerializationAndDiagnostics() throws Exception {
+        var material = new com.course.platform.domain.servicecommerce.ServiceOrderFulfillment();
+        material.setOrderId("order-id");
+        material.setPayloadEncrypted("local-password-secret");
+        assertFalse(mapper.writeValueAsString(material).contains("local-password-secret"));
+        assertFalse(material.toString().contains("local-password-secret"));
+        var form = new com.course.platform.domain.servicecommerce.ServiceCommerceTypes.LocalFulfillmentForm(
+                "ATTENTION", 1L, null, "local-password-secret");
+        assertFalse(form.toString().contains("local-password-secret"));
+        for (var component : com.course.platform.domain.servicecommerce.ServiceCommerceTypes.OrderView.class.getRecordComponents()) {
+            assertFalse(java.util.Set.of("password", "rawAccount", "payload", "token", "providerId").contains(component.getName()));
+        }
+    }
+
     private void assertNoSecrets(String json) {
         for (String value : new String[]{"user-password-secret", "api-key-secret", "api-key-hash",
                 "mfa-secret", "provider-password-secret", "provider-token-secret", "provider-key-secret",
