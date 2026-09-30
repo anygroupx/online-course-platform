@@ -76,8 +76,9 @@ public class ProjectTicketImageCodecTest {
     }
 
     @Test void saturatedDecoderRejectsInsteadOfQueueingMorePixelBuffers() throws Exception {
-        var field = ProjectTicketImageCodec.class.getDeclaredField("decoding"); field.setAccessible(true);
-        var slots = (java.util.concurrent.Semaphore) field.get(codec); assertTrue(slots.tryAcquire(2));
+        var codecField = ProjectTicketImageCodec.class.getDeclaredField("codec"); codecField.setAccessible(true);
+        var field = SafeRasterCodec.class.getDeclaredField("decoding"); field.setAccessible(true);
+        var slots = (java.util.concurrent.Semaphore) field.get(codecField.get(codec)); assertTrue(slots.tryAcquire(2));
         try { assertThrows(BusinessException.class, () -> codec.normalize(data("png", 0))); }
         finally { slots.release(2); }
         assertNotNull(codec.normalize(data("png", 0)));

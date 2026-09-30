@@ -178,8 +178,12 @@
               </template>
             </template>
             <template v-else>
+              <SelfOperatedHeishaFields
+                v-if="isSelfOperatedHeishaProduct(selected)"
+                v-model="fields"
+              />
               <FlashAccountFields
-                v-if="selected.providerType === 'flash'"
+                v-else-if="selected.providerType === 'flash'"
                 :key="selected.id"
                 :product-id="selected.id"
                 :project="selected.project"
@@ -188,7 +192,7 @@
                 @working="lookupLoading = $event"
               />
               <HeishaFaceFields
-                v-if="isHeishaFaceService(selected)"
+                v-else-if="isHeishaFaceService(selected)"
                 :key="selected.id"
                 :product-id="selected.id"
                 :authorized="consent"
@@ -207,7 +211,7 @@
                   @input="clearLookup"
               /></el-form-item>
               <div
-                v-else-if="!usesServiceAccountSession(selected)"
+                v-else-if="!isSelfOperatedHeishaProduct(selected) && !usesServiceAccountSession(selected)"
                 class="form-grid"
               >
                 <el-form-item label="服务账号 / 手机号"
@@ -239,6 +243,14 @@
                     :active="checkout && consent" :max-page="150" id-mode="name" :selected-name="fields.schoolName" @select="selectAppuiSchool" />
                 </el-form-item>
               </div>
+              <SelfOperatedFaceMaterial
+                v-if="requiresSelfOperatedFaceMaterial(selected)"
+                :key="`face-${selected.id}`"
+                v-model:authorized="authorizedBiometric"
+                v-model:draft-id="materialDraftId"
+                :product="selected"
+                :disabled="busy"
+              />
               <el-button
                 v-if="!usesServiceAccountSession(selected) && selected.capabilities.includes('LOOKUP')"
                 type="primary"
@@ -314,7 +326,7 @@
                   placeholder="按计划限制填写"
               /></el-form-item>
               <el-form-item
-                v-if="selected.providerType === 'heisha'"
+                v-if="selected.providerType === 'heisha' && !isSelfOperatedHeishaProduct(selected)"
                 label="每日时间"
                 ><el-time-select
                   v-model="fields.runTime"
@@ -424,7 +436,7 @@
   </div>
 </template>
 <script setup>
-import { computed, ref, watch, onBeforeUnmount } from "vue";
+import { computed, ref, watch, onBeforeUnmount, onDeactivated } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { ArrowRight } from "@element-plus/icons-vue";
@@ -441,6 +453,8 @@ import {
   buildTaskTimes,
   serviceFormFields,
   isHeishaFaceService,
+  isSelfOperatedHeishaProduct,
+  requiresSelfOperatedFaceMaterial,
   usesServiceAccountSession,
   knownOutcome,
 } from "@/utils/serviceCommerce";
@@ -448,6 +462,8 @@ import ServiceSchoolSearch from "@/components/ServiceSchoolSearch.vue";
 import InternshipPlanFields from "@/components/InternshipPlanFields.vue";
 import FlashAccountFields from "@/components/FlashAccountFields.vue";
 import HeishaFaceFields from "@/components/HeishaFaceFields.vue";
+import SelfOperatedHeishaFields from "@/components/SelfOperatedHeishaFields.vue";
+import SelfOperatedFaceMaterial from "@/components/SelfOperatedFaceMaterial.vue";
 import { newInternshipSchedule } from "@/utils/internshipServices";
 import WuxinPlanFields from "@/components/WuxinPlanFields.vue";
 import AppuiPlanFields from "@/components/AppuiPlanFields.vue";
@@ -479,6 +495,7 @@ const checkout = ref(false),
   distance = ref("2"),
   consent = ref(false);
 const accountSessionId = ref(null), checkoutPending = ref(false);
+const authorizedBiometric = ref(false), materialDraftId = ref("");
 const jingyuTasks = ref([]);
 const jingyuValidation = computed(() => isJingyuService(selected.value)
   ? jingyuOrderError(selected.value, fields.value, quantity.value, distance.value, lookupResult.value, jingyuTasks.value) : "");
@@ -516,7 +533,13 @@ const canPreview = computed(
     !checkoutPending.value &&
     !lookupLoading.value &&
     selected.value &&
-    (isJingyuService(selected.value)
+    (isSelfOperatedHeishaProduct(selected.value)
+      ? !!fields.value.account?.trim() && !!fields.value.password &&
+        /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(fields.value.runTime || "") &&
+        Number.isInteger(quantity.value) && quantity.value >= 1 && quantity.value <= 365 &&
+        Number(distance.value) >= 0.1 && Number(distance.value) <= 50 &&
+        (!requiresSelfOperatedFaceMaterial(selected.value) || (authorizedBiometric.value && !!materialDraftId.value))
+      : isJingyuService(selected.value)
       ? !jingyuValidation.value
       : isLeidianService(selected.value)
       ? !leidianValidation.value
@@ -607,6 +630,8 @@ function open(item) {
   };
   lookupResult.value = null;
   consent.value = false;
+  authorizedBiometric.value = false;
+  materialDraftId.value = "";
   quantity.value = isTotalDistanceService(item) ? 1 : 10;
   distance.value = isTotalDistanceService(item) ? "" : "2";
   if (isJingyuService(item)) {
@@ -647,6 +672,8 @@ function beforeClose(done) {
   if (isLeidianService(selected.value) || isJingyuService(selected.value)) fields.value = {};
   jingyuTasks.value = [];
   accountSessionId.value = null;
+  authorizedBiometric.value = false;
+  materialDraftId.value = "";
   lookupResult.value = null;
   done();
 }
@@ -691,7 +718,8 @@ async function preview() {
   const version = selectionVersion;
   busy.value = true;
   try {
-    const result = await previewServiceOrder(selected.value.id, {
+    const local = isSelfOperatedHeishaProduct(selected.value);
+    const pendingQuote = previewServiceOrder(selected.value.id, {
       quantity: isTotalDistanceService(selected.value) ? 1 : selected.value.providerType === "sxdk_tw" ? 0 : quantity.value,
       distance:
         ["sxdk_tw", "appui"].includes(selected.value.providerType) ? null : distance.value,
@@ -699,16 +727,28 @@ async function preview() {
         selected.value.providerType === "sxdk_tw"
           ? internshipSchedule.value
           : null,
-      fields: serviceFormFields(selected.value.providerType, {
-        ...fields.value,
-        repair: String(repair.value),
-      }, selected.value.project),
+      fields: local ? {
+        phone: String(fields.value.account || ""),
+        password: String(fields.value.password || ""),
+        run_time: String(fields.value.runTime || ""),
+        school_name: String(fields.value.schoolName || ""),
+        note: String(fields.value.note || ""),
+      } : serviceFormFields(selected.value.providerType, {
+          ...fields.value,
+          repair: String(repair.value),
+        }, selected.value.project),
       taskTimes: isJingyuService(selected.value) ? [...jingyuTasks.value] : selected.value.providerType === "flash" ? taskTimes.value : [],
       authorizedAccount: consent.value,
       accountSessionId: usesServiceAccountSession(selected.value)
         ? accountSessionId.value
         : null,
+      ...(local ? {
+        authorizedBiometric: authorizedBiometric.value,
+        materialDraftId: materialDraftId.value || null,
+      } : {}),
     });
+    if (local) fields.value.password = "";
+    const result = await pendingQuote;
     if (version === selectionVersion && checkout.value && consent.value) quote.value = result;
   } catch {
     /* Request layer displays safe server validation errors. */
@@ -736,6 +776,8 @@ function onResult(result) {
     fields.value = {};
     jingyuTasks.value = [];
     accountSessionId.value = null;
+    authorizedBiometric.value = false;
+    materialDraftId.value = "";
     lookupResult.value = null;
     consent.value = false;
     router.push({ path: "/service-orders", query: { focus: result.orderId, providerType } });
@@ -749,6 +791,7 @@ watch(authSessionScope, () => {
   selectionVersion++; checkout.value = false; selected.value = null; jingyuTasks.value = [];
   fields.value = {}; lookupResult.value = null; accountSessionId.value = null; quote.value = null;
   lookupLoading.value = false; busy.value = false;
+  authorizedBiometric.value = false; materialDraftId.value = "";
 }, { flush: "sync" });
 watch(() => router?.currentRoute?.value, (route) => {
   if (route?.path === viewPath) filter.value = serviceTypeFromQuery(route.query.providerType);
@@ -764,6 +807,14 @@ onBeforeUnmount(() => {
   fields.value = {};
   lookupResult.value = null;
   accountSessionId.value = null;
+  authorizedBiometric.value = false;
+  materialDraftId.value = "";
+});
+onDeactivated(() => {
+  fields.value.password = "";
+  fields.value.authCode = "";
+  authorizedBiometric.value = false;
+  materialDraftId.value = "";
 });
 load();
 </script>

@@ -43,6 +43,18 @@ public interface ServiceCommerceService {
 
     FulfillmentDetails fulfillmentDetails(String id);
 
+    FulfillmentAdminView fulfillmentAdmin(String id);
+
+    MaterialDraftView createMaterialDraft(MaterialDraftForm form);
+
+    MaterialDraftView createOrderMaterialDraft(String id, OrderMaterialDraftForm form);
+
+    byte[] fulfillmentAsset(String orderId, String assetId);
+
+    OrderView verifyFulfillment(String id, VerificationForm form);
+
+    OrderView updateFulfillmentMaterials(String id, MaterialUpdateForm form);
+
     List<EventView> events(String id);
 
     RunLogPage logs(String id, int page);

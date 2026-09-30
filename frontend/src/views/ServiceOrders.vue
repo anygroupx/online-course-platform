@@ -59,6 +59,22 @@
           }}</el-tag>
         </div>
         <p v-if="item.fulfillmentMode === 'SELF_OPERATED'">退款需联系管理员进行财务核对。</p>
+        <div v-if="item.fulfillmentMode === 'SELF_OPERATED' && item.providerType === 'heisha'" class="verification-state">
+          <el-tag :type="verificationTagType(item.verificationStatus)">{{ verificationStatusName(item.verificationStatus) }}</el-tag>
+          <span>{{ item.faceMaterialPresent ? "已提交人脸资格核验材料" : "未提交人脸资格核验材料" }}</span>
+        </div>
+        <el-alert
+          v-if="!admin && item.verificationStatus === 'NEEDS_INFO'"
+          type="warning"
+          :closable="false"
+          :title="item.verificationReason || '请按要求补充资料后重新提交核验。'"
+        />
+        <el-alert
+          v-else-if="!admin && item.verificationStatus === 'REJECTED'"
+          type="error"
+          :closable="false"
+          :title="item.verificationReason || '资格核验未通过，请联系工作人员确认。'"
+        />
         <div class="order-metrics">
           <div>
             <span>服务账号</span><strong>{{ item.accountLabel }}</strong>
@@ -155,6 +171,11 @@
                 @click="sync(item)"
                 >{{ item.providerType === "sxdk_tw" ? "核对计划状态" : isTotalDistanceService(item) ? "核对提交状态" : serviceActionName("SYNC", item) }}</el-button
               ><el-button @click="showEvents(item)">操作记录</el-button
+              ><el-button
+                v-if="canSupplementFulfillment(item)"
+                type="warning"
+                @click="openSupplement(item)"
+                >补充资料</el-button
               ><el-button v-if="item.providerType === 'sxdk_tw'" @click="notificationOrder=item; notificationOpen=true">微信通知</el-button
               ><el-button
                 v-if="
@@ -216,6 +237,47 @@
       @close="quote = null"
       @result="onQuoteResult"
     />
+    <el-dialog
+      v-model="supplementOpen"
+      title="补充资格核验资料"
+      width="min(560px, 94vw)"
+      :close-on-click-modal="false"
+      :show-close="!supplementLoading"
+      @closed="clearSupplement"
+    >
+      <el-alert
+        v-if="supplementOrder?.verificationReason"
+        type="warning"
+        :closable="false"
+        :title="supplementOrder.verificationReason"
+      />
+      <el-form v-if="supplementOrder" label-position="top" :disabled="supplementLoading" @submit.prevent="submitSupplement">
+        <el-form-item label="新密码（未要求修改时可留空）">
+          <el-input v-model="supplement.password" type="password" show-password maxlength="200" autocomplete="new-password" />
+        </el-form-item>
+        <el-form-item label="补充说明">
+          <el-input
+            v-model="supplement.note"
+            type="textarea"
+            maxlength="1000"
+            autocomplete="off"
+            placeholder="说明已补充或调整的内容，请勿重复填写密码"
+          />
+        </el-form-item>
+        <SelfOperatedFaceMaterial
+          v-if="supplementOrder.faceMaterialRequired"
+          v-model:authorized="supplement.authorizedBiometric"
+          v-model:draft-id="supplement.materialDraftId"
+          :order-id="supplementOrder.id"
+          :disabled="supplementLoading"
+        />
+        <p v-if="supplementError" role="alert">{{ supplementError }}</p>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="supplementLoading" @click="supplementOpen = false">取消</el-button>
+        <el-button type="primary" :loading="supplementLoading" @click="submitSupplement">重新提交核验</el-button>
+      </template>
+    </el-dialog>
     <el-drawer
       v-model="eventsOpen"
       title="订单操作记录"
@@ -446,6 +508,10 @@
             <small v-if="entry.resolvedBy"
               >核对人 #{{ entry.resolvedBy }}</small
             >
+            <p v-if="entry.previousVerificationStatus && entry.resultingVerificationStatus">
+              {{ verificationStatusName(entry.previousVerificationStatus) }} →
+              {{ verificationStatusName(entry.resultingVerificationStatus) }}
+            </p>
             <p v-if="entry.previousStatus && entry.resultingStatus">
               {{ orderStateName({ ...audit.order, status: entry.previousStatus }) }} →
               {{ orderStateName({ ...audit.order, status: entry.resultingStatus }) }}
@@ -618,6 +684,7 @@ import {
   getServiceOrderOptions,
   getServiceOrderAudit,
   previewServiceRefundSettlement,
+  updateServiceFulfillmentMaterials,
 } from "@/api/serviceCommerce";
 import {
   serviceNames,
@@ -632,6 +699,8 @@ import {
 import InternshipPlanFields from "@/components/InternshipPlanFields.vue";
 import ServiceNotifications from "@/components/ServiceNotifications.vue";
 import ServiceFulfillment from "@/components/ServiceFulfillment.vue";
+import { canSupplementFulfillment } from "@/utils/serviceFulfillment";
+import SelfOperatedFaceMaterial from "@/components/SelfOperatedFaceMaterial.vue";
 import ServiceStatusCheck from "@/components/ServiceStatusCheck.vue";
 import ServiceOrderFilters from "@/components/ServiceOrderFilters.vue";
 import { useServiceOrderSearch } from "@/composables/useServiceOrderSearch";
@@ -715,6 +784,8 @@ const reportOpen = ref(false),
   reportForm = ref({ startDate: "", endDate: "", reportType: "日报" });
 const busyId = ref(null),
   quote = ref(null);
+const supplementOpen = ref(false), supplementOrder = ref(null), supplementLoading = ref(false), supplementError = ref("");
+const supplement = ref({ password: "", note: "", materialDraftId: "", authorizedBiometric: false });
 const events = ref([]),
   eventsOrder = ref(null),
   eventsOpen = ref(false),
@@ -754,6 +825,52 @@ const resolution = ref({
   evidence: "",
   upstreamChecked: false,
 });
+function verificationStatusName(value) {
+  return ({ PENDING: "待资格核验", VERIFIED: "资格已通过", NEEDS_INFO: "需要补充资料", REJECTED: "资格未通过" })[value] || "待资格核验";
+}
+function verificationTagType(value) {
+  return ({ VERIFIED: "success", NEEDS_INFO: "warning", REJECTED: "danger" })[value] || "info";
+}
+function clearSupplement() {
+  supplementOpen.value = false;
+  supplementOrder.value = null;
+  supplementLoading.value = false;
+  supplementError.value = "";
+  supplement.value = { password: "", note: "", materialDraftId: "", authorizedBiometric: false };
+}
+function openSupplement(item) {
+  clearSupplement();
+  supplementOrder.value = item;
+  supplementOpen.value = true;
+}
+async function submitSupplement() {
+  const item = supplementOrder.value, value = supplement.value;
+  if (!item || supplementLoading.value || !sessionActive.value) return;
+  if (!value.password.trim() && !value.note.trim() && !value.materialDraftId) {
+    supplementError.value = "请至少补充一项资料。";
+    return;
+  }
+  supplementLoading.value = true; supplementError.value = "";
+  try {
+    const pendingUpdate = updateServiceFulfillmentMaterials(item.id, {
+      orderVersion: item.version,
+      fulfillmentVersion: item.fulfillmentVersion,
+      password: value.password || null,
+      materialDraftId: value.materialDraftId || null,
+      authorizedBiometric: !!value.materialDraftId && value.authorizedBiometric,
+      note: value.note.trim() || null,
+    });
+    value.password = "";
+    await pendingUpdate;
+    clearSupplement();
+    ElMessage.success("补充资料已提交，等待重新核验。");
+    await load();
+  } catch {
+    supplementError.value = "补充资料未提交，请刷新订单后重试。";
+  } finally {
+    supplementLoading.value = false;
+  }
+}
 const jingyuSettlementError = computed(() => isJingyuService(settlementOrder.value)
   ? jingyuResolutionError("REFUND", { ...settlement.value, outcome: "ACCEPTED" }, maxRefundableUnits(settlementOrder.value)) : "");
 function tagType(state, providerType) {
@@ -1197,6 +1314,7 @@ watch(resolveOpen, (open) => {
   if (!open) { resolveOrder.value = null; resolveQuote.value = null; resolution.value = { outcome: "NOT_ACCEPTED", evidence: "", upstreamChecked: false }; }
 });
 function clearPrivateDetails() {
+  clearSupplement();
   detailVersion++; logContextVersion++; logRequests.invalidate();
   runLogsOpen.value = scoreOpen.value = taskTimeOpen.value = planOpen.value = resolveOpen.value = false;
   eventsOpen.value = auditOpen.value = settlementOpen.value = notificationOpen.value = internshipOpen.value = reportOpen.value = false;

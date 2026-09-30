@@ -53,4 +53,28 @@ class ProjectClientTicketBodyFilterTest {
         assertEquals(413,res.getStatus());assertEquals("no-store",res.getHeader("Cache-Control"));
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"/api/service-fulfillment-material-drafts","/api/service-orders/id/fulfillment/material-drafts"})
+    void fulfillmentMaterialBodiesRejectDeclaredOversizeBeforeReading(String path) throws Exception {
+        var req=new MockHttpServletRequest("POST",path);req.setContextPath("/api");
+        var wrapped=new HttpServletRequestWrapper(req) {
+            @Override public long getContentLengthLong() {return ProjectClientTicketBodyFilter.MAX_BODY+1L;}
+            @Override public jakarta.servlet.ServletInputStream getInputStream() {fail("must not read declared huge image body");return null;}
+        };
+        var res=new MockHttpServletResponse();
+        new ProjectClientTicketBodyFilter().doFilter(wrapped,res,(r,s)->fail("oversized image body reached controller"));
+        assertEquals(413,res.getStatus());assertEquals("no-store",res.getHeader("Cache-Control"));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"/api/service-fulfillment-material-drafts","/api/service-orders/id/fulfillment/material-drafts"})
+    void fulfillmentMaterialBodiesRejectUnknownLengthOversize(String path) throws Exception {
+        var req=new MockHttpServletRequest("POST",path);req.setContextPath("/api");
+        req.setContent(new byte[ProjectClientTicketBodyFilter.MAX_BODY+1]);
+        var wrapped=new HttpServletRequestWrapper(req) { @Override public long getContentLengthLong() {return -1;} };
+        var res=new MockHttpServletResponse();
+        new ProjectClientTicketBodyFilter().doFilter(wrapped,res,(r,s)->fail("chunked oversized image body reached controller"));
+        assertEquals(413,res.getStatus());assertEquals("no-store",res.getHeader("Cache-Control"));
+    }
+
 }

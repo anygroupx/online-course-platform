@@ -17,6 +17,12 @@ export const actionNames = Object.freeze({
   LOCAL_COMPLETE: "标记完成",
   LOCAL_ATTENTION: "标记异常",
   LOCAL_RESUME: "恢复处理",
+  LOCAL_VERIFY: "资格核验通过",
+  LOCAL_NEEDS_INFO: "要求补充资料",
+  LOCAL_REJECT: "资格核验不通过",
+  LOCAL_MATERIAL_UPDATED: "补充资料已更新",
+  LOCAL_CANCEL: "取消订单",
+  LOCAL_REFUND: "取消并退款",
   CREATE: "下单",
   SYNC: "更新进度",
   ADD_TIMES: "增加次数",
@@ -241,9 +247,17 @@ export function serviceAccountExpired(session, now = Date.now()) {
 export function isHeishaFaceService(product) {
   return (
     product?.providerType === "heisha" &&
+    product.fulfillmentMode !== "SELF_OPERATED" &&
     product.project === "default" &&
     ["3", "4"].includes(String(product.remoteProductId))
   );
+}
+export function isSelfOperatedHeishaProduct(product) {
+  return product?.providerType === "heisha" && product.fulfillmentMode === "SELF_OPERATED";
+}
+export function requiresSelfOperatedFaceMaterial(product) {
+  return isSelfOperatedHeishaProduct(product) && product.project === "default" &&
+    ["3", "4"].includes(String(product.remoteProductId));
 }
 export function usesServiceAccountSession(product) {
   return product?.providerType === "flash" || isHeishaFaceService(product);

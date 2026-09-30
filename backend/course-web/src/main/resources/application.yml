@@ -144,6 +144,9 @@ course:
 
 # 敏感字段本地加密与安全任务配置
 app:
+  native-services:
+    fulfillment-assets:
+      retention-hours: ${NATIVE_SERVICE_FULFILLMENT_ASSET_RETENTION_HOURS:24}
   provider-health:
     enabled: ${PROVIDER_HEALTH_ENABLED:false}
     interval-millis: ${PROVIDER_HEALTH_INTERVAL_MILLIS:1800000}

@@ -48,6 +48,8 @@ public class ServiceOperation {
     private String previousStatus;
     private String resultingStatus;
     private Integer completedSnapshot;
+    private String previousVerificationStatus;
+    private String resultingVerificationStatus;
     private LocalDateTime expiresAt;
 
     @TableField(fill = FieldFill.INSERT)

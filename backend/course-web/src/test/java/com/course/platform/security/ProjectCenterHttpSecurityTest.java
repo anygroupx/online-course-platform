@@ -198,8 +198,30 @@ class ProjectCenterHttpSecurityTest {
         mvc.perform(post(path).contextPath("/api").with(authentication(auth("service-order:fulfill")))
                 .contentType("application/json").content("{\"action\":\"START\",\"orderVersion\":0}"))
                 .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
-        verify(commerce).fulfillmentDetails("00000000-0000-0000-0000-000000000001");
+        verify(commerce).fulfillmentAdmin("00000000-0000-0000-0000-000000000001");
         verify(commerce).manageFulfillment(eq("00000000-0000-0000-0000-000000000001"), any());
+    }
+
+    @Test
+    void fulfillmentImagesRequireBothPermissionsBeforeBroaderAdminRoutes() throws Exception {
+        String order = "00000000-0000-0000-0000-000000000001";
+        String asset = "00000000-0000-0000-0000-000000000002";
+        String path = "/api/admin/service-orders/" + order + "/fulfillment/assets/" + asset;
+        for (String permission : List.of("ROLE_USER", "api-provider:update", "service-order:fulfill",
+                "service-order:biometric", "ROLE_FINANCE", "ROLE_AUDITOR")) {
+            mvc.perform(get(path).contextPath("/api").with(authentication(auth(permission))))
+                    .andExpect(status().isForbidden());
+        }
+        verifyNoInteractions(commerce);
+        when(commerce.fulfillmentAsset(order, asset)).thenReturn(new byte[] {(byte) 0x89, 80, 78, 71});
+        mvc.perform(get(path).contextPath("/api").with(authentication(auth("service-order:fulfill", "service-order:biometric"))))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "image/png"))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(header().string("Content-Security-Policy", "default-src 'none'; sandbox"))
+                .andExpect(header().string("Cross-Origin-Resource-Policy", "same-origin"));
+        verify(commerce).fulfillmentAsset(order, asset);
     }
 
     @Test

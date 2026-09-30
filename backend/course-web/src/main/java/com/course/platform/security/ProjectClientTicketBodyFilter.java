@@ -6,7 +6,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 
-/** Bounds local and supplier ticket image bodies before JSON parsing, including chunked transfers. */
+/** Bounds JSON image bodies before parsing, including chunked transfers. */
 public class ProjectClientTicketBodyFilter extends OncePerRequestFilter {
     public static final int MAX_BODY = 3 * 1024 * 1024;
 
@@ -15,7 +15,9 @@ public class ProjectClientTicketBodyFilter extends OncePerRequestFilter {
         if (!"POST".equals(request.getMethod())) return true;
         String path = request.getServletPath();
         if (path == null || path.isEmpty()) path = request.getRequestURI().substring(request.getContextPath().length());
-        return !(path.matches("/project-accounts/[^/]+/tickets")
+        return !(path.equals("/service-fulfillment-material-drafts")
+                || path.matches("/service-orders/[^/]+/fulfillment/material-drafts")
+                || path.matches("/project-accounts/[^/]+/tickets")
                 || path.matches("/project-tickets/[^/]+/reply-quotes")
                 || path.equals("/project-client-tickets") || path.startsWith("/project-client-tickets/")
                 || path.equals("/external/projects/v1/tickets") || path.startsWith("/external/projects/v1/tickets/"));
@@ -51,6 +53,6 @@ public class ProjectClientTicketBodyFilter extends OncePerRequestFilter {
         response.setStatus(413);
         response.setHeader("Cache-Control", "no-store");
         response.setContentType("application/json;charset=UTF-8");
-        response.getWriter().write("{\"code\":413,\"message\":\"工单请求过大，图片原文件最多2MiB\"}");
+        response.getWriter().write("{\"code\":413,\"message\":\"请求过大，图片原文件最多2MiB\"}");
     }
 }

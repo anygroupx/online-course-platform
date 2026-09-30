@@ -276,11 +276,10 @@ try {
   await page.goto(`${base}/__native_services?page=/admin/service-products`);
   await page.setViewportSize({ width: 1440, height: 1080 });
   await page.getByRole("button", { name: "上架服务商品", exact: true }).click();
-  await page
-    .getByRole("dialog", { name: "上架服务商品", exact: true })
-    .getByRole("combobox")
-    .first()
-    .click();
+  const publish = page.getByRole("dialog", { name: "上架服务商品", exact: true });
+  await publish.getByRole("combobox", { name: "服务类型", exact: true }).locator("xpath=ancestor::div[contains(@class,'el-select__wrapper')][1]").click();
+  await page.getByRole("option", { name: "极光", exact: true }).click();
+  await publish.getByRole("combobox", { name: "已保存的服务接口", exact: true }).click();
   await page
     .getByRole("option", { name: "已授权极光接口 · 极光", exact: true })
     .click();

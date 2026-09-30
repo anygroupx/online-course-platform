@@ -19,6 +19,15 @@ public class ServiceOrderFulfillment {
     @ToString.Exclude
     private String payloadEncrypted;
 
+    private String verificationStatus;
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Long verifiedBy;
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private LocalDateTime verifiedAt;
+    @JsonIgnore @ToString.Exclude
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String verificationNote;
+    private Long materialVersion;
     private Long version;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

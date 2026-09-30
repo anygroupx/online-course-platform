@@ -21,6 +21,7 @@ import com.course.platform.infra.servicecommerce.InternshipNativeServiceGateway;
 import com.course.platform.infra.servicecommerce.JingyuNativeServiceGateway;
 import com.course.platform.infra.servicecommerce.PhpNativeServiceGateway;
 import com.course.platform.infra.servicecommerce.SsbenzDistanceGateway;
+import com.course.platform.infra.projectclient.SafeRasterCodec;
 import com.course.platform.security.SecurityUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,6 +38,7 @@ import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.function.Supplier;
@@ -49,11 +51,15 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
     private final ServiceOrderMapper orderMapper;
     private final ServiceOperationMapper operationMapper;
     private final ServiceOrderFulfillmentMapper fulfillmentMapper;
+    private final ServiceFulfillmentMaterialDraftMapper materialDraftMapper;
+    private final ServiceOrderFulfillmentAssetMapper fulfillmentAssetMapper;
     private final ApiProviderMapper providerMapper;
     private final ApiProviderService providers;
     private final PluginConnectorRegistry catalogs;
     private final NativeServiceGateway gateway;
     private final ServiceAccountSessions accounts;
+    private final SelfOperatedCheckoutPreparer selfOperatedCheckout;
+    private final SafeRasterCodec safeRasterCodec;
     private final AccountLedgerServiceImpl ledger;
     private final PlatformTransactionManager transactions;
 
@@ -67,6 +73,9 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
 
     @Value("${app.native-services.status-refresh.enabled:false}")
     private boolean statusRefreshEnabled;
+
+    @Value("${app.native-services.fulfillment-assets.retention-hours:24}")
+    private long fulfillmentAssetRetentionHours;
 
     private static final Set<String> PERIODIC_TYPES = Set.of("flash", "heisha", "jiguang", "wuxin", "sxdk_tw", "appui", "leidian", "jingyu");
     private static final Set<String> PERIODIC_STATES = Set.of("ACTIVE", "PAUSED", "ATTENTION", "REFUND_REVIEW");
@@ -101,31 +110,44 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
         user();
         admin();
         if (c == null
-                || c.providerId() == null
                 || c.project() == null
                 || c.remoteProductId() == null) throw bad("商品参数不完整");
         String fulfillmentMode = FulfillmentMode.normalize(c.fulfillmentMode());
-        if (id != null && !c.enabled())
-            return tx(
-                    () -> {
-                        ServiceProduct stored = productMapper.lock(id);
-                        if (stored == null) throw missing();
-                        if (!Objects.equals(stored.getVersion(), c.version())
-                                || !Objects.equals(stored.getProviderId(), c.providerId())
-                                || !stored.getProject().equals(c.project())
-                                || !stored.getRemoteProductId().equals(c.remoteProductId()))
-                            throw bad("商品版本或绑定已变化");
-                        requireFulfillmentMode(stored.getProviderType(), fulfillmentMode);
-                        stored.setEnabled(false);
-                        stored.setFulfillmentMode(fulfillmentMode);
-                        stored.setVersion(stored.getVersion() + 1);
-                        stamp(stored);
-                        requireWrite(productMapper.updateById(stored));
-                        return productView(stored, true);
-                    });
-        ApiProvider provider = active(c.providerId(), null, null);
+        boolean local = FulfillmentMode.SELF_OPERATED.name().equals(fulfillmentMode);
+        if (local) {
+            if (c.providerId() != null || !"heisha".equals(c.providerType())
+                    || !"default".equals(c.project()) || !Set.of("1", "2", "3", "4").contains(c.remoteProductId()))
+                throw bad("自营黑鲨商品配置不正确");
+        } else if (c.providerId() == null) throw bad("接口履约必须选择服务配置");
+        if (id != null && !c.enabled()) {
+            ServiceProduct stored = productMapper.selectById(id);
+            if (stored == null) throw missing();
+            boolean sameBinding = Objects.equals(stored.getProviderId(), c.providerId())
+                    && FulfillmentMode.normalize(stored.getFulfillmentMode()).equals(fulfillmentMode)
+                    && (!local || Objects.equals(stored.getProviderType(), c.providerType()));
+            if (sameBinding)
+                return tx(
+                        () -> {
+                            ServiceProduct current = productMapper.lock(id);
+                            if (current == null) throw missing();
+                            if (!Objects.equals(current.getVersion(), c.version())
+                                    || !Objects.equals(current.getProviderId(), c.providerId())
+                                    || !current.getProject().equals(c.project())
+                                    || !current.getRemoteProductId().equals(c.remoteProductId())
+                                    || !FulfillmentMode.normalize(current.getFulfillmentMode()).equals(fulfillmentMode))
+                                throw bad("商品版本或绑定已变化");
+                            current.setEnabled(false);
+                            current.setVersion(current.getVersion() + 1);
+                            stamp(current);
+                            requireWrite(productMapper.updateById(current));
+                            return productView(current, true);
+                        });
+        }
+        ApiProvider provider = local ? null : active(c.providerId(), null, null);
+        if (!local && c.providerType() != null && !c.providerType().isBlank()
+                && !c.providerType().equals(provider.getProviderType())) throw bad("服务类型与所选配置不一致");
         if (!PhpNativeServiceGateway.supported(
-                provider.getProviderType(), c.project(), c.remoteProductId()))
+                local ? c.providerType() : provider.getProviderType(), c.project(), c.remoteProductId()))
             throw bad("仅可上架已支持原生订单的商品");
         if (c.unitPrice() == null
                 || c.unitPrice().signum() <= 0
@@ -137,12 +159,12 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                 || c.title().codePoints().anyMatch(Character::isISOControl)) throw bad("商品名称格式错误");
         ServiceProduct candidate = new ServiceProduct();
         candidate.setProviderId(c.providerId());
-        candidate.setProviderType(provider.getProviderType());
+        candidate.setProviderType(local ? "heisha" : provider.getProviderType());
         candidate.setProject(c.project());
         candidate.setRemoteProductId(c.remoteProductId());
         candidate.setFulfillmentMode(fulfillmentMode);
         requireFulfillmentMode(candidate.getProviderType(), fulfillmentMode);
-        if (c.enabled()
+        if (!local && c.enabled()
                 && PhpNativeServiceGateway.isHeishaFace(candidate)
                 && !accounts.faceCollectionConfigured()) throw bad("上架人脸商品前必须配置已批准的官方 HTTPS 采集域名");
         if (daily(candidate)) attestContract(candidate, provider, c.contractPrice());
@@ -158,10 +180,9 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                             if (p == null) throw missing();
                             if (id != null
                                     && (!Objects.equals(p.getVersion(), c.version())
-                                            || !Objects.equals(p.getProviderId(), c.providerId())
                                             || !p.getProject().equals(c.project())
                                             || !p.getRemoteProductId().equals(c.remoteProductId())))
-                                throw bad("商品已更新，或尝试更换已关联的服务配置，请刷新后重试");
+                                throw bad("商品已更新，请刷新后重试");
                             if (daily(candidate)) {
                                 p.setContractUnitCost(candidate.getContractUnitCost());
                                 p.setContractValidUntil(candidate.getContractValidUntil());
@@ -175,6 +196,8 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                             p.setDescription(c.description());
                             p.setUnitPrice(c.unitPrice());
                             p.setEnabled(c.enabled());
+                            p.setProviderId(candidate.getProviderId());
+                            p.setProviderType(candidate.getProviderType());
                             p.setFulfillmentMode(fulfillmentMode);
                             p.setVersion(id == null ? 0 : p.getVersion() + 1);
                             stamp(p);
@@ -189,6 +212,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
     public Lookup lookup(Long productId, Map<String, String> fields) {
         user();
         ServiceProduct p = forSale(productId);
+        if (FulfillmentMode.selfOperated(p)) throw bad("该商品请直接填写订单资料");
         return gateway.lookup(active(p.getProviderId(), p.getProviderType(), null), p, fields);
     }
 
@@ -213,19 +237,20 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
         limitQuotes(uid);
         ServiceProduct p = forSale(productId);
         validateOrderForm(form, p);
-        ApiProvider provider = active(p.getProviderId(), p.getProviderType(), null);
-        BigDecimal cost = FulfillmentMode.selfOperated(p) ? null : catalogPrice(p, provider);
-        var authorization =
-                form.accountSessionId() == null ? null : accounts.prepare(p, provider, form);
-        PreparedOrder prepared =
-                authorization == null ? gateway.prepare(provider, p, form) : authorization.order();
+        boolean local = FulfillmentMode.selfOperated(p);
+        ApiProvider provider = local ? null : active(p.getProviderId(), p.getProviderType(), null);
+        BigDecimal cost = local ? null : catalogPrice(p, provider);
+        var authorization = local || form.accountSessionId() == null ? null : accounts.prepare(p, provider, form);
+        PreparedOrder prepared = local ? selfOperatedCheckout.prepare(p, form)
+                : authorization == null ? gateway.prepare(provider, p, form) : authorization.order();
+        if (local) validateMaterialDraftForQuote(uid, p, form);
         if (cost != null && cost.compareTo(p.getUnitPrice()) > 0)
             throw bad("商品价格待更新，暂不能下单，请联系管理员");
         ServiceOperation op =
                 newOperation(
                         uid,
                         p,
-                        provider.getConfigVersion(),
+                        provider == null ? null : provider.getConfigVersion(),
                         "CREATE",
                         UUID.randomUUID().toString(),
                         null);
@@ -413,6 +438,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
         uuid(quoteId);
         Dispatch dispatch = tx(() -> reserve(quoteId, uid));
         if (dispatch == null) return operation(quoteId);
+        if (FulfillmentMode.selfOperated(dispatch.product())) return operation(quoteId);
         try {
             // One and only one dispatch for this durable operation ID, even with simultaneous
             // confirmations.
@@ -457,8 +483,9 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
         ServiceProduct p = productMapper.lock(op.getProductId());
         if (p == null) throw missing();
         if (!Objects.equals(p.getVersion(), op.getProductVersion())) throw bad("商品配置或售价已变化，请重新预览");
-        ApiProvider provider =
-                active(p.getProviderId(), p.getProviderType(), op.getProviderVersion());
+        boolean local = FulfillmentMode.selfOperated(p);
+        ApiProvider provider = local ? null
+                : active(p.getProviderId(), p.getProviderType(), op.getProviderVersion());
         ServiceOrder o;
         if (daily(p) && isDebit(op) && op.getAmount().signum() > 0) requireContract(p, provider);
         if ("CREATE".equals(op.getAction())) {
@@ -471,15 +498,14 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
             o.setUserId(uid);
             o.setProductId(p.getId());
             o.setProviderId(p.getProviderId());
-            o.setProviderVersion(op.getProviderVersion());
-            o.setProviderIdentity(identity(provider));
+            o.setProviderVersion(local ? null : op.getProviderVersion());
+            o.setProviderIdentity(local ? null : identity(provider));
             o.setProviderType(p.getProviderType());
             o.setProject(p.getProject());
             o.setRemoteProductId(p.getRemoteProductId());
             o.setTitle(p.getTitle());
             o.setAccountLabel(op.getAccountLabel());
             o.setFulfillmentMode(FulfillmentMode.normalize(p.getFulfillmentMode()));
-            boolean local = FulfillmentMode.selfOperated(p);
             o.setStatus(local ? "PENDING" : "SUBMITTING");
             o.setQuantity(op.getQuantity());
             o.setCompleted(0);
@@ -522,15 +548,18 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
             Map<String, Object> prepared = decrypt(op.getPayloadEncrypted());
             Map<String, Object> material = new LinkedHashMap<>();
             for (String key : List.of("phone", "password", "plan_option_id", "fence_option_id",
-                    "run_time", "school_name", "plan_name", "fence_name", "single_min_distance_km",
+                    "run_time", "school_name", "note", "plan_name", "fence_name", "single_min_distance_km",
                     "single_max_distance_km", "time_fragments", "product_id", "times", "km_per_day")) {
                 if (prepared.containsKey(key)) material.put(key, prepared.get(key));
             }
             fulfillment.setPayloadEncrypted(encrypt(material));
+            fulfillment.setVerificationStatus("PENDING");
+            fulfillment.setMaterialVersion(0L);
             fulfillment.setVersion(0L);
             fulfillment.setCreateTime(ServiceTime.now());
             fulfillment.setUpdateTime(ServiceTime.now());
             requireWrite(fulfillmentMapper.insert(fulfillment));
+            consumeMaterialDraft(uid, p, o, prepared);
             op.setState("SUCCEEDED");
             op.setPayloadEncrypted(null);
             op.setErrorCategory(null);
@@ -862,18 +891,17 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
             if (note != null) {
                 ServiceOrderFulfillment material = fulfillmentMapper.selectById(id);
                 if (material == null) throw bad("履约资料不存在，请核对订单记录");
-                Map<String, Object> fields = decrypt(material.getPayloadEncrypted());
-                for (String key : List.of("phone", "password")) {
-                    Object secret = fields.get(key);
-                    if (secret instanceof String value && !value.isBlank() && note.contains(value))
-                        throw bad("处理备注不能包含账号或密码");
-                }
+                rejectSecretInNote(material, note);
             }
             String action;
+            BigDecimal eventAmount = ZERO;
             switch (form.action()) {
                 case "START" -> {
                     requireState(order, "PENDING");
                     requireNoCompletedInput(form);
+                    ServiceOrderFulfillment fulfillment = fulfillmentMapper.lock(id);
+                    if (fulfillment == null || !"VERIFIED".equals(fulfillment.getVerificationStatus()))
+                        throw bad("资格核验通过后才能开始处理");
                     order.setStatus("ACTIVE");
                     action = "LOCAL_START";
                 }
@@ -907,8 +935,27 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                     requireState(order, "ATTENTION");
                     requireNoCompletedInput(form);
                     requireLifecycleNote(note, "请填写恢复处理备注");
-                    order.setStatus("ACTIVE");
+                    ServiceOrderFulfillment fulfillment = fulfillmentMapper.lock(id);
+                    if (fulfillment == null) throw bad("履约资料不存在，请核对订单记录");
+                    order.setStatus("VERIFIED".equals(fulfillment.getVerificationStatus())
+                            ? "ACTIVE" : "PENDING");
                     action = "LOCAL_RESUME";
+                }
+                case "CANCEL_REFUND" -> {
+                    requireState(order, "PENDING");
+                    requireNoCompletedInput(form);
+                    if (order.getCompleted() != 0) throw bad("订单已有处理进度，不能全额退款");
+                    requireLifecycleNote(note, "请填写取消退款原因");
+                    BigDecimal refundable = order.getPaidAmount().subtract(order.getRefundedAmount());
+                    if (refundable.signum() < 0) throw bad("订单退款金额异常，请核对账务");
+                    if (refundable.signum() > 0)
+                        ledger.credit(order.getUserId(), refundable,
+                                AccountLedgerServiceImpl.BIZ_REFUND,
+                                "SERVICE_LOCAL:" + order.getId(), "自营服务订单取消退款", false);
+                    order.setRefundedAmount(order.getRefundedAmount().add(refundable));
+                    eventAmount = refundable;
+                    order.setStatus("REFUNDED");
+                    action = "LOCAL_REFUND";
                 }
                 default -> throw bad("不支持的处理操作");
             }
@@ -923,7 +970,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
             event.setQuantity(0);
             event.setDistance(order.getDistance());
             event.setUnitCharge(order.getUnitCharge());
-            event.setAmount(ZERO);
+            event.setAmount(eventAmount);
             event.setAccountLabel(order.getAccountLabel());
             event.setResolvedBy(actor);
             event.setResolutionNote(note);
@@ -948,6 +995,228 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                 new LinkedHashMap<>(decrypt(fulfillment.getPayloadEncrypted())));
         securityAudit.recordFulfillmentRead(actor, id);
         return new FulfillmentDetails(id, fields);
+    }
+
+    @Override
+    public FulfillmentAdminView fulfillmentAdmin(String id) {
+        Long actor = fulfillmentOperator();
+        uuid(id);
+        ServiceOrder order = orderMapper.selectById(id);
+        requireSelfOperatedHeisha(order);
+        ServiceOrderFulfillment fulfillment = fulfillmentMapper.selectById(id);
+        if (fulfillment == null) throw bad("履约资料不存在，请核对订单记录");
+        Map<String, Object> fields = Collections.unmodifiableMap(
+                new LinkedHashMap<>(decrypt(fulfillment.getPayloadEncrypted())));
+        List<FulfillmentAssetView> assets = fulfillmentAssetMapper.selectList(
+                        new LambdaQueryWrapper<ServiceOrderFulfillmentAsset>()
+                                .eq(ServiceOrderFulfillmentAsset::getOrderId, id)
+                                .orderByAsc(ServiceOrderFulfillmentAsset::getCreateTime))
+                .stream().map(this::assetView).toList();
+        securityAudit.recordFulfillmentRead(actor, id);
+        return new FulfillmentAdminView(id, fields, fulfillment.getVerificationStatus(),
+                fulfillment.getVersion(), fulfillment.getMaterialVersion(), fulfillment.getVerifiedBy(),
+                fulfillment.getVerifiedAt(), fulfillment.getVerificationNote(), assets);
+    }
+
+    @Override
+    public MaterialDraftView createMaterialDraft(MaterialDraftForm form) {
+        Long uid = user();
+        if (form == null || form.productId() == null || form.productVersion() == null
+                || !form.authorizedBiometric()) throw bad("请单独确认敏感资料使用授权");
+        ServiceProduct product = forSale(form.productId());
+        if (!validSelfOperatedProduct(product) || !SelfOperatedCheckoutPreparer.requiresFaceMaterial(product)
+                || !Objects.equals(product.getVersion(), form.productVersion()))
+            throw bad("商品配置已变化，请刷新后重试");
+        return saveMaterialDraft(uid, product, form.imageData());
+    }
+
+    @Override
+    public MaterialDraftView createOrderMaterialDraft(String id, OrderMaterialDraftForm form) {
+        Long uid = user();
+        uuid(id);
+        if (form == null || !form.authorizedBiometric())
+            throw bad("请单独确认敏感资料使用授权");
+        ServiceOrder order = orderMapper.selectById(id);
+        if (order == null || !uid.equals(order.getUserId())) throw missing();
+        requireSelfOperatedHeisha(order);
+        requireState(order, "PENDING");
+        ServiceOrderFulfillment fulfillment = fulfillmentMapper.selectById(id);
+        if (fulfillment == null || !"NEEDS_INFO".equals(fulfillment.getVerificationStatus()))
+            throw bad("当前订单不需要补充资料");
+        ServiceProduct product = product(order.getProductId());
+        if (!Set.of("3", "4").contains(order.getRemoteProductId()))
+            throw bad("该订单不需要提交资格核验图片");
+        return saveMaterialDraft(uid, product, form.imageData());
+    }
+
+    private MaterialDraftView saveMaterialDraft(Long uid, ServiceProduct product, String imageData) {
+        SafeRasterCodec.Image image = safeRasterCodec.normalizeDataUrl(imageData);
+        if (image == null) throw bad("请选择资格核验图片");
+        LocalDateTime now = ServiceTime.now();
+        ServiceFulfillmentMaterialDraft draft = new ServiceFulfillmentMaterialDraft();
+        draft.setId(UUID.randomUUID().toString());
+        draft.setUserId(uid);
+        draft.setProductId(product.getId());
+        draft.setProductVersion(product.getVersion());
+        draft.setAssetType("FACE_QUALIFICATION");
+        draft.setContentEncrypted(encryptBytes(image.png()));
+        draft.setMimeType("image/png");
+        draft.setWidth(image.width());
+        draft.setHeight(image.height());
+        draft.setByteSize(image.png().length);
+        draft.setSha256(sha256(image.png()));
+        draft.setState("READY");
+        draft.setVersion(0L);
+        draft.setExpiresAt(now.plusMinutes(15));
+        draft.setCreateTime(now);
+        draft.setUpdateTime(now);
+        requireWrite(materialDraftMapper.insert(draft));
+        return new MaterialDraftView(draft.getId(), draft.getExpiresAt());
+    }
+
+    @Override
+    public byte[] fulfillmentAsset(String orderId, String assetId) {
+        Long actor = fulfillmentOperator();
+        SecurityUtils.requireAuthority("service-order:biometric");
+        uuid(orderId);
+        uuid(assetId);
+        ServiceOrder order = orderMapper.selectById(orderId);
+        requireSelfOperatedHeisha(order);
+        ServiceOrderFulfillmentAsset asset = fulfillmentAssetMapper.selectById(assetId);
+        if (asset == null || !orderId.equals(asset.getOrderId())) throw missing();
+        if (asset.getContentEncrypted() == null || asset.getPurgedAt() != null)
+            throw bad("资格材料已按保留期限清除");
+        byte[] bytes = decryptBytes(asset.getContentEncrypted());
+        if (bytes.length != asset.getByteSize() || !sha256(bytes).equals(asset.getSha256()))
+            throw bad("资格材料完整性校验失败");
+        securityAudit.recordFulfillmentAssetRead(actor, orderId, assetId, asset.getAssetType());
+        return bytes;
+    }
+
+    @Override
+    public OrderView verifyFulfillment(String id, VerificationForm form) {
+        Long actor = fulfillmentOperator();
+        uuid(id);
+        if (form == null || form.action() == null || form.orderVersion() == null
+                || form.fulfillmentVersion() == null) throw bad("核验参数不完整");
+        return tx(() -> {
+            ServiceOrder order = orderMapper.lock(id);
+            requireSelfOperatedHeisha(order);
+            requireState(order, "PENDING");
+            noPending(order);
+            ServiceOrderFulfillment fulfillment = fulfillmentMapper.lock(id);
+            if (fulfillment == null) throw bad("履约资料不存在，请核对订单记录");
+            if (!Objects.equals(order.getVersion(), form.orderVersion())
+                    || !Objects.equals(fulfillment.getVersion(), form.fulfillmentVersion()))
+                throw bad("订单或履约资料已变化，请刷新后重试");
+            String previous = fulfillment.getVerificationStatus();
+            String note = normalizeLifecycleNote(form.note());
+            String next;
+            String action;
+            switch (form.action()) {
+                case "VERIFY" -> {
+                    if (!Set.of("PENDING", "NEEDS_INFO").contains(previous))
+                        throw bad("当前资格状态不能核验通过");
+                    next = "VERIFIED";
+                    action = "LOCAL_VERIFY";
+                }
+                case "NEEDS_INFO" -> {
+                    if (!"PENDING".equals(previous)) throw bad("当前资格状态不能要求补充资料");
+                    requireLifecycleNote(note, "请填写需要补充的资料");
+                    next = "NEEDS_INFO";
+                    action = "LOCAL_NEEDS_INFO";
+                }
+                case "REJECT" -> {
+                    if (!Set.of("PENDING", "NEEDS_INFO").contains(previous))
+                        throw bad("当前资格状态不能核验不通过");
+                    requireLifecycleNote(note, "请填写核验不通过原因");
+                    next = "REJECTED";
+                    action = "LOCAL_REJECT";
+                }
+                default -> throw bad("不支持的核验操作");
+            }
+            rejectSecretInNote(fulfillment, note);
+            Map<String, Object> fields = new LinkedHashMap<>(decrypt(fulfillment.getPayloadEncrypted()));
+            if (form.resolvedPlanId() != null) fields.put("plan_option_id", safeMaterialText(form.resolvedPlanId(), 120));
+            if (form.resolvedPlanName() != null) fields.put("plan_name", safeMaterialText(form.resolvedPlanName(), 200));
+            if (form.resolvedFenceId() != null) fields.put("fence_option_id", safeMaterialText(form.resolvedFenceId(), 120));
+            if (form.resolvedFenceName() != null) fields.put("fence_name", safeMaterialText(form.resolvedFenceName(), 200));
+            if (form.resolvedMinDistance() != null || form.resolvedMaxDistance() != null) {
+                BigDecimal minimum = form.resolvedMinDistance(), maximum = form.resolvedMaxDistance();
+                if (minimum == null || maximum == null || minimum.compareTo(new BigDecimal("0.1")) < 0
+                        || maximum.compareTo(new BigDecimal("50")) > 0 || minimum.compareTo(maximum) > 0
+                        || minimum.stripTrailingZeros().scale() > 2 || maximum.stripTrailingZeros().scale() > 2)
+                    throw bad("请填写有效的单次公里范围");
+                fields.put("single_min_distance_km", minimum.toPlainString());
+                fields.put("single_max_distance_km", maximum.toPlainString());
+            }
+            fulfillment.setPayloadEncrypted(encrypt(fields));
+            fulfillment.setVerificationStatus(next);
+            fulfillment.setVerifiedBy("VERIFIED".equals(next) ? actor : null);
+            fulfillment.setVerifiedAt("VERIFIED".equals(next) ? ServiceTime.now() : null);
+            fulfillment.setVerificationNote(note);
+            fulfillment.setVersion(fulfillment.getVersion() + 1);
+            fulfillment.setUpdateTime(ServiceTime.now());
+            requireWrite(fulfillmentMapper.updateById(fulfillment));
+            ServiceOperation event = localEvent(order, actor, action, note);
+            event.setPreviousVerificationStatus(previous);
+            event.setResultingVerificationStatus(next);
+            requireWrite(operationMapper.insert(event));
+            return orderView(order);
+        });
+    }
+
+    @Override
+    public OrderView updateFulfillmentMaterials(String id, MaterialUpdateForm form) {
+        Long uid = user();
+        uuid(id);
+        if (form == null || form.orderVersion() == null || form.fulfillmentVersion() == null)
+            throw bad("补充资料参数不完整");
+        return tx(() -> {
+            ServiceOrder order = orderMapper.lock(id);
+            if (order == null || !uid.equals(order.getUserId())) throw missing();
+            requireSelfOperatedHeisha(order);
+            requireState(order, "PENDING");
+            ServiceOrderFulfillment fulfillment = fulfillmentMapper.lock(id);
+            if (fulfillment == null || !"NEEDS_INFO".equals(fulfillment.getVerificationStatus()))
+                throw bad("当前订单不需要补充资料");
+            if (!Objects.equals(order.getVersion(), form.orderVersion())
+                    || !Objects.equals(fulfillment.getVersion(), form.fulfillmentVersion()))
+                throw bad("订单或履约资料已变化，请刷新后重试");
+            String password = form.password();
+            String note = normalizeLifecycleNote(form.note());
+            boolean hasDraft = form.materialDraftId() != null;
+            if ((password == null || password.isEmpty()) && !hasDraft && note == null)
+                throw bad("请提交需要补充的资料");
+            if (password != null && !password.isEmpty() && (password.isBlank() || password.length() < 4
+                    || password.length() > 200 || password.codePoints().anyMatch(Character::isISOControl)))
+                throw bad("密码格式不正确");
+            rejectSecretInNote(fulfillment, note);
+            Map<String, Object> fields = new LinkedHashMap<>(decrypt(fulfillment.getPayloadEncrypted()));
+            if (password != null && !password.isEmpty()) fields.put("password", password);
+            SelfOperatedCheckoutPreparer.requireSafeNote(note, fields);
+            if (note != null) fields.put("supplemental_note", note);
+            if (hasDraft) {
+                if (!Set.of("3", "4").contains(order.getRemoteProductId()))
+                    throw bad("该订单不需要提交资格核验图片");
+                if (!form.authorizedBiometric()) throw bad("请单独确认敏感资料使用授权");
+                consumeDraft(uid, product(order.getProductId()), order, form.materialDraftId());
+            }
+            fulfillment.setPayloadEncrypted(encrypt(fields));
+            fulfillment.setVerificationStatus("PENDING");
+            fulfillment.setVerifiedBy(null);
+            fulfillment.setVerifiedAt(null);
+            fulfillment.setVerificationNote(null);
+            fulfillment.setMaterialVersion(fulfillment.getMaterialVersion() + 1);
+            fulfillment.setVersion(fulfillment.getVersion() + 1);
+            fulfillment.setUpdateTime(ServiceTime.now());
+            requireWrite(fulfillmentMapper.updateById(fulfillment));
+            ServiceOperation event = localEvent(order, uid, "LOCAL_MATERIAL_UPDATED", note);
+            event.setPreviousVerificationStatus("NEEDS_INFO");
+            event.setResultingVerificationStatus("PENDING");
+            requireWrite(operationMapper.insert(event));
+            return orderView(order);
+        });
     }
 
     @Override
@@ -1171,7 +1440,8 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                                                         op.getCreateTime()),
                                                 op.getResolvedBy(),
                                                 op.getResolutionNote(),
-                                                op.getPreviousStatus(), op.getResultingStatus(), op.getCompletedSnapshot()))
+                                                op.getPreviousStatus(), op.getResultingStatus(), op.getCompletedSnapshot(),
+                                                op.getPreviousVerificationStatus(), op.getResultingVerificationStatus()))
                         .toList();
         return new OrderAuditView(
                 orderView(order),
@@ -1427,6 +1697,37 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                         .set(ServiceOperation::getPayloadEncrypted, null));
     }
 
+    /** Privacy retention is independent of sales availability and runs at minute granularity. */
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 60000, initialDelay = 60000)
+    public void purgeFulfillmentMaterials() {
+        LocalDateTime now = ServiceTime.now();
+        materialDraftMapper.update(null,
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
+                                ServiceFulfillmentMaterialDraft>()
+                        .eq(ServiceFulfillmentMaterialDraft::getState, "READY")
+                        .lt(ServiceFulfillmentMaterialDraft::getExpiresAt, now)
+                        .set(ServiceFulfillmentMaterialDraft::getState, "EXPIRED")
+                        .set(ServiceFulfillmentMaterialDraft::getContentEncrypted, null)
+                        .set(ServiceFulfillmentMaterialDraft::getPurgedAt, now)
+                        .set(ServiceFulfillmentMaterialDraft::getUpdateTime, now));
+        LocalDateTime cutoff = now.minusHours(Math.max(1, fulfillmentAssetRetentionHours));
+        List<String> terminalOrders = orderMapper.selectList(
+                        new LambdaQueryWrapper<ServiceOrder>()
+                                .eq(ServiceOrder::getFulfillmentMode, "SELF_OPERATED")
+                                .in(ServiceOrder::getStatus, "COMPLETED", "CANCELLED", "REFUNDED")
+                                .lt(ServiceOrder::getUpdateTime, cutoff)
+                                .select(ServiceOrder::getId))
+                .stream().map(ServiceOrder::getId).toList();
+        if (!terminalOrders.isEmpty())
+            fulfillmentAssetMapper.update(null,
+                    new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<
+                                    ServiceOrderFulfillmentAsset>()
+                            .in(ServiceOrderFulfillmentAsset::getOrderId, terminalOrders)
+                            .isNotNull(ServiceOrderFulfillmentAsset::getContentEncrypted)
+                            .set(ServiceOrderFulfillmentAsset::getContentEncrypted, null)
+                            .set(ServiceOrderFulfillmentAsset::getPurgedAt, now));
+    }
+
     private ServiceOperation newOperation(
             Long uid,
             ServiceProduct p,
@@ -1541,9 +1842,11 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
     }
 
     private ProductView productView(ServiceProduct p, boolean admin) {
-        ApiProvider provider = providerMapper.selectById(p.getProviderId());
-        boolean available =
-                Boolean.TRUE.equals(p.getEnabled())
+        boolean local = FulfillmentMode.selfOperated(p);
+        ApiProvider provider = local ? null : providerMapper.selectById(p.getProviderId());
+        boolean available = local
+                ? Boolean.TRUE.equals(p.getEnabled()) && validSelfOperatedProduct(p)
+                : Boolean.TRUE.equals(p.getEnabled())
                         && provider != null
                         && Integer.valueOf(1).equals(provider.getStatus())
                         && provider.getVerifiedAt() != null
@@ -1571,7 +1874,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                 available,
                 FulfillmentMode.normalize(p.getFulfillmentMode()),
                 p.getVersion(),
-                PhpNativeServiceGateway.capabilities(p.getProviderType()),
+                local ? List.of() : PhpNativeServiceGateway.capabilities(p.getProviderType()),
                 admin && daily(p)
                         ? new ContractPriceView(
                                 plain(p.getContractUnitCost()),
@@ -1583,6 +1886,13 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
     }
 
     private OrderView orderView(ServiceOrder o) {
+        ServiceOrderFulfillment fulfillment = FulfillmentMode.selfOperated(o)
+                ? fulfillmentMapper.selectById(o.getId()) : null;
+        boolean faceMaterialPresent = fulfillment != null && fulfillmentAssetMapper.selectCount(
+                new LambdaQueryWrapper<ServiceOrderFulfillmentAsset>()
+                        .eq(ServiceOrderFulfillmentAsset::getOrderId, o.getId())
+                        .eq(ServiceOrderFulfillmentAsset::getAssetType, "FACE_QUALIFICATION")
+                        .isNotNull(ServiceOrderFulfillmentAsset::getContentEncrypted)) > 0;
         return new OrderView(
                 o.getId(),
                 o.getTitle(),
@@ -1611,7 +1921,14 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                 totalDistance(o.getProviderType()) ? distancePlan(o.getScheduleJson()) : null,
                 !FulfillmentMode.selfOperated(o)
                                 && PERIODIC_TYPES.contains(o.getProviderType()) && !leidianRecordRemoved(o)
-                        ? new StatusCheckView(o.getStatusCheckedAt(), "RETRY".equals(o.getStatusCheckState())) : null);
+                        ? new StatusCheckView(o.getStatusCheckedAt(), "RETRY".equals(o.getStatusCheckState())) : null,
+                fulfillment == null ? null : fulfillment.getVerificationStatus(),
+                fulfillment == null ? null : fulfillment.getVersion(),
+                faceMaterialPresent,
+                fulfillment != null && "NEEDS_INFO".equals(fulfillment.getVerificationStatus())
+                        ? fulfillment.getVerificationNote() : null,
+                FulfillmentMode.selfOperated(o) && "heisha".equals(o.getProviderType())
+                        && Set.of("3", "4").contains(o.getRemoteProductId()));
     }
 
     private List<String> actions(ServiceOrder o) {
@@ -1713,6 +2030,129 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
         return actor;
     }
 
+    private boolean validSelfOperatedProduct(ServiceProduct product) {
+        return product != null
+                && FulfillmentMode.selfOperated(product)
+                && product.getProviderId() == null
+                && "heisha".equals(product.getProviderType())
+                && "default".equals(product.getProject())
+                && Set.of("1", "2", "3", "4").contains(product.getRemoteProductId());
+    }
+
+    private void validateMaterialDraftForQuote(Long uid, ServiceProduct product, OrderForm form) {
+        boolean required = SelfOperatedCheckoutPreparer.requiresFaceMaterial(product);
+        if (!required) {
+            if (form.materialDraftId() != null || form.authorizedBiometric())
+                throw bad("该商品不需要提交资格核验图片");
+            return;
+        }
+        if (!form.authorizedBiometric() || form.materialDraftId() == null)
+            throw bad("请单独授权并提交资格核验图片");
+        uuid(form.materialDraftId());
+        ServiceFulfillmentMaterialDraft draft = materialDraftMapper.selectById(form.materialDraftId());
+        requireUsableDraft(draft, uid, product);
+    }
+
+    private void consumeMaterialDraft(Long uid, ServiceProduct product, ServiceOrder order,
+            Map<String, Object> prepared) {
+        Object value = prepared.get("material_draft_id");
+        String draftId = value instanceof String text ? text : null;
+        if (SelfOperatedCheckoutPreparer.requiresFaceMaterial(product) && draftId == null)
+            throw bad("资格核验图片不存在，请重新提交");
+        if (draftId != null) consumeDraft(uid, product, order, draftId);
+    }
+
+    private void consumeDraft(Long uid, ServiceProduct product, ServiceOrder order, String draftId) {
+        uuid(draftId);
+        ServiceFulfillmentMaterialDraft draft = materialDraftMapper.lock(draftId);
+        requireUsableDraft(draft, uid, product);
+        ServiceOrderFulfillmentAsset asset = fulfillmentAssetMapper.selectOne(
+                new LambdaQueryWrapper<ServiceOrderFulfillmentAsset>()
+                        .eq(ServiceOrderFulfillmentAsset::getOrderId, order.getId())
+                        .eq(ServiceOrderFulfillmentAsset::getAssetType, draft.getAssetType()));
+        if (asset == null) {
+            asset = new ServiceOrderFulfillmentAsset();
+            asset.setId(UUID.randomUUID().toString());
+            asset.setOrderId(order.getId());
+            asset.setAssetType(draft.getAssetType());
+            asset.setVersion(0L);
+            asset.setCreateTime(ServiceTime.now());
+            copyDraftAsset(draft, asset);
+            requireWrite(fulfillmentAssetMapper.insert(asset));
+        } else {
+            asset = fulfillmentAssetMapper.lock(asset.getId());
+            if (asset == null || !order.getId().equals(asset.getOrderId())) throw bad("资格材料状态已变化");
+            copyDraftAsset(draft, asset);
+            asset.setVersion(asset.getVersion() + 1);
+            asset.setPurgedAt(null);
+            requireWrite(fulfillmentAssetMapper.updateById(asset));
+        }
+        draft.setState("USED");
+        draft.setContentEncrypted(null);
+        draft.setPurgedAt(ServiceTime.now());
+        draft.setVersion(draft.getVersion() + 1);
+        draft.setUpdateTime(ServiceTime.now());
+        requireWrite(materialDraftMapper.updateById(draft));
+    }
+
+    private static void copyDraftAsset(ServiceFulfillmentMaterialDraft draft,
+            ServiceOrderFulfillmentAsset asset) {
+        asset.setContentEncrypted(draft.getContentEncrypted());
+        asset.setMimeType(draft.getMimeType());
+        asset.setWidth(draft.getWidth());
+        asset.setHeight(draft.getHeight());
+        asset.setByteSize(draft.getByteSize());
+        asset.setSha256(draft.getSha256());
+    }
+
+    private static void requireUsableDraft(ServiceFulfillmentMaterialDraft draft, Long uid,
+            ServiceProduct product) {
+        if (draft == null || !uid.equals(draft.getUserId())
+                || !product.getId().equals(draft.getProductId())
+                || !product.getVersion().equals(draft.getProductVersion())
+                || !"FACE_QUALIFICATION".equals(draft.getAssetType())
+                || !"READY".equals(draft.getState())
+                || draft.getContentEncrypted() == null
+                || !draft.getExpiresAt().isAfter(ServiceTime.now()))
+            throw bad("资格核验图片已失效，请重新提交");
+    }
+
+    private FulfillmentAssetView assetView(ServiceOrderFulfillmentAsset asset) {
+        return new FulfillmentAssetView(asset.getId(), asset.getAssetType(), asset.getMimeType(),
+                asset.getWidth(), asset.getHeight(), asset.getByteSize(), asset.getVersion(),
+                asset.getCreateTime(), asset.getPurgedAt());
+    }
+
+    private ServiceOperation localEvent(ServiceOrder order, Long actor, String action, String note) {
+        ServiceOperation event = newOperation(order.getUserId(), product(order.getProductId()),
+                null, action, order.getId(), order.getVersion());
+        event.setState("SUCCEEDED");
+        event.setQuantity(0);
+        event.setDistance(order.getDistance());
+        event.setUnitCharge(order.getUnitCharge());
+        event.setAmount(ZERO);
+        event.setAccountLabel(order.getAccountLabel());
+        event.setResolvedBy(actor);
+        event.setResolutionNote(note);
+        event.setPreviousStatus(order.getStatus());
+        event.setResultingStatus(order.getStatus());
+        event.setCompletedSnapshot(order.getCompleted());
+        event.setExpiresAt(ServiceTime.now());
+        return event;
+    }
+
+    private void rejectSecretInNote(ServiceOrderFulfillment fulfillment, String note) {
+        SelfOperatedCheckoutPreparer.requireSafeNote(note, decrypt(fulfillment.getPayloadEncrypted()));
+    }
+
+    private static String safeMaterialText(String value, int max) {
+        String text = value == null ? null : value.trim();
+        if (text == null || text.isEmpty() || text.length() > max
+                || text.codePoints().anyMatch(Character::isISOControl))
+            throw bad("核验结果格式不正确");
+        return text;
+    }
+
     private static void requireFulfillmentMode(String providerType, String fulfillmentMode) {
         if (FulfillmentMode.SELF_OPERATED.name().equals(fulfillmentMode)
                 && !"heisha".equals(providerType))
@@ -1739,6 +2179,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
         if (normalized.length() > 1000
                 || normalized.codePoints().anyMatch(Character::isISOControl))
             throw bad("处理备注格式不正确");
+        SelfOperatedCheckoutPreparer.requireSafeNote(normalized, Map.of());
         return normalized.isEmpty() ? null : normalized;
     }
 
@@ -1765,6 +2206,36 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
             return SecretCrypto.encrypt(JSON.writeValueAsString(fields), cryptoSecret);
         } catch (Exception ex) {
             throw bad("无法安全保存订单参数");
+        }
+    }
+
+    private String encryptBytes(byte[] bytes) {
+        try {
+            return SecretCrypto.encrypt(Base64.getEncoder().encodeToString(bytes), cryptoSecret);
+        } catch (Exception exception) {
+            throw bad("无法安全保存资格材料");
+        }
+    }
+
+    private byte[] decryptBytes(String cipher) {
+        try {
+            if (!SecretCrypto.isEncrypted(cipher)) throw bad("资格材料不可用");
+            byte[] bytes = Base64.getDecoder().decode(SecretCrypto.decrypt(cipher, cryptoSecret));
+            if (bytes.length == 0 || bytes.length > SafeRasterCodec.MAX_OUTPUT)
+                throw bad("资格材料不可用");
+            return bytes;
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw bad("资格材料不可用");
+        }
+    }
+
+    private static String sha256(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (Exception exception) {
+            throw bad("资格材料校验失败");
         }
     }
 

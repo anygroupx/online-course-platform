@@ -13,6 +13,7 @@ import jakarta.validation.constraints.*;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -61,6 +62,18 @@ public class ServiceCommerceController {
         return ok(service.quote(id, form));
     }
 
+    @PostMapping("/service-fulfillment-material-drafts")
+    public ResponseEntity<Result<MaterialDraftView>> materialDraft(
+            @Valid @RequestBody MaterialDraftForm form) {
+        return ok(service.createMaterialDraft(form));
+    }
+
+    @PostMapping("/service-orders/{id}/fulfillment/material-drafts")
+    public ResponseEntity<Result<MaterialDraftView>> orderMaterialDraft(
+            @PathVariable String id, @Valid @RequestBody OrderMaterialDraftForm form) {
+        return ok(service.createOrderMaterialDraft(id, form));
+    }
+
     @GetMapping("/service-orders")
     public ResponseEntity<Result<IPage<OrderView>>> orders(
             @RequestParam(defaultValue = "1") int page,
@@ -78,6 +91,12 @@ public class ServiceCommerceController {
     @PostMapping("/service-orders/{id}/sync")
     public ResponseEntity<Result<OrderView>> sync(@PathVariable String id) {
         return ok(service.sync(id));
+    }
+
+    @PostMapping("/service-orders/{id}/fulfillment/materials")
+    public ResponseEntity<Result<OrderView>> updateFulfillmentMaterials(
+            @PathVariable String id, @Valid @RequestBody MaterialUpdateForm form) {
+        return ok(service.updateFulfillmentMaterials(id, form));
     }
 
     @GetMapping("/service-orders/{id}/options")
@@ -157,8 +176,27 @@ public class ServiceCommerceController {
 
     @GetMapping("/admin/service-orders/{id}/fulfillment")
     @PreAuthorize("hasAuthority('service-order:fulfill')")
-    public ResponseEntity<Result<FulfillmentDetails>> fulfillmentDetails(@PathVariable String id) {
-        return ok(service.fulfillmentDetails(id));
+    public ResponseEntity<Result<FulfillmentAdminView>> fulfillmentDetails(@PathVariable String id) {
+        return ok(service.fulfillmentAdmin(id));
+    }
+
+    @PostMapping("/admin/service-orders/{id}/fulfillment/verification")
+    @PreAuthorize("hasAuthority('service-order:fulfill')")
+    public ResponseEntity<Result<OrderView>> verifyFulfillment(
+            @PathVariable String id, @Valid @RequestBody VerificationForm form) {
+        return ok(service.verifyFulfillment(id, form));
+    }
+
+    @GetMapping("/admin/service-orders/{orderId}/fulfillment/assets/{assetId}")
+    @PreAuthorize("hasAuthority('service-order:fulfill') and hasAuthority('service-order:biometric')")
+    public ResponseEntity<byte[]> fulfillmentAsset(
+            @PathVariable String orderId, @PathVariable String assetId) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.IMAGE_PNG)
+                .header("X-Content-Type-Options", "nosniff")
+                .header("Content-Security-Policy", "default-src 'none'; sandbox")
+                .header("Content-Disposition", "inline; filename=qualification.png")
+                .header("Cross-Origin-Resource-Policy", "same-origin")
+                .body(service.fulfillmentAsset(orderId, assetId));
     }
 
     @GetMapping("/admin/service-order-operations/{id}")

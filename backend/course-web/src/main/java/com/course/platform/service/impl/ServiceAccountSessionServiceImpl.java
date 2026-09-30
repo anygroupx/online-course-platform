@@ -74,6 +74,7 @@ public class ServiceAccountSessionServiceImpl implements ServiceAccountSessions 
         String account = field(form.account(), 100, false).trim(),
                 school = field(form.schoolName(), 120, true).trim();
         ServiceProduct product = product(productId);
+        if (FulfillmentMode.selfOperated(product)) throw bad("该商品不使用在线账号授权流程");
         ApiProvider provider = provider(product, null);
         if (isHeishaFace(product)
                 && (!"PASSWORD".equals(form.mode()) || !account.matches("1[0-9]{10}")))

@@ -470,7 +470,8 @@ class ServiceCommerceControllerTest {
         }
         verifyNoInteractions(service);
         auth("service-order:fulfill");
-        when(service.fulfillmentDetails(id)).thenReturn(new FulfillmentDetails(id, Map.of("password", "authorized-secret")));
+        when(service.fulfillmentAdmin(id)).thenReturn(new FulfillmentAdminView(id, Map.of("password", "authorized-secret"),
+                "PENDING", 0L, 0L, null, null, null, List.of()));
         mvc.perform(get("/admin/service-orders/" + id + "/fulfillment"))
                 .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.data.fields.password").value("authorized-secret"));

@@ -67,7 +67,7 @@ class RateLimitFilterTest {
     }
 
     @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(strings={"/api/services/1/lookup","/api/services/1/quotes","/api/service-orders/id/quotes","/api/service-order-operations/id/confirm","/api/service-account-sessions/id/send-code","/api/service-account-sessions/id/verify","/api/service-account-sessions/id/refresh-rules"})
+    @org.junit.jupiter.params.provider.ValueSource(strings={"/api/services/1/lookup","/api/services/1/quotes","/api/service-orders/id/quotes","/api/service-order-operations/id/confirm","/api/service-account-sessions/id/send-code","/api/service-account-sessions/id/verify","/api/service-account-sessions/id/refresh-rules","/api/service-fulfillment-material-drafts","/api/service-orders/id/fulfillment/material-drafts","/api/admin/service-orders/id/fulfillment","/api/admin/service-orders/id/fulfillment/verification"})
     void nativeServiceMutationsUseExistingUserRateBudget(String path) throws Exception {
         RateLimitService service=mock(RateLimitService.class);
         when(service.check(any())).thenReturn(RateLimitDecision.allowed(10));
@@ -105,6 +105,21 @@ class RateLimitFilterTest {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", path); request.setContextPath("/api");
         filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
         verify(service).check(argThat(rule -> "order:user".equals(rule.dimension()) && "7".equals(rule.keyMaterial())));
+    }
+
+    @Test
+    void biometricReadsHaveADedicatedBoundedBudget() throws Exception {
+        RateLimitService service = mock(RateLimitService.class);
+        when(service.check(any())).thenReturn(RateLimitDecision.allowed(10));
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(7L, null, List.of()));
+        RateLimitFilter filter = new RateLimitFilter(service, new RateLimitProperties(), mock(SecurityAuditService.class), new ObjectMapper());
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/admin/service-orders/order/fulfillment/assets/asset");
+        request.setContextPath("/api");
+
+        filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+
+        verify(service).check(argThat(rule -> "service-biometric:user".equals(rule.dimension())
+                && "7".equals(rule.keyMaterial()) && rule.limit() == 30));
     }
 
     @org.junit.jupiter.params.ParameterizedTest

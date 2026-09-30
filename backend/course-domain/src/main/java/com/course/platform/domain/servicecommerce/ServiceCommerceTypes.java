@@ -14,7 +14,7 @@ public final class ServiceCommerceTypes {
     private ServiceCommerceTypes() {}
 
     public record ProductCommand(
-            @NotNull Long providerId,
+            Long providerId,
             @NotBlank @Size(max = 16) String project,
             @NotBlank @Size(max = 64) String remoteProductId,
             @NotBlank @Size(max = 100) String title,
@@ -24,7 +24,14 @@ public final class ServiceCommerceTypes {
             boolean enabled,
             @Pattern(regexp = "UPSTREAM|SELF_OPERATED") String fulfillmentMode,
             Long version,
-            @Valid ContractPriceForm contractPrice) {
+            @Valid ContractPriceForm contractPrice,
+            @Size(max = 20) String providerType) {
+        public ProductCommand(Long providerId, String project, String remoteProductId, String title,
+                String description, BigDecimal unitPrice, boolean enabled, String fulfillmentMode,
+                Long version, ContractPriceForm contractPrice) {
+            this(providerId, project, remoteProductId, title, description, unitPrice, enabled,
+                    fulfillmentMode, version, contractPrice, null);
+        }
         public ProductCommand(
                 Long providerId,
                 String project,
@@ -44,6 +51,7 @@ public final class ServiceCommerceTypes {
                     enabled,
                     "UPSTREAM",
                     version,
+                    null,
                     null);
         }
 
@@ -58,7 +66,7 @@ public final class ServiceCommerceTypes {
                 Long version,
                 ContractPriceForm contractPrice) {
             this(providerId, project, remoteProductId, title, description, unitPrice, enabled,
-                    "UPSTREAM", version, contractPrice);
+                    "UPSTREAM", version, contractPrice, null);
         }
     }
 
@@ -85,7 +93,16 @@ public final class ServiceCommerceTypes {
             boolean authorizedAccount,
             @Valid InternshipSchedule schedule,
             @Pattern(regexp = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-                    String accountSessionId) {
+                    String accountSessionId,
+            boolean authorizedBiometric,
+            @Pattern(regexp = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+                    String materialDraftId) {
+        public OrderForm(int quantity, BigDecimal distance, Map<String, String> fields,
+                List<String> taskTimes, boolean authorizedAccount, InternshipSchedule schedule,
+                String accountSessionId) {
+            this(quantity, distance, fields, taskTimes, authorizedAccount, schedule,
+                    accountSessionId, false, null);
+        }
         public OrderForm(
                 int quantity,
                 BigDecimal distance,
@@ -93,7 +110,7 @@ public final class ServiceCommerceTypes {
                 List<String> taskTimes,
                 boolean authorizedAccount,
                 InternshipSchedule schedule) {
-            this(quantity, distance, fields, taskTimes, authorizedAccount, schedule, null);
+            this(quantity, distance, fields, taskTimes, authorizedAccount, schedule, null, false, null);
         }
 
         public OrderForm(
@@ -102,7 +119,7 @@ public final class ServiceCommerceTypes {
                 Map<String, String> fields,
                 List<String> taskTimes,
                 boolean authorizedAccount) {
-            this(quantity, distance, fields, taskTimes, authorizedAccount, null);
+            this(quantity, distance, fields, taskTimes, authorizedAccount, null, null, false, null);
         }
 
         @Override
@@ -228,10 +245,27 @@ public final class ServiceCommerceTypes {
             InternshipSchedule schedule,
             String quantityUnit,
             TotalDistancePlan distancePlan,
-            StatusCheckView statusCheck) {}
+            StatusCheckView statusCheck,
+            String verificationStatus,
+            Long fulfillmentVersion,
+            boolean faceMaterialPresent,
+            String verificationReason,
+            boolean faceMaterialRequired) {
+        public OrderView(String id, String title, String accountLabel, String providerType,
+                String project, String status, String fulfillmentMode, int quantity,
+                Integer completed, String distance, String paidAmount, String refundedAmount,
+                String pendingOperationId, LocalDateTime createTime, Long version,
+                List<String> actions, InternshipSchedule schedule, String quantityUnit,
+                TotalDistancePlan distancePlan, StatusCheckView statusCheck) {
+            this(id, title, accountLabel, providerType, project, status, fulfillmentMode, quantity,
+                    completed, distance, paidAmount, refundedAmount, pendingOperationId, createTime,
+                    version, actions, schedule, quantityUnit, distancePlan, statusCheck,
+                    null, null, false, null, false);
+        }
+    }
 
     public record LocalFulfillmentForm(
-            @NotBlank @Pattern(regexp = "START|PROGRESS|COMPLETE|ATTENTION|RESUME") String action,
+            @NotBlank @Pattern(regexp = "START|PROGRESS|COMPLETE|ATTENTION|RESUME|CANCEL_REFUND") String action,
             @NotNull @Min(0) Long orderVersion,
             @Min(0) Integer completed,
             @Size(max = 1000) String note) {
@@ -243,6 +277,61 @@ public final class ServiceCommerceTypes {
         public String toString() {
             return "FulfillmentDetails[orderId=" + orderId + ", fields=REDACTED]";
         }
+    }
+
+    public record MaterialDraftForm(
+            @NotNull Long productId,
+            @NotNull @Min(0) Long productVersion,
+            @NotBlank @Size(max = 2_900_000) String imageData,
+            boolean authorizedBiometric) {
+        @Override public String toString() { return "MaterialDraftForm[imageData=REDACTED]"; }
+    }
+
+    public record OrderMaterialDraftForm(
+            @NotBlank @Size(max = 2_900_000) String imageData,
+            boolean authorizedBiometric) {
+        @Override public String toString() { return "OrderMaterialDraftForm[imageData=REDACTED]"; }
+    }
+
+    public record MaterialDraftView(String id, LocalDateTime expiresAt) {}
+
+    public record FulfillmentAssetView(String id, String assetType, String mimeType, int width,
+            int height, int byteSize, Long version, LocalDateTime createTime, LocalDateTime purgedAt) {}
+
+    public record FulfillmentAdminView(String orderId, Map<String, Object> fields,
+            String verificationStatus, Long version, Long materialVersion, Long verifiedBy,
+            LocalDateTime verifiedAt, String verificationNote, List<FulfillmentAssetView> assets) {
+        @Override public String toString() { return "FulfillmentAdminView[orderId=" + orderId + ", fields=REDACTED]"; }
+    }
+
+    public record VerificationForm(
+            @NotBlank @Pattern(regexp = "VERIFY|NEEDS_INFO|REJECT") String action,
+            @NotNull @Min(0) Long orderVersion,
+            @NotNull @Min(0) Long fulfillmentVersion,
+            @Size(max = 1000) String note,
+            @Size(max = 120) String resolvedPlanId,
+            @Size(max = 200) String resolvedPlanName,
+            @Size(max = 120) String resolvedFenceId,
+            @Size(max = 200) String resolvedFenceName,
+            @DecimalMin("0.1") @DecimalMax("50") @Digits(integer = 2, fraction = 2) BigDecimal resolvedMinDistance,
+            @DecimalMin("0.1") @DecimalMax("50") @Digits(integer = 2, fraction = 2) BigDecimal resolvedMaxDistance) {
+        public VerificationForm(String action, Long orderVersion, Long fulfillmentVersion, String note,
+                String resolvedPlanId, String resolvedPlanName, String resolvedFenceId, String resolvedFenceName) {
+            this(action, orderVersion, fulfillmentVersion, note, resolvedPlanId, resolvedPlanName,
+                    resolvedFenceId, resolvedFenceName, null, null);
+        }
+        @Override public String toString() { return "VerificationForm[REDACTED]"; }
+    }
+
+    public record MaterialUpdateForm(
+            @NotNull @Min(0) Long orderVersion,
+            @NotNull @Min(0) Long fulfillmentVersion,
+            @Size(max = 200) String password,
+            @Pattern(regexp = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+                    String materialDraftId,
+            boolean authorizedBiometric,
+            @Size(max = 1000) String note) {
+        @Override public String toString() { return "MaterialUpdateForm[REDACTED]"; }
     }
 
     public record StatusCheckView(
@@ -301,7 +390,14 @@ public final class ServiceCommerceTypes {
             LocalDateTime createTime) {}
 
     public record AuditEventView(EventView operation, Long resolvedBy, String evidence,
-            String previousStatus, String resultingStatus, Integer completed) {}
+            String previousStatus, String resultingStatus, Integer completed,
+            String previousVerificationStatus, String resultingVerificationStatus) {
+        public AuditEventView(EventView operation, Long resolvedBy, String evidence,
+                String previousStatus, String resultingStatus, Integer completed) {
+            this(operation, resolvedBy, evidence, previousStatus, resultingStatus, completed,
+                    null, null);
+        }
+    }
 
     public record OrderAuditView(
             OrderView order,

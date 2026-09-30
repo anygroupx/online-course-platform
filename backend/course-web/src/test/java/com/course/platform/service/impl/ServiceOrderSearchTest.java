@@ -202,7 +202,7 @@ class ServiceOrderSearchTest {
     void administrativeFulfillmentFilterUsesOrderSnapshotAndCombinesWithPendingState() {
         String local = row(1, 7, "heisha", "PENDING", "自营服务", "13***07", CREATED, null);
         String upstream = row(2, 7, "heisha", "ACTIVE", "接口服务", "13***07", CREATED, null);
-        fixture.jdbc.update("UPDATE service_order SET fulfillment_mode='SELF_OPERATED' WHERE id=?", local);
+        fixture.jdbc.update("UPDATE service_order SET fulfillment_mode='SELF_OPERATED',provider_id=NULL,provider_version=NULL,provider_identity=NULL WHERE id=?", local);
         seal();
         fixture.auth(7, "api-provider:update");
         assertEquals(List.of(local), fixture.service.orders(1, 20, true,
