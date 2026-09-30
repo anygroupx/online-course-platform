@@ -10,5 +10,8 @@ public interface SecurityAuditService {
     /** Must persist successfully before sensitive fulfillment data is returned. */
     void recordFulfillmentRead(Long operatorId, String orderId);
 
+    /** Must persist successfully before biometric material is returned. */
+    void recordFulfillmentAssetRead(Long operatorId, String orderId, String assetId, String assetType);
+
     IPage<SecurityAuditLog> query(String eventType, String severity, Integer page, Integer pageSize);
 }

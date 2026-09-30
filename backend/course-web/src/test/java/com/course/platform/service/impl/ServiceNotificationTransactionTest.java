@@ -81,6 +81,11 @@ class ServiceNotificationTransactionTest {
                             .replace("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", "");
             for (String stmt : ddl.split(";")) if (!stmt.isBlank() && !stmt.stripLeading().startsWith("INSERT")) jdbc.execute(stmt);
         }
+        // The operation mapper reads the current schema even for historical upstream orders.
+        jdbc.execute("CREATE TABLE sys_permission(id BIGINT AUTO_INCREMENT PRIMARY KEY,permission_code VARCHAR(100) UNIQUE,permission_name VARCHAR(100),enabled INT DEFAULT 1)");
+        jdbc.execute("CREATE TABLE sys_role(id BIGINT PRIMARY KEY,role_code VARCHAR(50))");
+        jdbc.execute("CREATE TABLE sys_role_permission(role_id BIGINT,permission_id BIGINT,PRIMARY KEY(role_id,permission_id))");
+        ProviderlessSelfOperatedMigrationTest.executeMigration(jdbc);
         jdbc.update(
                 "INSERT INTO"
                     + " service_product(id,provider_id,provider_type,project,remote_product_id,title,unit_price,create_time,update_time)"

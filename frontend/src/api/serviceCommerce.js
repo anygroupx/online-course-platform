@@ -20,6 +20,12 @@ export const findServiceSchools = (productId, params, signal) =>
   read(`/services/${id(productId)}/schools`, params, signal);
 export const previewServiceOrder = (productId, data) =>
   write(`/services/${id(productId)}/quotes`, data);
+export const createFulfillmentMaterialDraft = (data) =>
+  write("/service-fulfillment-material-drafts", data);
+export const createOrderFulfillmentMaterialDraft = (orderId, data) =>
+  write(`/service-orders/${id(orderId)}/fulfillment/material-drafts`, data);
+export const updateServiceFulfillmentMaterials = (orderId, data) =>
+  write(`/service-orders/${id(orderId)}/fulfillment/materials`, data);
 export const previewServiceAction = (orderId, data) =>
   write(`/service-orders/${id(orderId)}/quotes`, data);
 export const confirmServiceOperation = (operationId) =>
@@ -78,3 +84,9 @@ export const manageServiceFulfillment = (orderId, data) =>
   write(`/admin/service-orders/${id(orderId)}/fulfillment`, data);
 export const getServiceFulfillment = (orderId, signal) =>
   read(`/admin/service-orders/${id(orderId)}/fulfillment`, undefined, signal);
+export const verifyServiceFulfillment = (orderId, data) =>
+  write(`/admin/service-orders/${id(orderId)}/fulfillment/verification`, data);
+export const getServiceFulfillmentAsset = async (orderId, assetId, signal) =>
+  request.get(`/admin/service-orders/${id(orderId)}/fulfillment/assets/${id(assetId)}`, {
+    signal, responseType: "blob", timeout: 125000,
+  });

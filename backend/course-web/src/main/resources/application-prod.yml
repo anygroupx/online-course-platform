@@ -104,6 +104,9 @@ course:
 
 # 敏感字段本地加密与安全任务配置
 app:
+  native-services:
+    fulfillment-assets:
+      retention-hours: ${NATIVE_SERVICE_FULFILLMENT_ASSET_RETENTION_HOURS:24}
   crypto:
     # 必须由环境变量注入；生产环境建议改用 KMS。
     secret: ${APP_CRYPTO_SECRET}

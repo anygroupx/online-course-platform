@@ -418,7 +418,9 @@ try {
     name: "上架服务商品",
     exact: true,
   });
-  await publish.getByRole("combobox").first().click();
+  await publish.getByRole("combobox", { name: "服务类型", exact: true }).locator("xpath=ancestor::div[contains(@class,'el-select__wrapper')][1]").click();
+  await page.getByRole("option", { name: "实习服务", exact: true }).click();
+  await publish.getByRole("combobox", { name: "已保存的服务接口", exact: true }).click();
   await page
     .getByRole("option", { name: "已授权实习直连接口 · 实习服务", exact: true })
     .click();

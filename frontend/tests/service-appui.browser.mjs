@@ -188,7 +188,9 @@ try {
   await page.goto(`${base}/__appui_services?page=/admin/service-products`);
   await page.getByRole("button", { name: "上架服务商品", exact: true }).click();
   const adminDialog = page.getByRole("dialog", { name: "上架服务商品", exact: true });
-  await adminDialog.getByRole("combobox").first().click();
+  await adminDialog.getByRole("combobox", { name: "服务类型", exact: true }).locator("xpath=ancestor::div[contains(@class,'el-select__wrapper')][1]").click();
+  await page.getByRole("option", { name: "实习打卡", exact: true }).click();
+  await adminDialog.getByRole("combobox", { name: "已保存的服务接口", exact: true }).click();
   await page.getByRole("option", { name: "已验证实习服务 · 实习打卡", exact: true }).click();
   await adminDialog.locator(".el-form-item").filter({ hasText: "实习项目" }).locator(".el-select").click();
   await page.getByRole("option", { name: "慧职教", exact: true }).click();

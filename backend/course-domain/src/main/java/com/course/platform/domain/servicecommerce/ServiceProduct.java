@@ -13,6 +13,7 @@ public class ServiceProduct {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Long providerId;
     private String providerType;
     private String project;

@@ -121,7 +121,21 @@ public class SecurityConfig {
                         .requestMatchers("/customer-service/admin/**").hasAuthority("customer-service:read")
                         .requestMatchers("/customer-service/session/*/assign").hasAuthority("customer-service:assign")
                         .requestMatchers("/admin/api-providers/**").hasAuthority("api-provider:update")
-                        .requestMatchers("/admin/service-orders/*/fulfillment").hasAuthority("service-order:fulfill")
+                        .requestMatchers("/admin/service-orders/*/fulfillment/assets/*")
+                                .access(new org.springframework.security.authorization.AuthorizationManager<>() {
+                                    @Override
+                                    public org.springframework.security.authorization.AuthorizationDecision check(
+                                            java.util.function.Supplier<org.springframework.security.core.Authentication> authentication,
+                                            org.springframework.security.web.access.intercept.RequestAuthorizationContext context) {
+                                        var authorities = authentication.get().getAuthorities().stream()
+                                                .map(org.springframework.security.core.GrantedAuthority::getAuthority).collect(java.util.stream.Collectors.toSet());
+                                        return new org.springframework.security.authorization.AuthorizationDecision(
+                                                authorities.contains("service-order:fulfill")
+                                                        && authorities.contains("service-order:biometric"));
+                                    }
+                                })
+                        .requestMatchers("/admin/service-orders/*/fulfillment", "/admin/service-orders/*/fulfillment/verification")
+                                .hasAuthority("service-order:fulfill")
                         // Native-service controllers enforce finer, dual financial permissions at method level.
                         .requestMatchers("/admin/service-products/**", "/admin/service-orders/**", "/admin/service-order-operations/**",
                                 "/admin/plugin-integrations/**", "/admin/service-projects/**", "/admin/service-project-catalog", "/admin/project-operations/**",

@@ -103,8 +103,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
         if (isWrite(method) && (path.equals("/orders") || path.startsWith("/orders/create")
                 || path.startsWith("/orders/batch")
+                || path.equals("/service-fulfillment-material-drafts")
+                || path.matches("/service-orders/[^/]+/fulfillment/material-drafts")
                 || path.startsWith("/services/") || path.startsWith("/service-orders/")
                 || path.startsWith("/service-order-operations/") || path.startsWith("/service-account-sessions/")
+                || path.matches("/admin/service-orders/[^/]+/fulfillment(?:/verification)?")
                 || path.startsWith("/service-projects/") || path.startsWith("/project-accounts/") || path.startsWith("/project-operations/")
                 || path.startsWith("/project-tickets/") || path.startsWith("/project-ticket-operations/"))) {
             values.add(new Limit("order:" + (user == null ? "ip" : "user"),
@@ -114,6 +117,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 || path.matches("/service-orders/[^/]+/(logs|options|notifications(?:/deliveries)?)") || path.startsWith("/service-notification-deliveries/"))) {
             values.add(new Limit("order:" + (user == null ? "ip" : "user"),
                     user == null ? ip : user, properties.getOrderUser(), "order"));
+        }
+        if ("GET".equals(method)
+                && path.matches("/admin/service-orders/[^/]+/fulfillment/assets/[^/]+")) {
+            values.add(new Limit("service-biometric:" + (user == null ? "ip" : "user"),
+                    user == null ? ip : user, new RateLimitProperties.Rule(30, 60), "service-biometric"));
         }
         if (isWrite(method) && (path.matches("/admin/service-orders/[^/]+/refund-quotes")
                 || path.matches("/admin/service-order-operations/[^/]+/(settle-refund|resolve)")

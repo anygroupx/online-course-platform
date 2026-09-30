@@ -64,11 +64,23 @@
     >
       <el-form label-position="top" :disabled="saving">
         <el-alert
-          title="商品和服务配置关联后不可更换。停用配置会暂停新订单；旧订单仍会保留。"
+          title="修改履约方式不会改变历史订单；停用商品只会暂停新订单。"
           type="info"
           :closable="false"
         />
-        <el-form-item label="已保存的服务接口" :error="providersError"
+        <el-form-item label="服务类型">
+          <el-select v-model="form.providerType" aria-label="服务类型" :disabled="!!editing" @change="serviceTypeChanged">
+            <el-option v-for="(name, type) in serviceNames" :key="type" :label="name" :value="type" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="selectedType === 'heisha'" label="履约方式">
+          <el-select v-model="form.fulfillmentMode" aria-label="履约方式" :disabled="!!editing" @change="fulfillmentModeChanged">
+            <el-option label="平台自营" value="SELF_OPERATED" />
+            <el-option label="接口履约" value="UPSTREAM" />
+          </el-select>
+          <p>{{ form.fulfillmentMode === 'SELF_OPERATED' ? '付款后由工作人员核验资料并处理，用户可查看进度。' : '付款后自动提交服务申请，并持续更新订单进度。' }}</p>
+        </el-form-item>
+        <el-form-item v-if="form.fulfillmentMode !== 'SELF_OPERATED'" label="已保存的服务接口" :error="providersError"
           ><div class="provider-row">
             <el-select
               v-model="form.providerId"
@@ -110,13 +122,6 @@
           </div>
           </el-form-item
         >
-        <el-form-item v-if="selectedType === 'heisha'" label="履约方式">
-          <el-select v-model="form.fulfillmentMode" aria-label="履约方式">
-            <el-option label="接口履约" value="UPSTREAM" />
-            <el-option label="平台自营" value="SELF_OPERATED" />
-          </el-select>
-          <p>{{ form.fulfillmentMode === 'SELF_OPERATED' ? '付款后等待管理员处理，可在订单中查看进度。' : '付款后自动提交服务申请，并持续更新订单进度。' }}</p>
-        </el-form-item>
         <el-form-item v-if="selectedType === 'flash'" label="项目"
           ><el-select
             v-model="form.project"
@@ -168,7 +173,7 @@
             <el-select
               v-model="form.remoteProductId"
               :disabled="!!editing"
-              placeholder="先读取服务目录"
+              :placeholder="form.fulfillmentMode === 'SELF_OPERATED' ? '选择黑鲨商品' : '先读取服务目录'"
               @change="selectRemote"
               ><el-option
                 v-for="p in remoteProducts"
@@ -176,6 +181,7 @@
                 :value="p.id"
                 :label="form.fulfillmentMode === 'SELF_OPERATED' ? p.name : `${p.name} · 成本 ¥${p.unitPrice}`" /></el-select
             ><el-button
+              v-if="form.fulfillmentMode !== 'SELF_OPERATED'"
               :loading="reading"
               :disabled="!selectedProviderReady || !!editing"
               @click="readCatalog"
@@ -186,9 +192,17 @@
         <el-alert
           v-if="
             selectedType === 'heisha' &&
+            form.fulfillmentMode === 'UPSTREAM' &&
             ['3', '4'].includes(form.remoteProductId)
           "
           title="人脸商品须先配置已批准的 HTTPS 官方采集域名（HEISHA_FACE_ALLOWED_ORIGINS），并完成本人授权流程联调。空白名单会阻止创建采集链接；平台不存储人脸照片。"
+          type="warning"
+          show-icon
+          :closable="false"
+        />
+        <el-alert
+          v-if="selectedType === 'heisha' && form.fulfillmentMode === 'SELF_OPERATED' && ['3', '4'].includes(form.remoteProductId)"
+          title="该商品要求用户单独授权并提交人脸资格核验材料。"
           type="warning"
           show-icon
           :closable="false"
@@ -250,8 +264,8 @@
           type="primary"
           :loading="saving"
           :disabled="
-            !form.providerId ||
-            (!editing && !selectedProviderReady) ||
+            !form.providerType ||
+            (form.fulfillmentMode !== 'SELF_OPERATED' && (!form.providerId || (!editing && !selectedProviderReady))) ||
             !form.remoteProductId ||
             !form.title ||
             !form.unitPrice
@@ -295,6 +309,7 @@ const items = ref([]),
   saving = ref(false);
 const blank = () => ({
   providerId: null,
+  providerType: providerTypeFilter.value || "",
   project: "default",
   remoteProductId: "",
   title: "",
@@ -327,6 +342,7 @@ const selectedProvider = computed(() => providers.value.find((p) => p.id === for
 const selectedProviderReady = computed(() => selectedProvider.value?.status === 1 && !!selectedProvider.value.verifiedAt);
 const selectedType = computed(
   () =>
+    form.value.providerType ||
     selectedProvider.value?.providerType ||
     editing.value?.providerType ||
     "",
@@ -419,6 +435,7 @@ function open(row, preset = null, requested = null) {
   form.value = row
     ? {
         providerId: row.providerId,
+        providerType: row.providerType,
         project: row.project,
         remoteProductId: row.remoteProductId,
         title: row.title,
@@ -442,7 +459,7 @@ function open(row, preset = null, requested = null) {
     }
   }
   dialog.value = true;
-  loadProviders();
+  if (form.value.fulfillmentMode !== "SELF_OPERATED" && selectedType.value) loadProviders();
 }
 function configureService() {
   dialog.value = false;
@@ -486,6 +503,7 @@ function projectChanged() {
 }
 function providerChanged() {
   form.value.fulfillmentMode = "UPSTREAM";
+  form.value.providerType = selectedProvider.value?.providerType || form.value.providerType;
   projectChanged();
   if (selectedType.value === "sxdk_tw") {
     form.value.project = "zxjy";
@@ -497,6 +515,26 @@ function providerChanged() {
     : selectedType.value === "jingyu" ? "keep" : ["appui", "leidian"].includes(selectedType.value) ? "1" : selectedType.value === "ssbenz_xbd" ? "xbd" : "default";
   form.value.remoteProductId = "";
   remoteProducts.value = [];
+}
+function serviceTypeChanged(type) {
+  form.value.providerId = null;
+  form.value.fulfillmentMode = type === "heisha" ? "SELF_OPERATED" : "UPSTREAM";
+  form.value.project = ["flash", "wuxin"].includes(type) ? "sdxy"
+    : type === "jingyu" ? "keep" : ["appui", "leidian"].includes(type) ? "1" : type === "ssbenz_xbd" ? "xbd" : type === "sxdk_tw" ? "zxjy" : "default";
+  form.value.remoteProductId = type === "sxdk_tw" ? form.value.project : "";
+  resetCatalog();
+  if (type === "heisha") fulfillmentModeChanged("SELF_OPERATED");
+  else loadProviders(true);
+}
+function fulfillmentModeChanged(mode) {
+  resetCatalog();
+  form.value.remoteProductId = "";
+  if (mode === "SELF_OPERATED") {
+    form.value.providerId = null;
+    form.value.providerType = "heisha";
+    form.value.project = "default";
+    remoteProducts.value = [1, 2, 3, 4].map((id) => ({ id: String(id), name: `黑鲨商品 ${id}`, unitPrice: null }));
+  } else loadProviders(true);
 }
 function internshipProjectChanged() {
   resetCatalog();
@@ -544,6 +582,8 @@ async function save() {
   try {
     await saveServiceProduct(editing.value?.id, {
       ...form.value,
+      providerId: form.value.fulfillmentMode === "SELF_OPERATED" ? null : form.value.providerId,
+      providerType: selectedType.value,
       contractPrice: selectedType.value === "sxdk_tw" ? contract.value : null,
     });
     dialog.value = false;

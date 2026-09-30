@@ -191,10 +191,12 @@ try {
   await go("/admin/service-products");
   await page.getByRole("button", { name: "上架服务商品", exact: true }).click();
   const productDialog = page.getByRole("dialog");
-  await productDialog.locator(".el-select").first().click();
+  await productDialog.getByRole("combobox", { name: "服务类型", exact: true }).locator("xpath=ancestor::div[contains(@class,'el-select__wrapper')][1]").click();
+  await page.getByRole("option", { name: "公里计划", exact: true }).click();
+  await productDialog.getByRole("combobox", { name: "已保存的服务接口", exact: true }).click();
   await page.getByRole("option", { name: /总公里测试配置/ }).click();
   await productDialog.getByRole("button", { name: "读取目录", exact: true }).click();
-  await productDialog.locator(".el-select").nth(1).click();
+  await productDialog.getByText("先读取服务目录", { exact: true }).click();
   await page.getByRole("option", { name: /总公里计划 · 方案 1/ }).click();
   await productDialog.locator(".el-form-item").filter({ has: page.locator("label", { hasText: "销售单价" }) }).locator("input").fill("0.35");
   await productDialog.getByRole("button", { name: "保存商品", exact: true }).click();

@@ -199,7 +199,10 @@ try {
   check("school checkout preserves long IDs and password spaces, freezes cent-rounded pricing, and confirms once");
 
   await navigate("/admin/service-products"); await page.getByRole("button", { name: "上架服务商品", exact: true }).click();
-  const admin = page.locator(".service-product-dialog"); await admin.locator(".el-select").first().click();
+  const admin = page.locator(".service-product-dialog");
+  await admin.getByRole("combobox", { name: "服务类型", exact: true }).locator("xpath=ancestor::div[contains(@class,'el-select__wrapper')][1]").click();
+  await page.getByRole("option", { name: "鲸鱼", exact: true }).click();
+  await admin.getByRole("combobox", { name: "已保存的服务接口", exact: true }).click();
   await page.getByRole("option", { name: "测试运动服务 · 鲸鱼", exact: true }).click();
   await admin.getByLabel("运动项目", { exact: true }).locator("xpath=ancestor::div[contains(@class,'el-select__wrapper')][1]").click();
   await page.getByRole("option", { name: "校园运动", exact: true }).click();
