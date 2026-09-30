@@ -38,7 +38,7 @@
       <el-button :disabled="dirty || loading" @click="retry">重试查询</el-button>
       <p v-if="dirty">筛选条件已修改，请点击“查询订单”。</p>
     </el-alert>
-    <div v-loading="loading" class="order-list">
+    <div v-loading="loading" class="order-list" :class="{ 'is-loading': loading }">
       <article
         v-for="item in items"
         :key="item.id"
@@ -1391,6 +1391,8 @@ onBeforeUnmount(clearPrivateDetails);
 .order-list {
   display: grid;
   gap: 18px;
+}
+.order-list.is-loading {
   min-height: 100px;
 }
 .order-card {

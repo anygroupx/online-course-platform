@@ -50,7 +50,7 @@ async function fixture(t, entry, viewport = { width: 1440, height: 900 }, provid
     if (endpoint === '/client/bootstrap') return respond({})
     if (endpoint === '/announcement/system') return respond(null)
     if (endpoint === '/customer-service/unread-count') return respond(0)
-    if (['/service-orders', '/admin/service-orders', '/admin/service-products', '/service-projects',
+    if (['/services', '/service-orders', '/admin/service-orders', '/admin/service-products', '/service-projects',
       '/project-operations', '/project-tickets', '/project-clients', '/project-client-operations', '/admin/service-projects'].includes(endpoint)) return respond(emptyPage)
     if (endpoint === '/project-clients/stats') return respond({ customers: 0, active: 0, appliedOperations: 0, totalDebited: '0.00', totalReturned: '0.00' })
     if (endpoint === '/admin/api-providers') {
@@ -83,6 +83,39 @@ await test('main layout route and dialog regressions', async (t) => {
     base = `http://127.0.0.1:${server.httpServer.address().port}`
     browser = await chromium.launch({ executablePath: process.env.BROWSER_PATH || (existsSync('/snap/bin/chromium') ? '/snap/bin/chromium' : undefined),
       args: ['--no-sandbox', '--disable-dev-shm-usage'] })
+
+    await t.test('service pages keep a viewport-bounded scroll area', async (t) => {
+      const { page, go } = await fixture(t, '/services')
+      for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
+        await page.setViewportSize(viewport)
+        for (const path of ['/services', '/service-orders', '/admin/service-orders', '/admin/service-products', '/services']) {
+          await go(path)
+          await page.locator('.main-content .el-loading-mask:visible').waitFor({ state: 'hidden' })
+          const bounds = await page.locator('.main-content').evaluate((el) => {
+            const rect = el.getBoundingClientRect()
+            return { bottom: rect.bottom, height: rect.height }
+          })
+          const list = page.locator('.service-grid, .order-list')
+          if (await list.count()) {
+            await page.locator('.main-content .el-empty').waitFor()
+            assert.equal(await list.evaluate(el => el.getBoundingClientRect().height), 0,
+              'an empty loaded list must not reserve a second placeholder above its empty state')
+          }
+          assert.ok(bounds.bottom <= viewport.height + 1, 'content must fit below the header and tabs')
+          assert.ok(bounds.height > 100, 'content must not collapse')
+          await page.locator('.main-content').evaluate(el => { el.scrollTop = el.scrollHeight })
+          if (await list.count()) {
+            const visible = await page.locator('.main-content .el-empty').evaluate(el => {
+              const box = el.getBoundingClientRect(), main = el.closest('.main-content').getBoundingClientRect()
+              return box.bottom <= main.bottom + 1
+            })
+            assert.ok(visible, 'the bottom of the empty state remains reachable by scrolling')
+          }
+          await page.locator('.main-content').evaluate(el => { el.scrollTop = 0 })
+          await page.screenshot({ path: `${output}height-${viewport.width}-${path.replaceAll('/', '-')}.png`, animations: 'disabled' })
+        }
+      }
+    })
 
     await t.test('only the visible order view loads, including cached user/admin transitions', async (t) => {
       const { page, go, count, reads } = await fixture(t, '/service-orders')
