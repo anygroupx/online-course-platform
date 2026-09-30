@@ -28,7 +28,7 @@
       :closable="false"
       show-icon
     />
-    <div v-loading="loading" class="service-grid">
+    <div v-loading="loading" class="service-grid" :class="{ 'is-loading': loading }">
       <article
         v-for="item in visibleProducts"
         :key="item.id"
@@ -881,6 +881,8 @@ load();
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
+}
+.service-grid.is-loading {
   min-height: 160px;
 }
 .service-card {
