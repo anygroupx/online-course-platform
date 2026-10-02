@@ -1,3 +1,4 @@
+import { mockAuthority } from './fixtures/rbac-policy.mjs';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
@@ -11,7 +12,7 @@ import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';
 import Page from '/src/views/AdminPlatforms.vue';
 import { applyAuthSession } from '/src/utils/authSession.js';
-applyAuthSession({ token: 'test.' + btoa(JSON.stringify({exp: Date.now()/1000 + 3600})) + '.signature', userId: 7 });
+applyAuthSession({ ...${JSON.stringify(mockAuthority('OPERATOR'))}, token: 'test.' + btoa(JSON.stringify({exp: Date.now()/1000 + 3600})) + '.signature', userId: 7 });
 createApp(Page).use(ElementPlus).mount('#app');
 </script></body></html>`;
 const server = await createServer({

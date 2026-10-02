@@ -165,7 +165,7 @@
               !detail.checkedAt ||
               (!!detail.pendingOperationId && detail.state !== 'UNKNOWN')
             "
-            @click="refreshDetail"
+            v-if="!admin || hasPermission(sessionUserInfo, 'service-project:update')" @click="refreshDetail"
             >读取最新回复</el-button
           >
         </div>
@@ -253,7 +253,7 @@
           ></el-form
         >
         <el-form
-          v-else-if="admin && canReviewTicket(detail)"
+          v-else-if="admin && hasPermission(sessionUserInfo, 'payment:reconcile') && canReviewTicket(detail)"
           label-position="top"
           :disabled="busy"
           ><h4>补偿审核 · 不自动付款</h4>
@@ -271,7 +271,7 @@
             >已核实原工单，了解审核通过不会自动向任何账户入账</el-checkbox
           >
           <p class="support-notice">
-            须同时具备接口管理与资金核对权限；不能覆盖已经完成的审核。
+            须具备资金核对权限；不能覆盖已经完成的审核。
           </p>
           <el-button
             type="primary"
@@ -314,7 +314,7 @@
           </li>
         </ul>
         <el-form
-          v-if="admin && operation.state === 'UNKNOWN'"
+          v-if="admin && hasPermission(sessionUserInfo, 'payment:reconcile') && operation.state === 'UNKNOWN'"
           label-position="top"
           :disabled="busy || resolutionAttempts.has(operation.id)"
           ><h4>人工核对原操作</h4>
@@ -363,6 +363,7 @@
           >关闭</el-button
         ><el-button
           v-if="
+            (!admin || hasPermission(sessionUserInfo, 'payment:reconcile')) &&
             operation &&
             !confirmAttempts.has(operation.id) &&
             ticketOperationReady(operation, admin, clock)
@@ -390,6 +391,8 @@
   </section>
 </template>
 <script setup>
+import { sessionUserInfo } from "@/utils/authSession";
+import { hasPermission } from "@/utils/permissions";
 import { computed, onBeforeUnmount, reactive, ref, watch } from "vue";
 import TicketImagePicker from "@/components/projectclient/TicketImagePicker.vue";
 import TicketImageViewer from "@/components/projectclient/TicketImageViewer.vue";

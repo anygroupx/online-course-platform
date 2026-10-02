@@ -9,7 +9,7 @@ import {createApp,h} from 'vue';import {createRouter,createMemoryHistory,RouterV
 import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';import '/src/styles/variables.scss';import '/src/styles/global.css';import '/src/styles/element-overrides.scss';
 import Orders from '/src/views/ServiceOrders.vue';import {applyAuthSession,clearAuthSession,sessionUserInfo} from '/src/utils/authSession.js';
 // Match LoginResponse: the public account identifier is uid, not the internal numeric userId.
-const session=(userId,permissions=[])=>applyAuthSession({token:'test.'+btoa(JSON.stringify({userId,permissions,exp:Date.now()/1000+3600}))+'.signature',uid:'20000000-0000-4000-8000-'+String(userId).padStart(12,'0'),role:'USER',isAdmin:false,permissions});session(7);
+const session=(userId,permissions=[])=>applyAuthSession({token:'test.'+btoa(JSON.stringify({userId,exp:Date.now()/1000+3600}))+'.signature',uid:'20000000-0000-4000-8000-'+String(userId).padStart(12,'0'),role:'USER',isAdmin:false,permissions});session(7);
 const router=createRouter({history:createMemoryHistory(),routes:[{path:'/service-orders',component:Orders},{path:'/admin/service-orders',component:Orders,meta:{serviceAdmin:true}}]});
 await router.push('/service-orders');await router.isReady();window.__ordersFixture={go:(p)=>router.push(p),query:()=>router.currentRoute.value.query,session,logout:clearAuthSession,rotate:()=>applyAuthSession({...sessionUserInfo.value,balance:'8.00',nickname:'更新的昵称',token:'test.'+btoa(JSON.stringify({userId:7,exp:Date.now()/1000+7200}))+'.rotated'})};
 createApp({render:()=>h(RouterView,null,{default:({Component,route})=>Component?h(Component,{key:route.path}):null})}).use(router).use(ElementPlus).mount('#app');
@@ -28,6 +28,7 @@ const rows = Array.from({ length: 45 }, (_, i) => ({
   version: 1, createTime: `2026-09-${i % 3 ? "12" : "11"}T10:00:00`, actions: [], quantityUnit: "次",
 }));
 rows.push({ ...rows[0], id: orderId(46), ownerId: 8, title: "用户八的服务", accountLabel: "20***08" });
+const administrativeReaders = new Set();
 const reads = [], writes = [], unexpected = [], errors = [], cases = [], releases = [];
 let browser, page, base, failSecond = false, malformedNext = false, heldKeyword = "", releaseHeld;
 const output = path.resolve(process.env.ORDER_SEARCH_TEST_OUTPUT || "../.cache/native-service-ui/order-search");
@@ -67,7 +68,7 @@ try {
     assert.equal(params.pageSize, "20");
     const query = { ...params, administrative: endpoint.startsWith("/admin/") };
     reads.push({ endpoint, params, userId: user.userId });
-    if (query.administrative && !user.permissions.includes("api-provider:update")) return reply(null, 403);
+    if (query.administrative && !administrativeReaders.has(user.userId)) return reply(null, 403);
     if (heldKeyword && params.keyword === heldKeyword) {
       await new Promise((resolve) => { releaseHeld = resolve; releases.push(resolve); });
       try { return await reply(bodyFor(query, user)); } catch { return; } // An explicitly aborted read has no UI consumer.
@@ -180,7 +181,8 @@ try {
   await requestBy(() => page.evaluate(() => window.__ordersFixture.session(8)));
   releaseHeld(); releaseHeld = null; heldKeyword = ""; await page.waitForTimeout(150);
   assert.equal(await cards.count(), 1); assert.match(await cards.first().innerText(), /用户八的服务/); assert.equal(await search.inputValue(), "");
-  await requestBy(() => page.evaluate(() => window.__ordersFixture.session(8, ["api-provider:update"])));
+  administrativeReaders.add(8);
+  await requestBy(() => page.evaluate(() => window.__ordersFixture.session(8, ["service-order:read"])));
   await requestBy(() => page.evaluate(() => window.__ordersFixture.go("/admin/service-orders")));
   const owner = page.getByRole("textbox", { name: "所属用户编号", exact: true });
   await owner.fill("7"); await requestBy(() => submit.click()); assert.equal(reads.at(-1).params.ownerId, "7");
@@ -190,6 +192,7 @@ try {
   await owner.fill("9223372036854775808"); count = reads.length; await submit.click();
   assert.match(await page.locator(".filter-validation").innerText(), /有效的所属用户编号/); assert.equal(reads.length, count);
   await requestBy(() => reset.click());
+  administrativeReaders.delete(8);
   await requestBy(() => page.evaluate(() => window.__ordersFixture.session(8)));
   assert.equal(await cards.count(), 0); assert.match(await page.locator(".el-alert").innerText(), /查看权限/);
   cases.push("account switch, administrative owner query, Long precision and revoked permissions");

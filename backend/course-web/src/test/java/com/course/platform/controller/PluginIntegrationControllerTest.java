@@ -50,12 +50,12 @@ class PluginIntegrationControllerTest {
         mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(new ObjectMapper()))
                 .setControllerAdvice(new GlobalExceptionHandler(mock(SecurityAuditService.class))).build();
-        authenticate("api-provider:update");
+        authenticate("api-provider:read", "api-provider:update");
     }
     @AfterEach void clear() { SecurityContextHolder.clearContext(); }
-    private void authenticate(String authority) {
+    private void authenticate(String... authorities) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(7L, null,
-                List.of(new SimpleGrantedAuthority(authority))));
+                java.util.Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toList()));
     }
 
     @Test void userAndUnrelatedAdminCannotReadAnyIntegrationEndpoint() throws Exception {
@@ -102,7 +102,7 @@ class PluginIntegrationControllerTest {
     @Test void anonymousUsersAreRejectedAndMutationRoutesDoNotExist() throws Exception {
         SecurityContextHolder.clearContext();
         mvc.perform(get(ROOT)).andExpect(status().isUnauthorized());
-        authenticate("api-provider:update");
+        authenticate("api-provider:read", "api-provider:update");
         mvc.perform(post(ROOT + "/P04/providers/9/catalog")).andExpect(status().isMethodNotAllowed());
         verifyNoInteractions(service);
     }

@@ -1,3 +1,4 @@
+import { mockAuthority } from './fixtures/rbac-policy.mjs';
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -11,7 +12,7 @@ import {createApp,h} from 'vue';import {createRouter,createMemoryHistory,RouterV
 import zhCn from 'element-plus/es/locale/lang/zh-cn';import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';import '/src/styles/variables.scss';import '/src/styles/element-overrides.scss';import '/src/styles/global.css';import '/src/styles/fluent-spatial.scss';import '/src/styles/responsive.scss';
 import Store from '/src/views/ServiceStore.vue';import Orders from '/src/views/ServiceOrders.vue';import Admin from '/src/views/AdminServiceProducts.vue';import Providers from '/src/views/AdminApiProviders.vue';
 import {applyAuthSession,clearAuthSession} from '/src/utils/authSession.js';
-window.testLogin=(userId=7)=>applyAuthSession({token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600,sub:userId}))+'.signature',userId});window.testLogin();
+window.testLogin=(userId=7)=>applyAuthSession({ ...${JSON.stringify(mockAuthority('OPERATOR', 'FINANCE'))},token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600,sub:userId}))+'.signature',userId});window.testLogin();
 const router=createRouter({history:createMemoryHistory(),routes:[{path:'/services',component:Store},{path:'/service-orders',component:Orders},{path:'/admin/service-products',component:Admin},{path:'/admin/service-orders',component:Orders,meta:{serviceAdmin:true}},{path:'/providers',component:Providers}]});
 window.navigate=(path)=>router.push(path);window.logout=clearAuthSession;
 await router.push('/services');await router.isReady();createApp({render:()=>h(RouterView,null,{default:({Component,route})=>Component?h(Component,{key:route.path}):null})}).use(router).use(ElementPlus,{locale:zhCn}).mount('#app');

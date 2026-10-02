@@ -74,7 +74,7 @@ class ProjectCenterTransactionTest extends ProjectCenterTestSupport {
     void changingPublishedRatesCannotInflateAnExistingCustomersWithdrawalOrPrice() {
         var id = open();
         topup("8");
-        auth(7, "api-provider:update");
+        auth(7, "service-project:read", "service-project:update");
         service.save(projectId, form("0.50", true, 0L));
         auth(7, "ROLE_USER");
         assertEquals("0.25", service.refresh(id).unitPrice());
@@ -135,14 +135,14 @@ class ProjectCenterTransactionTest extends ProjectCenterTestSupport {
                         service.resolve(
                                 op.id(),
                                 new ResolveForm("NOT_ACCEPTED", null, "联系上游人工核实本操作完全未受理", true)));
-        auth(7, "api-provider:update");
+        auth(7, "service-project:read", "service-project:update");
         assertThrows(
                 BusinessException.class,
                 () ->
                         service.resolve(
                                 op.id(),
                                 new ResolveForm("NOT_ACCEPTED", null, "联系上游人工核实本操作完全未受理", true)));
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "payment:reconcile");
         service.resolve(op.id(), new ResolveForm("NOT_ACCEPTED", null, "联系上游人工核实本操作完全未受理", true));
         money("100");
         service.resolve(op.id(), new ResolveForm("NOT_ACCEPTED", null, "联系上游人工核实本操作完全未受理", true));
@@ -164,7 +164,7 @@ class ProjectCenterTransactionTest extends ProjectCenterTestSupport {
                 .adjust(any(), anyString(), anyString(), any(), anyString());
         assertEquals("UNKNOWN", service.confirm(q.id()).state());
         money("99");
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "payment:reconcile");
         var result =
                 service.resolve(
                         q.id(), new ResolveForm("ACCEPTED", null, "上游流水逐项核实，本次扣除两额度已成功", true));
@@ -183,7 +183,7 @@ class ProjectCenterTransactionTest extends ProjectCenterTestSupport {
         assertThrows(BusinessException.class, () -> quote("PROVISION", null));
         service.confirm(q.id());
         verify(gateway, times(1)).provision(any(), anyString());
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "payment:reconcile");
         assertThrows(
                 BusinessException.class,
                 () ->
@@ -230,7 +230,7 @@ class ProjectCenterTransactionTest extends ProjectCenterTestSupport {
         provider.setConfigVersion(3L);
         assertThrows(BusinessException.class, () -> service.confirm(second.id()));
         provider.setConfigVersion(2L);
-        auth(7, "api-provider:update");
+        auth(7, "service-project:read", "service-project:update");
         service.save(projectId, form("0.30", true, 0L));
         auth(7, "ROLE_USER");
         assertThrows(BusinessException.class, () -> service.confirm(second.id()));
@@ -393,7 +393,7 @@ class ProjectCenterTransactionTest extends ProjectCenterTestSupport {
         assertEquals("UNKNOWN", service.confirm(q.id()).state());
         verify(gateway, times(1)).adjust(any(), anyString(), anyString(), any(), anyString());
         jdbc.execute("ALTER TABLE service_project_account DROP CONSTRAINT simulated_write_failure");
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "payment:reconcile");
         assertEquals(
                 "SUCCEEDED",
                 service.resolve(
@@ -433,7 +433,7 @@ class ProjectCenterTransactionTest extends ProjectCenterTestSupport {
         assertEquals("ACTIVE", accounts.selectById(original).getState());
         assertNull(accounts.selectById(q.accountId()).getRemoteCustomerId());
         assertEquals("UNKNOWN", accounts.selectById(q.accountId()).getState());
-        auth(8, "api-provider:update", "payment:reconcile");
+        auth(8, "payment:reconcile");
         assertThrows(
                 RuntimeException.class,
                 () ->
@@ -451,7 +451,7 @@ class ProjectCenterTransactionTest extends ProjectCenterTestSupport {
         doAnswer(
                         a -> {
                             noTransaction();
-                            auth(7, "api-provider:update");
+                            auth(7, "service-project:read", "service-project:update");
                             service.save(projectId, form("0.80", true, 0L));
                             auth(7, "ROLE_USER");
                             return new AdjustmentReceipt(
@@ -471,7 +471,7 @@ class ProjectCenterTransactionTest extends ProjectCenterTestSupport {
     void disablingProjectPreservesExistingOwnersVisibilityAndPaidWithdrawal() {
         open();
         topup("4");
-        auth(7, "api-provider:update");
+        auth(7, "service-project:read", "service-project:update");
         service.save(projectId, form("0.25", false, 0L));
         auth(7, "ROLE_USER");
         assertEquals(1, service.projects(1, 20, false).getTotal());
@@ -505,7 +505,7 @@ class ProjectCenterTransactionTest extends ProjectCenterTestSupport {
                 .customer(any(), anyString(), anyString());
         Callable<OperationView> resolve =
                 () -> {
-                    auth(7, "api-provider:update", "payment:reconcile");
+                    auth(7, "payment:reconcile");
                     return service.resolve(
                             q.id(),
                             new ResolveForm("ACCEPTED", null, "已逐项核对相同原始流水，确认本次扣除受理成功", true));
@@ -537,7 +537,7 @@ class ProjectCenterTransactionTest extends ProjectCenterTestSupport {
                 .thenReturn(
                         new CustomerReceipt(
                                 "11", "5", "private-customer-key", new BigDecimal("2"), false));
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "payment:reconcile");
         service.resolve(q.id(), new ResolveForm("ACCEPTED", null, "已核实原扣款成功，且上游随后停用了该账户", true));
         assertEquals("DISABLED", accounts.selectById(account).getState());
         money("99.50");

@@ -6,7 +6,7 @@
         <h1>配置可购买的服务商品。</h1>
         <p>选择已验证的服务配置，设置售价并上架，用户即可在服务商城购买。</p>
       </div>
-      <el-button type="primary" :disabled="saving" @click="open()">上架服务商品</el-button>
+      <el-button v-if="permissionUser.hasPermission('service-product:update')" type="primary" :disabled="saving" @click="open()">上架服务商品</el-button>
     </header>
     <el-alert v-if="publicationLoading" type="info" title="正在核对所选服务接口，请稍候" :closable="false" />
     <el-alert v-if="publicationError" type="error" :title="publicationError" :closable="false">
@@ -38,7 +38,7 @@
             row.enabled ? (row.available ? "已上架" : "暂不可用") : "已下架"
           }}</el-tag></template
         ></el-table-column
-      ><el-table-column label="管理" width="100" fixed="right"
+      ><el-table-column v-if="permissionUser.hasPermission('service-product:update')" label="管理" width="100" fixed="right"
         ><template #default="{ row }"
           ><el-button text type="primary" @click="open(row)"
             >编辑</el-button
@@ -278,6 +278,9 @@
   </div>
 </template>
 <script setup>
+import { sessionUserInfo as permissionSession, authSessionScope } from "@/utils/authSession";
+import { hasPermission as checkPermission } from "@/utils/permissions";
+const permissionUser = { hasPermission: (code) => checkPermission(permissionSession.value, code) };
 import { computed, inject, ref, watch, onBeforeUnmount } from "vue";
 import { routerKey } from "vue-router";
 import { ElMessage } from "element-plus";
@@ -420,6 +423,7 @@ function searchProviders(keyword) {
   searchTimer = setTimeout(() => loadProviders(true), 250);
 }
 function open(row, preset = null, requested = null) {
+  if (!permissionUser.hasPermission("service-product:update")) return;
   resetCatalog();
   publicationRequests.invalidate(); publicationLoading.value = false;
   if (!preset) publicationError.value = "";
@@ -468,6 +472,7 @@ function configureService() {
     : { path: "/admin/plugin-integrations" });
 }
 async function readRequestedProvider(query) {
+  if (!permissionUser.hasPermission("service-product:update")) return;
   publicationRequests.invalidate(); publicationLoading.value = false; publicationError.value = "";
   if (!query) { if (router) dialog.value = false; return; }
   providerTypeFilter.value = serviceTypeFromQuery(query.providerType);
@@ -578,6 +583,7 @@ function selectRemote() {
   }
 }
 async function save() {
+  if (saving.value || !permissionUser.hasPermission("service-product:update")) return;
   saving.value = true;
   try {
     await saveServiceProduct(editing.value?.id, {
@@ -594,6 +600,21 @@ async function save() {
     saving.value = false;
   }
 }
+watch(authSessionScope, () => {
+  publicationRequests.invalidate();
+  productListRequests.invalidate();
+  resetCatalog();
+  providerRequest++;
+  clearTimeout(searchTimer);
+  dialog.value = false;
+  editing.value = null;
+  form.value = blank();
+  items.value = [];
+  total.value = 0;
+  loading.value = false;
+  providersLoading.value = false;
+  if ((!router || router.currentRoute.value.path === viewPath) && permissionUser.hasPermission("service-product:read")) load();
+}, { flush: "sync" });
 watch(providerTypeFilter, () => { page.value = 1; load(); });
 watch(() => router && router.currentRoute.value.path === viewPath ? router.currentRoute.value.query : null,
   readRequestedProvider, { immediate: true, flush: "sync" });

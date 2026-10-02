@@ -180,11 +180,14 @@ public class MfaServiceImpl implements MfaService {
         }
 
         RefreshSessionService.SessionTokens session = refreshSessionService.issue(user);
+        var authoritySnapshot = userAuthorityService.loadSnapshot(user.getId());
         String role = resolveRole(user);
         securityAuditService.record("MFA_LOGIN_SUCCESS", "INFO", user.getId(), user.getUsername(),
                 "/auth/mfa/verify", "POST", "MFA 登录成功", null);
         return LoginResponse.builder()
                 .token(session.accessToken())
+                .roles(authoritySnapshot.roles())
+                .permissions(authoritySnapshot.permissions())
                 .refreshToken(session.refreshToken())
                 .uid(user.getUid())
                 .username(user.getUsername())

@@ -357,24 +357,24 @@ class ProjectCenterHttpSecurityTest {
     }
 
     @Test
-    void ownerRecordsAndLedgerEnforceBothPermissionsOnEveryActualHttpRoute() throws Exception {
+    void ownerRecordsAndLedgerAcceptDomainReadersOrFinanceOnEveryActualHttpRoute() throws Exception {
         for (String path : List.of("/admin/project-reports/owners", "/admin/project-reports/owners/8",
                 "/admin/project-reports/owners/8/accounts", "/admin/project-reports/owners/8/clients", "/admin/project-reports/ledger")) {
             mvc.perform(get("/api" + path).contextPath("/api")).andExpect(status().isUnauthorized());
-            for (String permission : List.of("ROLE_SUPER_ADMIN", "api-provider:update", "payment:reconcile"))
+            for (String permission : List.of("ROLE_SUPER_ADMIN", "api-provider:update", "service-order:read"))
                 mvc.perform(get("/api" + path).contextPath("/api").with(authentication(auth(permission))))
                         .andExpect(status().isForbidden());
         }
         verifyNoInteractions(records);
         for (String path : List.of("/admin/project-reports/owners", "/admin/project-reports/owners/8",
                 "/admin/project-reports/owners/8/accounts", "/admin/project-reports/owners/8/clients", "/admin/project-reports/ledger"))
-            mvc.perform(get("/api" + path).contextPath("/api").with(authentication(auth("api-provider:update", "payment:reconcile"))))
+            mvc.perform(get("/api" + path).contextPath("/api").with(authentication(auth("payment:reconcile"))))
                     .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
         verify(records).owners(null, 1, 20); verify(records).owner(8); verify(records).accounts(8, 1, 20);
         verify(records).customers(8, null, null, 1, 20);
         verify(limiter, atLeastOnce()).check(argThat(r -> "project-report:user".equals(r.dimension())));
         mvc.perform(get("/api/admin/project-reports/owners/8/credentials").contextPath("/api")
-                        .with(authentication(auth("api-provider:update", "payment:reconcile"))))
+                        .with(authentication(auth("payment:reconcile"))))
                 .andExpect(status().isForbidden());
     }
 
@@ -397,7 +397,7 @@ class ProjectCenterHttpSecurityTest {
 
     @Test
     void ledgerAdminFiltersAreTypedAndPreservedWithoutPermittingWrites() throws Exception {
-        var auth = authentication(auth("api-provider:update", "payment:reconcile"));
+        var auth = authentication(auth("payment:reconcile"));
         mvc.perform(get("/api/admin/project-reports/ledger").contextPath("/api").with(auth)
                         .param("ownerId", "8").param("projectId", "2").param("book", "PROJECT_ACCOUNT")
                         .param("direction", "CREDIT").param("keyword", "100%_!").param("page", "2").param("pageSize", "10"))
@@ -429,17 +429,17 @@ class ProjectCenterHttpSecurityTest {
     }
 
     @Test
-    void globalReportsRequireBothFinancialAuthoritiesOnTheActualFilterChain() throws Exception {
+    void globalReportsAcceptDomainReadersOrFinanceOnTheActualFilterChain() throws Exception {
         String path = "/api/admin/project-reports/overview";
         mvc.perform(get(path).contextPath("/api")).andExpect(status().isUnauthorized());
-        for (String permission : List.of("ROLE_SUPER_ADMIN", "api-provider:update", "payment:reconcile"))
+        for (String permission : List.of("ROLE_SUPER_ADMIN", "api-provider:update", "service-order:read"))
             mvc.perform(get(path).contextPath("/api").with(authentication(auth(permission))))
                     .andExpect(status().isForbidden());
         verifyNoInteractions(reports);
-        mvc.perform(get(path).contextPath("/api").with(authentication(auth("api-provider:update", "payment:reconcile"))))
+        mvc.perform(get(path).contextPath("/api").with(authentication(auth("payment:reconcile"))))
                 .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"));
         verify(reports).system();
-        mvc.perform(get(path + "/unknown").contextPath("/api").with(authentication(auth("api-provider:update", "payment:reconcile"))))
+        mvc.perform(get(path + "/unknown").contextPath("/api").with(authentication(auth("payment:reconcile"))))
                 .andExpect(status().isForbidden());
     }
 
@@ -473,12 +473,12 @@ class ProjectCenterHttpSecurityTest {
             mvc.perform(get("/api"+path).contextPath("/api").with(authentication(auth("ROLE_USER"))))
                     .andExpect(status().isOk()).andExpect(content().bytes(png)).andExpect(content().contentType("image/png"))
                     .andExpect(header().string("Cache-Control","no-store")).andExpect(header().string("X-Content-Type-Options","nosniff"));
-            for(String role:List.of("ROLE_USER","ROLE_ADMIN","payment:reconcile"))
+            for(String role:List.of("ROLE_USER","ROLE_ADMIN","api-provider:update"))
                 mvc.perform(get("/api/admin"+path).contextPath("/api").with(authentication(auth(role)))).andExpect(status().isForbidden());
         }
-        mvc.perform(get("/api/admin/project-tickets/"+id+"/image").contextPath("/api").param("replyId","45").with(authentication(auth("api-provider:update"))))
+        mvc.perform(get("/api/admin/project-tickets/"+id+"/image").contextPath("/api").param("replyId","45").with(authentication(auth("service-project:read"))))
                 .andExpect(status().isOk()).andExpect(content().bytes(png)).andExpect(header().string("Content-Security-Policy","default-src 'none'; sandbox"));
-        mvc.perform(get("/api/admin/project-ticket-operations/"+id+"/image").contextPath("/api").with(authentication(auth("api-provider:update"))))
+        mvc.perform(get("/api/admin/project-ticket-operations/"+id+"/image").contextPath("/api").with(authentication(auth("service-project:read"))))
                 .andExpect(status().isOk()).andExpect(content().bytes(png));
         verify(tickets).image(id,"45",true);verify(tickets).operationImage(id,true);
         verify(limiter,atLeastOnce()).check(argThat(r->"project-ticket-image:user".equals(r.dimension())));
@@ -649,10 +649,10 @@ class ProjectCenterHttpSecurityTest {
         mvc.perform(
                         get("/api/admin/project-tickets")
                                 .contextPath("/api")
-                                .with(authentication(auth("api-provider:update"))))
+                                .with(authentication(auth("service-project:read"))))
                 .andExpect(status().isOk());
         for (String permission :
-                List.of("ROLE_USER", "ROLE_ADMIN", "api-provider:update", "payment:reconcile")) {
+                List.of("ROLE_USER", "ROLE_ADMIN", "api-provider:update", "service-project:read")) {
             mvc.perform(
                             post("/api/admin/project-ticket-operations/op/confirm")
                                     .contextPath("/api")
@@ -664,7 +664,7 @@ class ProjectCenterHttpSecurityTest {
                                 .contextPath("/api")
                                 .with(
                                         authentication(
-                                                auth("api-provider:update", "payment:reconcile")))
+                                                auth("payment:reconcile")))
                                 .contentType("application/json")
                                 .content(
                                         "{\"result\":\"approved\",\"note\":\"已经逐项核实的工单审核记录\",\"version\":1,\"upstreamChecked\":true}"))
@@ -733,8 +733,8 @@ class ProjectCenterHttpSecurityTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"ROLE_USER", "ROLE_ADMIN", "payment:reconcile"})
-    void adminLookingRoleOrFinancePermissionDoesNotGrantProjectManagement(String permission)
+    @ValueSource(strings = {"ROLE_USER", "ROLE_ADMIN", "api-provider:update"})
+    void roleNamesOrProviderPermissionDoNotGrantProjectReading(String permission)
             throws Exception {
         mvc.perform(
                         get("/api/admin/service-projects")
@@ -745,26 +745,19 @@ class ProjectCenterHttpSecurityTest {
     }
 
     @Test
-    void actualProviderPermissionCanReachEveryNativeAdminControllerInsteadOfGlobalDenyAll()
-            throws Exception {
-        for (String path :
-                List.of(
-                        "/admin/service-projects",
-                        "/admin/service-products",
-                        "/admin/service-orders",
-                        "/admin/plugin-integrations"))
-            mvc.perform(
-                            get("/api" + path)
-                                    .contextPath("/api")
-                                    .with(authentication(auth("api-provider:update"))))
-                    .andExpect(status().isOk())
+    void domainReadersReachOnlyTheirOwnNativeAdminControllers() throws Exception {
+        var permissions = Map.of("/admin/service-projects", "service-project:read",
+                "/admin/service-products", "service-product:read", "/admin/service-orders", "service-order:read",
+                "/admin/plugin-integrations", "api-provider:read");
+        for (var entry : permissions.entrySet()) {
+            mvc.perform(get("/api" + entry.getKey()).contextPath("/api")
+                    .with(authentication(auth(entry.getValue())))).andExpect(status().isOk())
                     .andExpect(header().string("Cache-Control", "no-store"));
-        mvc.perform(
-                        get("/api/admin/service-project-catalog")
-                                .contextPath("/api")
-                                .param("providerId", "9")
-                                .with(authentication(auth("api-provider:update"))))
-                .andExpect(status().isOk());
+            mvc.perform(get("/api" + entry.getKey()).contextPath("/api")
+                    .with(authentication(auth("api-provider:update")))).andExpect(status().isForbidden());
+        }
+        mvc.perform(get("/api/admin/service-project-catalog").contextPath("/api").param("providerId", "9")
+                .with(authentication(auth("service-project:update")))).andExpect(status().isOk());
         verify(projects).catalog(9L);
         verify(commerce).products(1, 20, true);
         verify(commerce).orders(1, 20, true);
@@ -772,9 +765,9 @@ class ProjectCenterHttpSecurityTest {
     }
 
     @Test
-    void bothPermissionsAreRequiredForFinancialReadsAndSettlement() throws Exception {
+    void projectFinancialReadsAndSettlementRequireFinanceNotProviderPermissions() throws Exception {
         for (String permission :
-                List.of("api-provider:update", "payment:reconcile", "ROLE_ADMIN")) {
+                List.of("api-provider:update", "service-project:read", "ROLE_ADMIN")) {
             mvc.perform(
                             get("/api/admin/project-operations")
                                     .contextPath("/api")
@@ -795,14 +788,14 @@ class ProjectCenterHttpSecurityTest {
                                 .contextPath("/api")
                                 .with(
                                         authentication(
-                                                auth("api-provider:update", "payment:reconcile"))))
+                                                auth("payment:reconcile"))))
                 .andExpect(status().isOk());
         mvc.perform(
                         post("/api/admin/project-operations/id/resolve")
                                 .contextPath("/api")
                                 .with(
                                         authentication(
-                                                auth("api-provider:update", "payment:reconcile")))
+                                                auth("payment:reconcile")))
                                 .contentType("application/json")
                                 .content(
                                         "{\"outcome\":\"NOT_ACCEPTED\",\"evidence\":\"已与上游完整核实确实未受理该操作\",\"upstreamChecked\":true}"))
@@ -817,14 +810,14 @@ class ProjectCenterHttpSecurityTest {
         mvc.perform(
                         get("/api/admin/service-order-operations/id")
                                 .contextPath("/api")
-                                .with(authentication(auth("api-provider:update"))))
+                                .with(authentication(auth("service-project:read"))))
                 .andExpect(status().isForbidden());
         mvc.perform(
                         get("/api/admin/service-order-operations/id")
                                 .contextPath("/api")
                                 .with(
                                         authentication(
-                                                auth("api-provider:update", "payment:reconcile"))))
+                                                auth("service-order:reconcile"))))
                 .andExpect(status().isOk());
         verify(commerce).adminOperation("id");
         mvc.perform(
@@ -832,7 +825,7 @@ class ProjectCenterHttpSecurityTest {
                                 .contextPath("/api")
                                 .with(
                                         authentication(
-                                                auth("api-provider:update", "payment:reconcile"))))
+                                                auth("service-order:reconcile"))))
                 .andExpect(status().isForbidden());
     }
 

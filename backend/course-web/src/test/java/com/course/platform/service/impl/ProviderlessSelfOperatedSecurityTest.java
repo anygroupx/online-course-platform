@@ -43,7 +43,7 @@ class ProviderlessSelfOperatedSecurityTest {
         jdbc.update("DELETE FROM api_provider");
         clearInvocations(fixture.providerService, fixture.providerMapper, fixture.catalog,
                 fixture.gateway, fixture.commerceAccounts);
-        fixture.auth(7, "api-provider:update");
+        fixture.auth(7, "service-product:read", "service-product:update", "service-order:read");
         var product = service.saveProduct(null, new ProductCommand(null, "default", sku,
                 "黑鲨商品 " + sku, "", new BigDecimal("0.25"), true, "SELF_OPERATED", null, null, "heisha"));
         assertTrue(product.available());
@@ -198,7 +198,7 @@ class ProviderlessSelfOperatedSecurityTest {
         var json = new ObjectMapper().findAndRegisterModules();
         String publicJson = json.writeValueAsString(List.of(service.order(created.orderId()),
                 service.products(1, 20, false).getRecords(), service.events(created.orderId())));
-        fixture.auth(8, "api-provider:update", "payment:reconcile", "service-order:fulfill");
+        fixture.auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund", "service-order:fulfill");
         publicJson += json.writeValueAsString(service.audit(created.orderId()));
         publicJson += json.writeValueAsString(service.fulfillmentAdmin(created.orderId()).assets());
         for (String secret : List.of("local-password-secret", image.substring(image.indexOf(',') + 1),

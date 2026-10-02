@@ -70,7 +70,7 @@
             <div v-if="session.customerServiceUid" class="cs-info">
               客服：{{ session.customerServiceName || '未知' }}
             </div>
-            <div v-if="!session.customerServiceUid && session.status === 1" class="take-action">
+            <div v-if="!session.customerServiceUid && session.status === 1 && hasPermission(sessionUserInfo, 'customer-service:take')" class="take-action">
               <el-button
                 type="primary"
                 size="small"
@@ -164,6 +164,8 @@
 </template>
 
 <script setup>
+import { sessionUserInfo } from "@/utils/authSession";
+import { hasPermission } from "@/utils/permissions";
 import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, ChatDotRound, User, Service } from '@element-plus/icons-vue'

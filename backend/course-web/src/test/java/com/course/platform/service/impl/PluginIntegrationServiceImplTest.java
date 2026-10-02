@@ -50,13 +50,13 @@ class PluginIntegrationServiceImplTest {
         mapper = mock(ApiProviderMapper.class);
         providers = mock(ApiProviderService.class);
         service = new PluginIntegrationServiceImpl(new PluginResearchCatalog(registry, mock(NativeServiceGatewayRouter.class)), registry, mapper, providers);
-        authenticate("api-provider:update");
+        authenticate("api-provider:read", "api-provider:update");
         clearInvocations(connector);
     }
     @AfterEach void clear() { SecurityContextHolder.clearContext(); }
-    private void authenticate(String authority) {
+    private void authenticate(String... authorities) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(7L, null,
-                List.of(new SimpleGrantedAuthority(authority))));
+                java.util.Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toList()));
     }
     private ApiProvider configured(int status, boolean verified) {
         ApiProvider provider = new ApiProvider();

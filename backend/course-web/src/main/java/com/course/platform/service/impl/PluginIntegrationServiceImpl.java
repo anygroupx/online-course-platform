@@ -8,6 +8,7 @@ import com.course.platform.application.service.integration.PluginReadOnlyConnect
 import com.course.platform.application.service.platform.ApiProviderService;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.common.result.ResultCode;
+import com.course.platform.common.security.SecurityAuthorities;
 import com.course.platform.domain.dto.PluginPageQuery;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.exception.ProviderRequestException;
@@ -31,12 +32,12 @@ public class PluginIntegrationServiceImpl implements PluginIntegrationService {
     private final ApiProviderService providers;
 
     @Override public List<PluginIntegrationDescriptor> listIntegrations() {
-        SecurityUtils.requireAuthority("api-provider:update");
+        SecurityUtils.requireAuthority(SecurityAuthorities.API_PROVIDER_READ);
         return research.list();
     }
 
     @Override public IPage<PluginProviderOption> listProviders(String pluginId, PluginPageQuery query) {
-        SecurityUtils.requireAuthority("api-provider:update");
+        SecurityUtils.requireAuthority(SecurityAuthorities.API_PROVIDER_READ);
         PluginIntegrationDescriptor descriptor = requireDescriptor(pluginId);
         if (!descriptor.availableCapabilities().contains("CATALOG")
                 && !descriptor.serviceCapabilities().contains("CREATE")) throw unsupported();
@@ -55,7 +56,7 @@ public class PluginIntegrationServiceImpl implements PluginIntegrationService {
     }
 
     @Override public List<PluginProduct> fetchCatalog(String pluginId, Long providerId, String project) {
-        SecurityUtils.requireAuthority("api-provider:update");
+        SecurityUtils.requireAuthority(SecurityAuthorities.API_PROVIDER_UPDATE);
         PluginReadOnlyConnector connector = requireConnector(pluginId);
         if (project != null && !project.isEmpty()
                 && connector.projects().stream().noneMatch(p -> p.id().equals(project))) {
@@ -66,7 +67,7 @@ public class PluginIntegrationServiceImpl implements PluginIntegrationService {
     }
 
     @Override public PluginSchoolPage searchSchools(String pluginId, Long providerId, PluginPageQuery query) {
-        SecurityUtils.requireAuthority("api-provider:update");
+        SecurityUtils.requireAuthority(SecurityAuthorities.API_PROVIDER_UPDATE);
         PluginReadOnlyConnector connector = requireConnector(pluginId);
         if (!connector.supportsSchools()) throw unsupported();
         requireQuery(query);

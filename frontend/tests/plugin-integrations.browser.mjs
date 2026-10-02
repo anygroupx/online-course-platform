@@ -1,3 +1,4 @@
+import { mockAuthority } from './fixtures/rbac-policy.mjs';
 /** Real Vue/Element Plus UI against an offline API fixture; never contacts a supplied plugin host. */
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
@@ -46,7 +47,7 @@ const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><met
 import { createApp } from 'vue'; import ElementPlus from 'element-plus'; import 'element-plus/dist/index.css';
 import 'element-plus/theme-chalk/dark/css-vars.css'; import '/src/styles/variables.scss'; import '/src/styles/element-overrides.scss'; import '/src/styles/global.css'; import '/src/styles/fluent-spatial.scss'; import '/src/styles/responsive.scss'; import Page from '/src/views/AdminPluginIntegrations.vue';
 import { applyAuthSession } from '/src/utils/authSession.js';
-applyAuthSession({ token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7 });
+applyAuthSession({ ...${JSON.stringify(mockAuthority('OPERATOR'))}, token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7 });
 createApp(Page).use(ElementPlus).mount('#app');</script></body></html>`;
 const server = await createServer({
   logLevel: "error", server: { host: "127.0.0.1", port: 0, strictPort: false },

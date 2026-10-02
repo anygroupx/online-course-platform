@@ -104,7 +104,7 @@ class ServiceCommerceControllerTest {
     }
 
     @Test
-    void reconciliationRequiresBothFinancialAndProviderPermissions() throws Exception {
+    void reconciliationUsesItsDomainPermissionNotProviderOrPaymentPrivileges() throws Exception {
         String body =
                 "{\"outcome\":\"NOT_ACCEPTED\",\"evidence\":\"已核实上游没有订单和扣款记录\",\"upstreamChecked\":true}";
         auth("api-provider:update");
@@ -120,7 +120,7 @@ class ServiceCommerceControllerTest {
                                 .content(body))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(service);
-        auth("api-provider:update", "payment:reconcile");
+        auth("service-order:reconcile", "service-order:refund");
         mvc.perform(
                         post("/admin/service-order-operations/test/resolve")
                                 .contentType("application/json")
@@ -229,7 +229,7 @@ class ServiceCommerceControllerTest {
 
     @Test
     void administrativeRefundKeepsExactUnitChargeAndServerCappedAmount() throws Exception {
-        auth("api-provider:update", "payment:reconcile");
+        auth("service-order:reconcile", "service-order:refund");
         QuoteView ready =
                 new QuoteView(
                         "refund-op", "order-id", "SETTLE_REFUND", "READY", "每次公里计划", 6,
@@ -290,7 +290,7 @@ class ServiceCommerceControllerTest {
                     .andExpect(status().isForbidden());
         }
         verifyNoInteractions(service);
-        auth("api-provider:update", "payment:reconcile");
+        auth("service-order:reconcile", "service-order:refund");
         mvc.perform(
                         post("/admin/service-orders/order-id/refund-quotes")
                                 .contentType("application/json")
@@ -406,7 +406,7 @@ class ServiceCommerceControllerTest {
     void orderSearchOwnerIdIsBoundLosslesslyAndAdministrativeReadIsPermissionProtected() throws Exception {
         mvc.perform(get("/admin/service-orders").param("ownerId", "8")).andExpect(status().isForbidden());
         verifyNoInteractions(service);
-        auth("api-provider:update");
+        auth("service-order:read");
         var filter = new ServiceOrderFilter(null, null, null, null, Long.MAX_VALUE, null, null, null);
         when(service.orders(1, 20, true, filter)).thenReturn(new Page<>(1, 20));
         mvc.perform(get("/admin/service-orders").param("ownerId", Long.toString(Long.MAX_VALUE)))
@@ -450,7 +450,7 @@ class ServiceCommerceControllerTest {
 
     @Test
     void recoveryBindsBothReceiptNumbersWithoutConflatingTheirRoles() throws Exception {
-        auth("api-provider:update", "payment:reconcile");
+        auth("service-order:reconcile", "service-order:refund");
         mvc.perform(post("/admin/service-order-operations/op-id/resolve").contentType("application/json")
                         .content("{\"outcome\":\"ACCEPTED\",\"externalOrderNo\":\"yid-451\",\"externalSubOrderNo\":\"17\","
                                 + "\"evidence\":\"已逐项核实两个编号、账号和实际资金记录\",\"upstreamChecked\":true}"))
@@ -494,6 +494,55 @@ class ServiceCommerceControllerTest {
         OrderForm form = tolerantMapper.readValue(
                 "{\"quantity\":1,\"distance\":2,\"fields\":{},\"authorizedAccount\":true,\"fulfillmentMode\":\"SELF_OPERATED\",\"selfOperated\":true}", OrderForm.class);
         org.junit.jupiter.api.Assertions.assertEquals(new OrderForm(1, new java.math.BigDecimal("2"), Map.of(), null, true), form);
+    }
+
+    @Test
+    void serviceProductReadsAndWritesUseSeparateDomainPermissions() throws Exception {
+        String body = """
+                {"providerType":"heisha","project":"default","remoteProductId":"3",
+                 "title":"权限测试商品","unitPrice":0.25,"enabled":true,"fulfillmentMode":"SELF_OPERATED"}
+                """;
+        when(service.products(anyInt(), anyInt(), eq(true))).thenReturn(new Page<>(1, 20));
+        auth("service-product:read");
+        mvc.perform(get("/admin/service-products")).andExpect(status().isOk());
+        mvc.perform(post("/admin/service-products").contentType("application/json").content(body))
+                .andExpect(status().isForbidden());
+        mvc.perform(put("/admin/service-products/1").contentType("application/json").content(body))
+                .andExpect(status().isForbidden());
+        verify(service, never()).saveProduct(any(), any());
+        auth("service-product:update");
+        mvc.perform(post("/admin/service-products").contentType("application/json").content(body))
+                .andExpect(status().isOk());
+        mvc.perform(put("/admin/service-products/1").contentType("application/json").content(body))
+                .andExpect(status().isOk());
+        auth("api-provider:update");
+        mvc.perform(get("/admin/service-products")).andExpect(status().isForbidden());
+        mvc.perform(post("/admin/service-products").contentType("application/json").content(body))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void orderReadAndRefundAreIndependentFromFulfillmentAndProviderManagement() throws Exception {
+        String id = "70fe9178-8f36-434e-8200-f4d1c9ed82d0";
+        String body = "{\"action\":\"CANCEL_REFUND\",\"orderVersion\":0,\"note\":\"开始前申请退款\"}";
+        when(service.orders(anyInt(), anyInt(), eq(true))).thenReturn(new Page<>(1, 20));
+        auth("service-order:read");
+        mvc.perform(get("/admin/service-orders")).andExpect(status().isOk());
+        for (String permission : List.of("service-order:fulfill", "api-provider:update", "service-order:read")) {
+            auth(permission);
+            mvc.perform(post("/admin/service-orders/" + id + "/fulfillment").contentType("application/json").content(body))
+                    .andExpect(status().isForbidden());
+        }
+        verify(service, never()).manageFulfillment(any(), any());
+        auth("service-order:refund");
+        mvc.perform(post("/admin/service-orders/" + id + "/fulfillment").contentType("application/json").content(body))
+                .andExpect(status().isOk());
+        mvc.perform(post("/admin/service-orders/" + id + "/fulfillment").contentType("application/json")
+                        .content("{\"action\":\"START\",\"orderVersion\":0}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/admin/service-orders/" + id + "/fulfillment/assets/70fe9178-8f36-434e-8200-f4d1c9ed82d1"))
+                .andExpect(status().isForbidden());
+        verify(service).manageFulfillment(eq(id), argThat(form -> "CANCEL_REFUND".equals(form.action())));
     }
 
 }

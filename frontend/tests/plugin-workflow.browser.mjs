@@ -1,3 +1,4 @@
+import { mockAuthority } from './fixtures/rbac-policy.mjs';
 /** Native Vue workflows against local fixtures only. Every API is mocked, including all writes. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -24,7 +25,7 @@ import {createApp,h,KeepAlive} from 'vue';import {RouterView,RouterLink} from 'v
 import ElementPlus from 'element-plus';import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';
 import '/src/styles/variables.scss';import '/src/styles/element-overrides.scss';import '/src/styles/global.css';import '/src/styles/fluent-spatial.scss';import '/src/styles/responsive.scss';
 import router from '${routerModule}';globalThis.__workflowRouter=router;import {applyAuthSession} from '/src/utils/authSession.js';
-applyAuthSession({token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7});
+applyAuthSession({ ...${JSON.stringify(mockAuthority('OPERATOR', 'FINANCE'))},token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7});
 await router.push(new URLSearchParams(location.search).get('page')||'/admin/plugin-integrations');await router.isReady();
 createApp({render:()=>h('main',{style:'padding:16px'},[
 h('nav',{style:'display:flex;flex-wrap:wrap;gap:20px;margin-bottom:20px'},[
@@ -294,6 +295,7 @@ await test('plugin configuration, publishing and native purchase workflow', asyn
       await page.locator('.order-card.focused').waitFor()
       await quote.waitFor({ state: 'hidden' })
       assert.deepEqual(await currentRoute(page), { path: '/service-orders', query: { focus: orderId, providerType: 'jiguang' } })
+      await page.getByRole('dialog').waitFor({ state: 'hidden' })
       assert.equal(await page.getByRole('dialog').count(), 0, 'cached checkout must not cover the order page')
       const search = calls.filter(c => c.endpoint === '/service-orders').at(-1)
       assert.equal(search.params.providerType, 'jiguang')

@@ -7,6 +7,7 @@ import {
   isAccessTokenExpired,
   refreshAccessSession,
   clearAuthSession,
+  csrfToken,
 } from "@/utils/authSession";
 import { isClientAutoRefreshEnabled } from "@/utils/clientConfigState";
 
@@ -78,7 +79,8 @@ request.interceptors.response.use(
     if (axios.isCancel(error)) return Promise.reject(error);
     const status = error.response?.status;
     const original = error.config || {};
-    if (original.suppressGlobalError) return Promise.reject(error);
+    if (original.suppressGlobalError && status !== 403) return Promise.reject(error);
+
     const canRetry = status === 401
       && !original.__sessionRetry
       && !String(original.url || "").includes("/auth/refresh")
@@ -101,7 +103,11 @@ request.interceptors.response.use(
       notifyMustChangePassword();
       ElMessage.warning(error.response.data.message || "首次登录必须修改密码");
     } else if (status === 403) {
-      ElMessage.error(error.response?.data?.message || "拒绝访问");
+      // Refresh the UX snapshot once, but never replay the denied business request.
+      if (csrfToken() && !String(original.url || "").includes("/auth/")) {
+        try { await refreshAccessSession(); } catch { /* The original denial remains authoritative. */ }
+      }
+      if (!original.suppressGlobalError) ElMessage.error("权限已发生变化，已重新检查可用操作");
     } else if (status === 429) {
       ElMessage.error(error.response?.data?.message || "请求过于频繁，请稍后再试");
     } else if (error.response) {

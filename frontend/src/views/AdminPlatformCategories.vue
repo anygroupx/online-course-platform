@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-header">
           <span>平台分类管理</span>
-          <el-button type="primary" @click="handleCreate">
+          <el-button :disabled="!permissionUser.hasPermission('platform:update')" type="primary" @click="handleCreate">
             <el-icon><Plus /></el-icon>
             添加分类
           </el-button>
@@ -25,9 +25,9 @@
         <el-table-column prop="createTime" label="创建时间" show-overflow-tooltip />
         <el-table-column label="操作" width="350" fixed="right">
           <template #default="scope">
-            <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
-            <el-button size="small" type="warning" @click="handleDeletePlatforms(scope.row)">批量删除课程</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+            <el-button :disabled="!permissionUser.hasPermission('platform:update')" size="small" @click="handleEdit(scope.row)">编辑</el-button>
+            <el-button :disabled="!permissionUser.hasPermission('platform:update')" size="small" type="warning" @click="handleDeletePlatforms(scope.row)">批量删除课程</el-button>
+            <el-button :disabled="!permissionUser.hasPermission('platform:update')" size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
             <el-button size="small" type="danger" plain @click="handleCascadeDelete(scope.row)">级联删除</el-button>
           </template>
         </el-table-column>
@@ -69,6 +69,9 @@
 </template>
 
 <script setup>
+import { sessionUserInfo as permissionSession } from "@/utils/authSession";
+import { hasPermission as checkPermission } from "@/utils/permissions";
+const permissionUser = { hasPermission: (code) => checkPermission(permissionSession.value, code) };
 import { ref, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

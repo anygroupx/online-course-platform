@@ -8,12 +8,12 @@
           目录展示价不等于最终实际成本。确认合同费率后发布，用户账户保留开通时的冻结售价。
         </p>
       </div>
-      <el-button type="primary" @click="edit()">发布项目</el-button>
+      <el-button v-if="permissionUser.hasPermission('service-project:update')" type="primary" @click="edit()">发布项目</el-button>
     </header>
     <el-tabs
       v-model="tab"
       @tab-change="tab === 'review' ? loadOperations() : tab === 'projects' ? load() : undefined"
-      ><el-tab-pane label="项目与费率" name="projects" /><el-tab-pane
+      ><el-tab-pane label="项目与费率" name="projects" /><el-tab-pane v-if="permissionUser.hasPermission('payment:reconcile')"
         label="资金操作核对"
         name="review" /><el-tab-pane label="项目工单" name="tickets" /><el-tab-pane label="运营统计" name="reports" /><el-tab-pane label="经营者明细" name="owners" /><el-tab-pane label="资金流水" name="ledger"
     /></el-tabs>
@@ -48,7 +48,7 @@
               row.enabled ? (row.available ? "已发布" : "需核实配置") : "未发布"
             }}</el-tag></template
           ></el-table-column
-        ><el-table-column label="操作" width="95"
+        ><el-table-column v-if="permissionUser.hasPermission('service-project:update')" label="操作" width="95"
           ><template #default="{ row }"
             ><el-button text @click="edit(row)">编辑</el-button></template
           ></el-table-column
@@ -63,7 +63,7 @@
     /></template>
     <template v-else-if="tab === 'review'"
       ><p class="review-policy">
-        须同时具备接口管理与资金核对权限。先查实际交易流水，再判断是否受理；不能用余额差猜测，也不会再次提交兑换。
+        须具备资金核对权限。先查实际交易流水，再判断是否受理；不能用余额差猜测，也不会再次提交兑换。
       </p>
       <el-button :loading="loading" @click="loadOperations"
         >刷新核对列表</el-button
@@ -88,7 +88,7 @@
           ><template #default="{ row }">{{
             projectState(row.state)
           }}</template></el-table-column
-        ><el-table-column label="操作" min-width="110"
+        ><el-table-column v-if="permissionUser.hasPermission('payment:reconcile')" label="操作" min-width="110"
           ><template #default="{ row }"
             ><el-button text @click="inspect(row.id)"
               >查看与核对</el-button
@@ -289,6 +289,9 @@
   </main>
 </template>
 <script setup>
+import { sessionUserInfo as permissionSession } from "@/utils/authSession";
+import { hasPermission as checkPermission } from "@/utils/permissions";
+const permissionUser = { hasPermission: (code) => checkPermission(permissionSession.value, code) };
 import { computed, onBeforeUnmount, ref } from "vue";
 import ProjectTickets from "@/components/projectcenter/ProjectTickets.vue";
 import ProjectUsage from "@/components/projectcenter/ProjectUsage.vue";
@@ -365,7 +368,7 @@ async function loadOperations() {
       operationTotal.value = r.total;
     }
   } catch {
-    error.value = "无法读取项目资金记录，须同时具备接口管理与资金核对权限。";
+    error.value = "无法读取项目资金记录，须具备资金核对权限。";
   } finally {
     loading.value = false;
   }

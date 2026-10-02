@@ -6,7 +6,7 @@
           <span>服务接口管理</span>
           <div class="provider-header-actions">
           <el-button @click="router.push('/admin/plugin-integrations')">插件集成</el-button>
-          <el-button type="primary" @click="handleCreate">
+          <el-button v-if="permissionUser.hasPermission('api-provider:update')" type="primary" @click="handleCreate">
             <el-icon><Plus /></el-icon>
             添加接口
           </el-button>
@@ -37,7 +37,7 @@
                 type="primary"
                 :loading="balanceLoadingIds.has(scope.row.id)"
                 :disabled="scope.row.status !== 1"
-                @click="handleRefreshBalance(scope.row)"
+                v-if="permissionUser.hasPermission('api-provider:update')" @click="handleRefreshBalance(scope.row)"
               >
                 查询余额
               </el-button>
@@ -75,7 +75,7 @@
           </template>
         </el-table-column>
         <el-table-column
-          label="操作"
+          v-if="permissionUser.hasPermission('api-provider:update')" label="操作"
           :width="isMobile ? 145 : 400"
           fixed="right"
         >
@@ -218,8 +218,8 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false" :disabled="submitting">取消</el-button>
-        <el-button :loading="submitting" @click="handleSubmit(false)">保存</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit(true)">保存并测试</el-button>
+        <el-button v-if="permissionUser.hasPermission('api-provider:update')" :loading="submitting" @click="handleSubmit(false)">保存</el-button>
+        <el-button v-if="permissionUser.hasPermission('api-provider:update')" type="primary" :loading="submitting" @click="handleSubmit(true)">保存并测试</el-button>
       </template>
     </el-dialog>
 
@@ -248,6 +248,9 @@
 </template>
 
 <script setup>
+import { sessionUserInfo as permissionSession, authSessionScope } from "@/utils/authSession";
+import { hasPermission as checkPermission } from "@/utils/permissions";
+const permissionUser = { hasPermission: (code) => checkPermission(permissionSession.value, code) };
 import { ref, onMounted, watch } from "vue";
 import { Plus, Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -317,6 +320,7 @@ const loadData = async () => {
 };
 
 const handleCreate = () => {
+  if (!permissionUser.hasPermission("api-provider:update")) return;
   dialogTitle.value = "添加接口";
   form.value = emptyForm();
   const requestedType = router.currentRoute.value.query.type;
@@ -327,6 +331,7 @@ const handleCreate = () => {
 };
 
 const handleEdit = (row) => {
+  if (!permissionUser.hasPermission("api-provider:update")) return;
   dialogTitle.value = "编辑接口";
   originalStatus.value = row.status;
   formRef.value?.clearValidate();
@@ -351,7 +356,9 @@ const handleEdit = (row) => {
 };
 
 const handleSubmit = async (testAfterSave = false) => {
-  if (submitting.value || !(await formRef.value?.validate().catch(() => false))) return;
+  if (submitting.value || !permissionUser.hasPermission("api-provider:update")
+      || !(await formRef.value?.validate().catch(() => false))) return;
+  if (!permissionUser.hasPermission("api-provider:update")) return;
   submitting.value = true;
   try {
     const payload = {
@@ -502,6 +509,17 @@ const formatTime = (timestamp) => {
   return dayjs.unix(timestamp).format("YYYY-MM-DD HH:mm:ss");
 };
 
+watch(authSessionScope, () => {
+  loadSequence++;
+  tableData.value = [];
+  total.value = 0;
+  tableLoading.value = false;
+  dialogVisible.value = false;
+  form.value = emptyForm();
+  testResultVisible.value = false;
+  connectionResult.value = null;
+  if (router.currentRoute.value.path === "/admin/api-providers" && permissionUser.hasPermission("api-provider:read")) loadData();
+}, { flush: "sync" });
 watch([currentPage, pageSize], loadData);
 watch(() => router.currentRoute.value.query.type, (type) => {
   if (router.currentRoute.value.path === "/admin/api-providers" && providerConfigurationType(type) && !dialogVisible.value) handleCreate();

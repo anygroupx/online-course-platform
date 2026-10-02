@@ -1,5 +1,7 @@
 package com.course.platform.controller;
 
+import static com.course.platform.common.security.SecurityAuthorities.*;
+
 import com.course.platform.application.service.projectcenter.ProjectReportingService;
 import com.course.platform.application.service.projectclient.ProjectApiKeyService;
 import com.course.platform.common.result.Result;
@@ -27,7 +29,7 @@ public class ProjectReportingController {
         return ok(reports.projects(keys.web(), page, pageSize));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update') and hasAuthority('payment:reconcile')")
+    @PreAuthorize("hasAnyAuthority('" + SERVICE_PROJECT_READ + "','payment:reconcile')")
     @GetMapping("/admin/project-reports/overview")
     public ResponseEntity<?> system() {
         return ok(reports.system());

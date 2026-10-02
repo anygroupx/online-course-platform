@@ -67,6 +67,8 @@ class AuthServiceImplTest {
         user.setRole(id != null && id == 1L ? SecurityRoles.ADMIN : SecurityRoles.USER);
         lenient().when(userAuthorityService.getPrimaryRole(id))
                 .thenReturn(id != null && id == 1L ? "SUPER_ADMIN" : "USER");
+        lenient().when(userAuthorityService.loadSnapshot(id)).thenReturn(
+                new UserAuthorityService.AuthoritySnapshot(java.util.List.of(id == 1L ? "SUPER_ADMIN" : "USER"), java.util.List.of()));
         return user;
     }
 
@@ -167,5 +169,30 @@ class AuthServiceImplTest {
         BusinessException ex = assertThrows(BusinessException.class, () -> authService.login(request));
         assertEquals(ResultCode.ACCOUNT_DISABLED.getCode(), ex.getCode());
         verify(refreshSessionService, never()).issue(any(User.class));
+    }
+    @Test
+    void multiRoleLoginAndRefreshReturnCurrentPermissionUnion() {
+        User user = buildUser(7L, "combined", 1);
+        when(userAuthorityService.getPrimaryRole(7L)).thenReturn("FINANCE", "USER");
+        var combined = new UserAuthorityService.AuthoritySnapshot(
+                java.util.List.of("FINANCE", "OPERATOR"),
+                java.util.List.of("service-order:fulfill", "service-order:refund"));
+        when(userAuthorityService.loadSnapshot(7L)).thenReturn(combined,
+                new UserAuthorityService.AuthoritySnapshot(java.util.List.of("USER"), java.util.List.of()));
+        when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(user);
+        when(passwordEncoder.matches("valid", "encoded")).thenReturn(true);
+        when(userMapper.updateLoginMetadata(anyLong(), any(LocalDateTime.class), anyString(), anyInt())).thenReturn(1);
+        var tokens = new RefreshSessionService.SessionTokens("access", "refresh", "session", user);
+        when(refreshSessionService.issue(user)).thenReturn(tokens);
+        when(refreshSessionService.rotate("refresh")).thenReturn(tokens);
+        LoginRequest request = new LoginRequest();
+        request.setUsername("combined"); request.setPassword("valid");
+        LoginResponse response = authService.login(request);
+        assertEquals(combined.roles(), response.getRoles());
+        assertEquals(combined.permissions(), response.getPermissions());
+        assertFalse(response.getIsAdmin());
+        response = authService.refresh("refresh");
+        assertEquals(java.util.List.of("USER"), response.getRoles());
+        assertTrue(response.getPermissions().isEmpty());
     }
 }

@@ -232,7 +232,7 @@ class ServiceCommerceTransactionTest {
                         mock(com.course.platform.application.service.security.SecurityAuditService.class));
         ReflectionTestUtils.setField(service, "enabled", true);
         ReflectionTestUtils.setField(service, "cryptoSecret", "test-service-master-key");
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         service.saveProduct(
                 null,
                 new ProductCommand(
@@ -328,7 +328,7 @@ class ServiceCommerceTransactionTest {
 
     @Test
     void productBindingIsImmutable() {
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         assertThrows(
                 BusinessException.class,
                 () ->
@@ -468,9 +468,9 @@ class ServiceCommerceTransactionTest {
         var command = new ResolveForm("NOT_ACCEPTED", null, null, "已在上游订单中心及账务流水核实未受理", true);
         assertThrows(BusinessException.class, () -> service.resolve(r.id(), command));
         money("95");
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         assertThrows(BusinessException.class, () -> service.resolve(r.id(), command));
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         assertEquals("NOT_ACCEPTED", service.resolve(r.id(), command).state());
         money("100");
         assertThrows(BusinessException.class, () -> service.resolve(r.id(), command));
@@ -588,7 +588,7 @@ class ServiceCommerceTransactionTest {
     @Test
     void unsolicitedUpstreamRefundHasTwoStepLocalSettlementWithoutAnotherSupplierCall() {
         String id = refundReview();
-        auth(8, "api-provider:update", "payment:reconcile");
+        auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         provider.setStatus(0); // Settlement must still work after the supplier becomes unavailable.
         clearInvocations(gateway, catalog);
         var quote = service.quoteRefundSettlement(id, settlement(id, 6));
@@ -613,7 +613,7 @@ class ServiceCommerceTransactionTest {
     @Test
     void independentRefundPreviewsCannotCreditTheSameOrderTwiceUnderConcurrency() throws Exception {
         String id = refundReview();
-        auth(8, "api-provider:update", "payment:reconcile");
+        auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         var first = service.quoteRefundSettlement(id, settlement(id, 6));
         var second = service.quoteRefundSettlement(id, settlement(id, 6));
         List<Future<Boolean>> results = new ArrayList<>();
@@ -621,7 +621,7 @@ class ServiceCommerceTransactionTest {
             results.add(
                     threads.submit(
                             () -> {
-                                auth(8, "api-provider:update", "payment:reconcile");
+                                auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
                                 try {
                                     service.confirmRefundSettlement(quote.id());
                                     return true;
@@ -643,7 +643,7 @@ class ServiceCommerceTransactionTest {
     @Test
     void refundSettlementLedgerFailureRollsBackOrderAndConfirmationTogether() {
         String id = refundReview();
-        auth(8, "api-provider:update", "payment:reconcile");
+        auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         var quote = service.quoteRefundSettlement(id, settlement(id, 6));
         jdbc.execute(
                 "ALTER TABLE account_ledger ADD CONSTRAINT reject_refund CHECK(biz_type <>"
@@ -661,7 +661,7 @@ class ServiceCommerceTransactionTest {
         assertThrows(
                 BusinessException.class,
                 () -> service.quoteRefundSettlement(id, settlement(id, 6)));
-        auth(8, "api-provider:update");
+        auth(8, "service-product:read", "service-product:update", "service-order:read");
         assertThrows(
                 BusinessException.class,
                 () -> service.quoteRefundSettlement(id, settlement(id, 6)));
@@ -669,7 +669,7 @@ class ServiceCommerceTransactionTest {
         assertThrows(
                 BusinessException.class,
                 () -> service.quoteRefundSettlement(id, settlement(id, 6)));
-        auth(8, "api-provider:update", "payment:reconcile");
+        auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         assertThrows(
                 BusinessException.class,
                 () -> service.quoteRefundSettlement(id, settlement(id, 7)));
@@ -698,7 +698,7 @@ class ServiceCommerceTransactionTest {
     void unpublishingWorksWithoutAnActiveSupplierOrCatalogRequest() {
         clearInvocations(catalog, gateway);
         provider.setStatus(0);
-        auth(8, "api-provider:update");
+        auth(8, "service-product:read", "service-product:update", "service-order:read");
         var result =
                 service.saveProduct(
                         1L,
@@ -783,7 +783,7 @@ class ServiceCommerceTransactionTest {
     void auditExposesOnlyPrivilegedReconciliationDataAndUserHistoryStaysMasked() {
         String id = refundReview();
         assertThrows(BusinessException.class, () -> service.audit(id));
-        auth(8, "api-provider:update", "payment:reconcile");
+        auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         var quote = service.quoteRefundSettlement(id, settlement(id, 6));
         service.confirmRefundSettlement(quote.id());
         var audit = service.audit(id);
@@ -817,7 +817,7 @@ class ServiceCommerceTransactionTest {
                         List.of(new PluginProduct("sdxy", "闪动校园", new BigDecimal("0.10"), "元/次")));
         ReflectionTestUtils.setField(
                 service, "catalogs", new PluginConnectorRegistry(List.of(flash)));
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         Long id =
                 service.saveProduct(
                                 null,
@@ -891,7 +891,7 @@ class ServiceCommerceTransactionTest {
     @Test
     void anExpiredAdminRefundPreviewIsShownAsExpiredRatherThanInvitingAnotherConfirmation() {
         String id = refundReview();
-        auth(8, "api-provider:update", "payment:reconcile");
+        auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         var quote = service.quoteRefundSettlement(id, settlement(id, 6));
         jdbc.update(
                 "UPDATE service_order_operation SET expires_at=? WHERE id=?",
@@ -1001,7 +1001,7 @@ class ServiceCommerceTransactionTest {
                             return internshipJson.writeValueAsString(
                                     Map.of("code", 0, "data", List.of(internshipRemote.get())));
                         });
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         Long product = service.saveProduct(null, internshipProductCommand(true, null)).id();
         auth(7, "ROLE_USER");
         return product;
@@ -1023,7 +1023,7 @@ class ServiceCommerceTransactionTest {
         var operation = operations.selectById(preview.id());
         assertFalse(operation.getScheduleJson().contains("password"));
         assertTrue(operation.getPayloadEncrypted().startsWith("ENC:"));
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         assertNotNull(service.products(1, 20, true, "sxdk_tw").getRecords().get(0).contractPrice());
         assertThrows(
                 BusinessException.class,
@@ -1114,7 +1114,7 @@ class ServiceCommerceTransactionTest {
         service.confirm(renew.id());
         verify(internshipHttp, times(1))
                 .postForString(any(), anyString(), argThat(m -> "editOrder".equals(m.get("act"))));
-        auth(8, "api-provider:update", "payment:reconcile");
+        auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         service.resolve(
                 renew.id(),
                 new ResolveForm("NOT_ACCEPTED", null, null, "已核实上游并未受理此次续期操作，原周期未变化", true));
@@ -1646,7 +1646,7 @@ class ServiceCommerceTransactionTest {
                         List.of(new PluginProduct("3", "人脸日常跑", new BigDecimal("0.1"), "元/公里")));
         ReflectionTestUtils.setField(
                 service, "catalogs", new PluginConnectorRegistry(List.of(faceCatalog)));
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         Long id =
                 service.saveProduct(
                                 null,
@@ -2028,7 +2028,7 @@ class ServiceCommerceTransactionTest {
         assertEquals("READY", accountSessionMapper.selectById(s.id()).getState());
         money("100");
         verify(gateway, never()).execute(any(), any(), any(), any(), anyMap());
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         assertThrows(
                 BusinessException.class,
                 () ->
@@ -2104,7 +2104,7 @@ class ServiceCommerceTransactionTest {
         });
         when(distanceHttp.postForString(any(), endsWith("/order"), anyMap()))
                 .thenReturn("{\"code\":1,\"data\":[{\"id\":42,\"status\":1}]}");
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         Long id = service.saveProduct(null, new ProductCommand(9L, "xbd", "0", "总公里计划", "按总公里数计费",
                 new BigDecimal(price), true, null)).id();
         auth(7, "ROLE_USER");
@@ -2220,7 +2220,7 @@ class ServiceCommerceTransactionTest {
         for (String permission : List.of("ROLE_ADMIN", "api-provider:update", "payment:reconcile")) {
             auth(7, permission); assertThrows(BusinessException.class, () -> service.resolve(q.id(), rejection)); money("69.87");
         }
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         var resolved = service.resolve(q.id(), rejection);
         assertEquals("NOT_ACCEPTED", resolved.state()); money("100");
         assertEquals("CANCELLED", service.order(unknown.orderId()).status());
@@ -2236,7 +2236,7 @@ class ServiceCommerceTransactionTest {
                 .thenThrow(new ProviderRequestException(ProviderRequestException.Reason.TIMEOUT));
         var q = service.quote(product, distanceForm("120.50"));
         var unknown = service.confirm(q.id());
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         String evidence = "已核对本人提交和资金记录，确认唯一的提交记录编号";
         assertThrows(BusinessException.class, () -> service.resolve(q.id(), new ResolveForm("ACCEPTED", "wrong-id", null, evidence, true)));
         assertThrows(BusinessException.class, () -> service.resolve(q.id(), new ResolveForm("ACCEPTED", "42", 1, evidence, true)));
@@ -2251,7 +2251,7 @@ class ServiceCommerceTransactionTest {
     @Test void distanceCannotEnterIntegerRefundSettlementEvenIfStoredStateIsCorrupted() {
         var result = service.confirm(service.quote(setupDistance("0.25"), distanceForm("120.50")).id());
         jdbc.update("UPDATE service_order SET status='REFUND_REVIEW' WHERE id=?", result.orderId());
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         assertThrows(BusinessException.class, () -> service.quoteRefundSettlement(result.orderId(),
                 new RefundSettlementForm(service.order(result.orderId()).version(), 1, "已核查资金但不能用次数代表公里", true)));
         money("69.87");
@@ -2447,7 +2447,7 @@ class ServiceCommerceTransactionTest {
         verify(gateway, times(1)).execute(any(), any(), any(), eq("CREATE"), any());
         var decision = new ResolveForm("NOT_ACCEPTED", null, null, "已核实订单未受理且无重复执行记录", true);
         assertThrows(BusinessException.class, () -> service.resolve(preview.id(), decision));
-        auth(8, "api-provider:update", "payment:reconcile");
+        auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         assertEquals("NOT_ACCEPTED", service.resolve(preview.id(), decision).state());
         assertThrows(BusinessException.class, () -> service.resolve(preview.id(), decision));
         money("100.00");
@@ -2461,7 +2461,7 @@ class ServiceCommerceTransactionTest {
                 ((ServiceOrder) call.getArgument(1)).getExternalOrderNo(), "REFUND_REVIEW", 3, null));
         service.sync(created.orderId());
         clearInvocations(gateway);
-        auth(8, "api-provider:update", "payment:reconcile");
+        auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         var preview = service.quoteRefundSettlement(created.orderId(), settlement(created.orderId(), 3));
         assertEquals("0.16", preview.amount());
         assertEquals("0.05499989", preview.unitCharge());
@@ -2602,7 +2602,7 @@ class ServiceCommerceTransactionTest {
                     "plan_option_id", "plan-1", "run_time", "08:00", "face_token", "discard-face-secret",
                     "run_preflight_token", "discard-preflight-secret"), input.quantity(), input.distance(), input.distance(), "13***00");
         }).when(gateway).prepare(any(), any(), any());
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         Long providerId = "SELF_OPERATED".equals(mode) ? null : 9L;
         String providerType = "SELF_OPERATED".equals(mode) ? "heisha" : null;
         Long id = service.saveProduct(null, new ProductCommand(providerId, "default", sku, "黑鲨", "",
@@ -2615,7 +2615,7 @@ class ServiceCommerceTransactionTest {
 
     Long heishaFaceProduct() {
         jdbc.update("DELETE FROM service_product");
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         Long id = service.saveProduct(null, new ProductCommand(null, "default", "3", "黑鲨资格服务",
                 "", new BigDecimal("0.25"), true, "SELF_OPERATED", null, null, "heisha")).id();
         auth(7, "ROLE_USER");
@@ -2633,7 +2633,7 @@ class ServiceCommerceTransactionTest {
     @Test
     void selfOperatedProductValidationPricingAndHistoricalSnapshot() {
         assertEquals("UPSTREAM", products.selectById(1L).getFulfillmentMode());
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         assertThrows(BusinessException.class, () -> service.saveProduct(null,
                 new ProductCommand(9L, "default", "1", "非法", "", BigDecimal.ONE, true, "SELF_OPERATED", null, null)));
         Long id = heishaProduct("SELF_OPERATED");
@@ -2642,7 +2642,7 @@ class ServiceCommerceTransactionTest {
         var quote = service.quote(id, localForm());
         assertEquals("5.00", quote.amount());
         var created = service.confirm(quote.id());
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         var changed = service.saveProduct(id, new ProductCommand(null, "default", "1", "黑鲨", "", BigDecimal.ONE,
                 false, "SELF_OPERATED", 0L, null, "heisha"));
         assertEquals(1L, changed.version());
@@ -2656,7 +2656,7 @@ class ServiceCommerceTransactionTest {
     @Test
     void heishaProductCanSwitchFulfillmentModeWithoutChangingSkuIdentity() {
         Long id = heishaProduct("SELF_OPERATED");
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         var upstream = service.saveProduct(id, new ProductCommand(9L, "default", "1", "黑鲨", "",
                 new BigDecimal("0.25"), true, "UPSTREAM", 0L, null, "heisha"));
         assertEquals(9L, upstream.providerId());
@@ -2710,7 +2710,7 @@ class ServiceCommerceTransactionTest {
     @Test
     void selfOperatedFaceCheckoutUsesLocalDraftWithoutOfficialSessionOrDispatch() {
         jdbc.update("DELETE FROM service_product");
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         var product = service.saveProduct(null, new ProductCommand(null, "default", "3",
                 "黑鲨商品 3", "", new BigDecimal("0.25"), true, "SELF_OPERATED", null, null,
                 "heisha"));
@@ -2786,7 +2786,7 @@ class ServiceCommerceTransactionTest {
                 new OrderMaterialDraftForm(pngDataUrl(), true)),
                 "another user cannot create materials for this order");
 
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         service.saveProduct(productId, new ProductCommand(null, "default", "3", "黑鲨资格服务", "",
                 new BigDecimal("0.25"), false, "SELF_OPERATED", 0L, null, "heisha"));
         assertEquals(1L, products.selectById(productId).getVersion());
@@ -2853,7 +2853,7 @@ class ServiceCommerceTransactionTest {
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class));
         assertEquals("READY", service.operation(quote.id()).state());
         ReflectionTestUtils.setField(service, "fulfillmentMapper", real);
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         service.saveProduct(id, new ProductCommand(null, "default", "1", "黑鲨", "", BigDecimal.ONE,
                 true, "SELF_OPERATED", 0L, null, "heisha"));
         auth(7, "ROLE_USER");
@@ -2868,7 +2868,7 @@ class ServiceCommerceTransactionTest {
         service.confirm(quote.id()); service.confirm(quote.id());
         var order = orders.selectById(service.operation(quote.id()).orderId());
         assertEquals("UPSTREAM", order.getFulfillmentMode()); assertNotNull(order.getExternalOrderNo());
-        auth(7, "api-provider:update");
+        auth(7, "service-product:read", "service-product:update", "service-order:read");
         service.saveProduct(order.getProductId(), new ProductCommand(9L, "default", "1", "黑鲨", "",
                 BigDecimal.ONE, true, "UPSTREAM", 0L, null, "heisha"));
         auth(7, "ROLE_USER");
@@ -2898,7 +2898,7 @@ class ServiceCommerceTransactionTest {
         String id = created.orderId();
         assertThrows(BusinessException.class, () -> service.manageFulfillment(id, new LocalFulfillmentForm("START", 0L, null, null)));
         assertThrows(BusinessException.class, () -> service.fulfillmentDetails(id));
-        auth(8, "api-provider:update", "payment:reconcile");
+        auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         assertThrows(BusinessException.class, () -> service.fulfillmentDetails(id));
         auth(8, "service-order:fulfill");
         service.verifyFulfillment(id, new VerificationForm("VERIFY", 0L, 0L, "核验完成",
@@ -2953,6 +2953,9 @@ class ServiceCommerceTransactionTest {
         auth(8, "service-order:fulfill");
         assertThrows(BusinessException.class, () -> service.manageFulfillment(created.orderId(),
                 new LocalFulfillmentForm("CANCEL_REFUND", 0L, null, " ")));
+        assertThrows(BusinessException.class, () -> service.manageFulfillment(created.orderId(),
+                new LocalFulfillmentForm("CANCEL_REFUND", 0L, null, "运营不能退款")));
+        auth(8, "service-order:refund");
         var refunded = service.manageFulfillment(created.orderId(),
                 new LocalFulfillmentForm("CANCEL_REFUND", 0L, null, "用户在开始前申请取消"));
         assertEquals("REFUNDED", refunded.status());

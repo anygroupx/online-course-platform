@@ -60,7 +60,7 @@
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button
-              v-if="row.status === 'PAID'"
+              v-if="row.status === 'PAID' && hasPermission(sessionUserInfo, 'payment:refund')"
               type="danger"
               size="small"
               @click="handleRefund(row)"

@@ -5,10 +5,10 @@
         <div class="card-header">
           <span>系统设置</span>
           <div class="header-actions">
-            <el-button @click="handleResetAll" :loading="resetting">
+            <el-button :disabled="!permissionUser.hasPermission('system-config:update')" @click="handleResetAll" :loading="resetting">
               重置全部
             </el-button>
-            <el-button type="primary" @click="handleSave" :loading="saving">
+            <el-button :disabled="!permissionUser.hasPermission('system-config:update')" type="primary" @click="handleSave" :loading="saving">
               <el-icon><Select /></el-icon>
               保存设置
             </el-button>
@@ -19,7 +19,7 @@
       <el-tabs v-model="activeTab" class="settings-tabs">
         <!-- 基础设置 -->
         <el-tab-pane label="基础设置" name="basic">
-          <el-form :model="configs" label-width="150px" class="config-form">
+          <el-form :disabled="!permissionUser.hasPermission('system-config:update')" :model="configs" label-width="150px" class="config-form">
             <el-form-item label="网站名称">
               <el-input
                 v-model="configs.site_name"
@@ -56,7 +56,7 @@
 
         <!-- 用户设置 -->
         <el-tab-pane label="用户设置" name="user">
-          <el-form :model="configs" label-width="180px" class="config-form">
+          <el-form :disabled="!permissionUser.hasPermission('system-config:update')" :model="configs" label-width="180px" class="config-form">
             <el-form-item label="允许用户注册">
               <el-switch
                 v-model="configs.user_register_enabled"
@@ -104,7 +104,7 @@
 
         <!-- 高级设置 -->
         <el-tab-pane label="高级设置" name="advanced">
-          <el-form :model="configs" label-width="180px" class="config-form">
+          <el-form :disabled="!permissionUser.hasPermission('system-config:update')" :model="configs" label-width="180px" class="config-form">
             <!-- Token安全配置 -->
             <el-divider content-position="left">
               <el-text type="primary">Token安全配置</el-text>
@@ -208,6 +208,9 @@
 </template>
 
 <script setup>
+import { sessionUserInfo as permissionSession } from "@/utils/authSession";
+import { hasPermission as checkPermission } from "@/utils/permissions";
+const permissionUser = { hasPermission: (code) => checkPermission(permissionSession.value, code) };
 import { ref, onMounted } from "vue";
 import { InfoFilled, Select, Brush } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";

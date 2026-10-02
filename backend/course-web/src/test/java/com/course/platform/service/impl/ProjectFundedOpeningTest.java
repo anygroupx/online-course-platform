@@ -149,8 +149,8 @@ class ProjectFundedOpeningTest extends ProjectCenterTestSupport {
         doThrow(new IllegalStateException()).when(gateway).provision(any(), anyString(), any());
         var q = quote("PROVISION", "8"); service.confirm(q.id()); money("98");
         var proof = new ResolveForm("NOT_ACCEPTED", null, EVIDENCE, true);
-        auth(7, "api-provider:update"); assertThrows(BusinessException.class, () -> service.resolve(q.id(), proof));
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "service-project:read", "service-project:update"); assertThrows(BusinessException.class, () -> service.resolve(q.id(), proof));
+        auth(7, "payment:reconcile");
         assertEquals("NOT_ACCEPTED", service.resolve(q.id(), proof).state());
         assertEquals("NOT_ACCEPTED", service.resolve(q.id(), proof).state()); money("100");
         assertEquals("NEW", accounts.selectById(q.accountId()).getState());
@@ -162,7 +162,7 @@ class ProjectFundedOpeningTest extends ProjectCenterTestSupport {
         doThrow(new IllegalStateException()).when(gateway).provision(any(), anyString(), any());
         var q = quote("PROVISION", "8"); service.confirm(q.id());
         upstream = new BigDecimal("5"); // Authoritative receipt is now lower after actual usage.
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "payment:reconcile");
         assertThrows(BusinessException.class, () -> service.resolve(q.id(), new ResolveForm("ACCEPTED", "11", EVIDENCE, false)));
         assertEquals("SUCCEEDED", service.resolve(q.id(), new ResolveForm("ACCEPTED", "11", EVIDENCE, true)).state());
         money("98"); var a = accounts.selectById(q.accountId());

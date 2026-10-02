@@ -147,6 +147,7 @@ public class User implements Serializable {
      * 历史角色镜像；授权唯一来源为 sys_user_role / sys_role_permission
      */
     @TableField("role")
+    @Deprecated
     private String role;
 
     /**

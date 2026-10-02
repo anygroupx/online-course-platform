@@ -1,3 +1,4 @@
+import { mockAuthority } from './fixtures/rbac-policy.mjs';
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import { chromium } from "playwright";
@@ -8,7 +9,7 @@ const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><met
 import {createApp,h} from 'vue';import {createRouter,createMemoryHistory,RouterView} from 'vue-router';import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';import '/src/styles/variables.scss';import '/src/styles/global.css';import '/src/styles/element-overrides.scss';
 import Projects from '/src/views/ProjectCenter.vue';import Admin from '/src/views/AdminProjectCenter.vue';import {applyAuthSession} from '/src/utils/authSession.js';
-applyAuthSession({token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7});
+applyAuthSession({ ...${JSON.stringify(mockAuthority('OPERATOR', 'FINANCE'))},token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7});
 const router=createRouter({history:createMemoryHistory(),routes:[{path:'/service-projects',component:Projects},{path:'/admin/service-projects',component:Admin}]});await router.push(new URLSearchParams(location.search).get('page')||'/service-projects');await router.isReady();createApp({render:()=>h(RouterView)}).use(router).use(ElementPlus).mount('#app');
 </script></body></html>`;
 const server = await createServer({

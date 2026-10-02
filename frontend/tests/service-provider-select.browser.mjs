@@ -1,3 +1,4 @@
+import { mockAuthority } from './fixtures/rbac-policy.mjs';
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { existsSync } from 'node:fs'
@@ -9,7 +10,7 @@ const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><met
 import {createApp} from 'vue';import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';import '/src/styles/variables.scss';import '/src/styles/element-overrides.scss';import '/src/styles/global.css';import '/src/styles/fluent-spatial.scss';import '/src/styles/responsive.scss';
 import Admin from '/src/views/AdminServiceProducts.vue';import {applyAuthSession} from '/src/utils/authSession.js';
-applyAuthSession({token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7});
+applyAuthSession({ ...${JSON.stringify(mockAuthority('OPERATOR'))},token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7});
 createApp(Admin).use(ElementPlus).mount('#app');
 </script></body></html>`
 const server = await createTestServer({ logLevel: 'error', plugins: [{ name: 'service-provider-select-fixture', configureServer(vite) {

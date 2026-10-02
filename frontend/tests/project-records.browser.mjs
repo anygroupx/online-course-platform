@@ -1,3 +1,4 @@
+import { mockAuthority } from './fixtures/rbac-policy.mjs';
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync } from 'node:fs'
 import { chromium } from 'playwright'
@@ -8,7 +9,7 @@ import { createTestServer } from './fixtures/test-server.mjs'
 const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:16px"><div id="app"></div><script type="module">
 import {createApp,ref,h} from 'vue';import {createPinia} from 'pinia';import ElementPlus from 'element-plus';import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';import '/src/styles/variables.scss';import '/src/styles/global.css';import '/src/styles/element-overrides.scss';
 import Admin from '/src/views/AdminProjectCenter.vue';import Clients from '/src/views/ProjectClients.vue';import Ledger from '/src/components/projectcenter/ProjectLedger.vue';import {applyAuthSession} from '/src/utils/authSession.js';
-applyAuthSession({token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7,isAdmin:true});
+applyAuthSession({ ...${JSON.stringify(mockAuthority('AUDITOR'))},token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7,isAdmin:true});
 const entry=new URLSearchParams(location.search).get('entry');const component=entry==='admin'?Admin:entry==='self'?Clients:{setup(){const owner=ref(7),visible=ref(true);return()=>h('div',[
   h('nav',{style:'display:flex;gap:12px;margin-bottom:16px'},[h('button',{onClick:()=>owner.value=7},'查看经营者七'),h('button',{onClick:()=>owner.value=8},'查看经营者八'),h('button',{onClick:()=>visible.value=false},'关闭记录')]),
   visible.value?h(Ledger,{admin:true,ownerId:owner.value}):null])}};

@@ -1,3 +1,4 @@
+import { routePermissions } from "../utils/routePermissions.js";
 // Route titles and breadcrumb groups live with the route records, not URL fragments.
 const routes = [
   {
@@ -76,25 +77,29 @@ const routes = [
         path: "settings",
         name: "Settings",
         component: () => import("@/views/Settings.vue"),
-        meta: { title: "系统设置", requiresAuth: true, adminOnly: true, breadcrumbGroup: "系统管理" },
+        meta: { title: "系统设置", requiresAuth: true, breadcrumbGroup: "系统管理" },
+      },
+      {
+        path: "admin/rbac", name: "RbacManagement", component: () => import("@/views/RbacManagement.vue"),
+        meta: { title: "角色与权限", requiresAuth: true, breadcrumbGroup: "系统管理" },
       },
       {
         path: "admin/platforms",
         name: "AdminPlatforms",
         component: () => import("@/views/AdminPlatforms.vue"),
-        meta: { title: "平台管理", requiresAuth: true, adminOnly: true, breadcrumbTitle: "课程平台", breadcrumbGroup: "系统管理" },
+        meta: { title: "平台管理", requiresAuth: true, breadcrumbTitle: "课程平台", breadcrumbGroup: "系统管理" },
       },
       {
         path: "admin/categories",
         name: "AdminCategories",
         component: () => import("@/views/AdminPlatformCategories.vue"),
-        meta: { title: "分类管理", requiresAuth: true, adminOnly: true, breadcrumbGroup: "系统管理" },
+        meta: { title: "分类管理", requiresAuth: true, breadcrumbGroup: "系统管理" },
       },
       {
         path: "admin/api-providers",
         name: "AdminApiProviders",
         component: () => import("@/views/AdminApiProviders.vue"),
-        meta: { title: "接口管理", requiresAuth: true, adminOnly: true, breadcrumbTitle: "接口配置", breadcrumbGroup: "系统管理" },
+        meta: { title: "接口管理", requiresAuth: true, breadcrumbTitle: "接口配置", breadcrumbGroup: "系统管理" },
       },
       {
         path: "services", name: "ServiceStore", component: () => import("@/views/ServiceStore.vue"),
@@ -114,27 +119,27 @@ const routes = [
       },
       {
         path: "admin/service-projects", name: "AdminProjectCenter", component: () => import("@/views/AdminProjectCenter.vue"),
-        meta: { title: "项目与子钱包", requiresAuth: true, adminOnly: true, breadcrumbGroup: "服务管理" },
+        meta: { title: "项目与子钱包", requiresAuth: true, breadcrumbGroup: "服务管理" },
       },
       {
         path: "admin/service-products", name: "AdminServiceProducts", component: () => import("@/views/AdminServiceProducts.vue"),
-        meta: { title: "服务商品", requiresAuth: true, adminOnly: true, breadcrumbGroup: "服务管理" },
+        meta: { title: "服务商品", requiresAuth: true, breadcrumbGroup: "服务管理" },
       },
       {
         path: "admin/service-orders", name: "AdminServiceOrders", component: () => import("@/views/ServiceOrders.vue"),
-        meta: { title: "服务订单与对账", requiresAuth: true, adminOnly: true, serviceAdmin: true, breadcrumbGroup: "服务管理" },
+        meta: { title: "服务订单与对账", requiresAuth: true, serviceAdmin: true, breadcrumbGroup: "服务管理" },
       },
       {
         path: "admin/plugin-integrations",
         name: "AdminPluginIntegrations",
         component: () => import("@/views/AdminPluginIntegrations.vue"),
-        meta: { title: "插件集成", requiresAuth: true, adminOnly: true, breadcrumbTitle: "接口接入检查", breadcrumbGroup: "服务管理" },
+        meta: { title: "插件集成", requiresAuth: true, breadcrumbTitle: "接口接入检查", breadcrumbGroup: "服务管理" },
       },
       {
         path: "admin/orders",
         name: "AdminOrders",
         component: () => import("@/views/AdminOrders.vue"),
-        meta: { title: "管理员订单管理", requiresAuth: true, adminOnly: true, breadcrumbTitle: "订单管理", breadcrumbGroup: "系统管理" },
+        meta: { title: "管理员订单管理", requiresAuth: true, breadcrumbTitle: "订单管理", breadcrumbGroup: "系统管理" },
       },
       {
         path: "recharge",
@@ -146,31 +151,31 @@ const routes = [
         path: "admin/cards",
         name: "CardManagement",
         component: () => import("@/views/CardManagement.vue"),
-        meta: { title: "充值卡密管理", requiresAuth: true, adminOnly: true, breadcrumbTitle: "充值卡密", breadcrumbGroup: "系统管理" },
+        meta: { title: "充值卡密管理", requiresAuth: true, breadcrumbTitle: "充值卡密", breadcrumbGroup: "系统管理" },
       },
       {
         path: "admin/announcements",
         name: "AnnouncementManagement",
         component: () => import("@/views/AnnouncementManagement.vue"),
-        meta: { title: "公告管理", requiresAuth: true, adminOnly: true, breadcrumbGroup: "系统管理" },
+        meta: { title: "公告管理", requiresAuth: true, breadcrumbGroup: "系统管理" },
       },
       {
         path: "admin/variables",
         name: "SystemVariableManagement",
         component: () => import("@/views/SystemVariableManagement.vue"),
-        meta: { title: "系统变量管理", requiresAuth: true, adminOnly: true, breadcrumbTitle: "系统变量", breadcrumbGroup: "系统管理" },
+        meta: { title: "系统变量管理", requiresAuth: true, breadcrumbTitle: "系统变量", breadcrumbGroup: "系统管理" },
       },
       {
         path: "admin/countdown",
         name: "CountdownManagement",
         component: () => import("@/views/CountdownManagement.vue"),
-        meta: { title: "倒计时管理", requiresAuth: true, adminOnly: true, breadcrumbGroup: "系统管理" },
+        meta: { title: "倒计时管理", requiresAuth: true, breadcrumbGroup: "系统管理" },
       },
       {
         path: "admin/aqks",
         name: "AqksStudyManagement",
         component: () => import("@/views/AqksStudyManagement.vue"),
-        meta: { title: "AQKS刷课管理", requiresAuth: true, adminOnly: true, breadcrumbGroup: "系统管理" },
+        meta: { title: "AQKS刷课管理", requiresAuth: true, breadcrumbGroup: "系统管理" },
       },
       {
         path: "api-guide",
@@ -188,7 +193,7 @@ const routes = [
         path: "admin/customer-service",
         name: "CustomerServiceManagement",
         component: () => import("@/views/CustomerServiceManagement.vue"),
-        meta: { title: "客服管理", requiresAuth: true, adminOnly: true, breadcrumbGroup: "系统管理" },
+        meta: { title: "客服管理", requiresAuth: true, breadcrumbGroup: "系统管理" },
       },
       {
         path: "examples",
@@ -200,7 +205,7 @@ const routes = [
         path: "theme-config",
         name: "ThemeConfig",
         redirect: { path: "/admin/variables", query: { type: "theme_color_light" } },
-        meta: { title: "主题配置", requiresAuth: true, adminOnly: true, breadcrumbGroup: "系统管理" },
+        meta: { title: "主题配置", requiresAuth: true, breadcrumbGroup: "系统管理" },
       },
       {
         path: "payment/callback",
@@ -218,4 +223,10 @@ const routes = [
   },
 ];
 
+for (const parent of routes) {
+  for (const route of parent.children || []) {
+    const path = '/' + route.path.replace(/^\//, '');
+    if (routePermissions[path]) route.meta = { ...route.meta, permissionsAny: routePermissions[path] };
+  }
+}
 export default routes;

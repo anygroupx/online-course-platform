@@ -1,3 +1,4 @@
+import { mockAuthority } from './fixtures/rbac-policy.mjs';
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync } from 'node:fs'
 import { chromium } from 'playwright'
@@ -5,7 +6,7 @@ import { createTestServer } from './fixtures/test-server.mjs'
 const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:16px"><div id="app"></div><script type="module">
 import {createApp,ref,h} from 'vue';import {createPinia} from 'pinia';import ElementPlus from 'element-plus';import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';import '/src/styles/variables.scss';import '/src/styles/global.css';import '/src/styles/element-overrides.scss';
 import Admin from '/src/views/AdminOrders.vue';import Recovery from '/src/components/orderreceipt/OrderReceiptRecovery.vue';import {applyAuthSession} from '/src/utils/authSession.js';
-applyAuthSession({token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7,isAdmin:true});
+applyAuthSession({ ...${JSON.stringify(mockAuthority('OPERATOR'))},token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7,isAdmin:true});
 const component=new URLSearchParams(location.search).get('entry')==='admin'?Admin:{setup(){const order=ref(1),shown=ref(true);return()=>h('main',[h('nav',{style:'display:flex;gap:12px;margin-bottom:18px'},[h('button',{onClick:()=>order.value=2},'切换订单二'),h('button',{onClick:()=>shown.value=false},'关闭核对')]),shown.value?h(Recovery,{orderId:order.value}):null])}};
 createApp(component).use(createPinia()).use(ElementPlus).mount('#app');</script></body></html>`
 const server = await createTestServer({ logLevel: 'error', plugins: [{ name: 'order-receipts-fixture', configureServer(vite) {

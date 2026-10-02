@@ -16,6 +16,7 @@ export const authSessionScope = computed(() => {
     sessionIdentity.value,
     readAccessTokenClaims(accessToken.value)?.sid || null,
     info?.role ?? null,
+    Array.isArray(info?.roles) ? [...new Set(info.roles)].sort() : [],
     info?.isAdmin === true,
     Array.isArray(info?.permissions) ? [...new Set(info.permissions)].sort() : [],
     info?.mustChangePassword === true,

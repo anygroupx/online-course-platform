@@ -17,7 +17,7 @@ import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 
-@PreAuthorize("hasAuthority('platform:update')")
+@PreAuthorize("isAuthenticated()")
 @RestController
 @RequestMapping("/admin/platform-categories")
 @RequiredArgsConstructor
@@ -28,6 +28,7 @@ public class PlatformCategoryController {
     private final OperationLogService operationLogService;
 
     @GetMapping
+    @PreAuthorize("hasAuthority('platform:read')")
     public Result<Page<PlatformCategory>> list(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer pageSize) {
@@ -39,6 +40,7 @@ public class PlatformCategoryController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAuthority('platform:update')")
     public Result<Void> create(@RequestBody PlatformCategory category) {
         validatePriceMultiplier(category.getPriceMultiplier());
         platformCategoryMapper.insert(category);
@@ -51,6 +53,7 @@ public class PlatformCategoryController {
     }
 
     @PutMapping
+    @PreAuthorize("hasAuthority('platform:update')")
     public Result<Void> update(@RequestBody PlatformCategory category) {
         validatePriceMultiplier(category.getPriceMultiplier());
         platformCategoryMapper.updateById(category);
@@ -72,6 +75,7 @@ public class PlatformCategoryController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('platform:update')")
     public Result<Void> delete(@PathVariable Long id) {
         platformCategoryMapper.deleteById(id);
         
@@ -86,6 +90,7 @@ public class PlatformCategoryController {
      * 方案A：批量删除某分类下的所有课程平台（独立接口）
      */
     @DeleteMapping("/{id}/platforms")
+    @PreAuthorize("hasAuthority('platform:update')")
     @Transactional(rollbackFor = Exception.class)
     public Result<Map<String, Object>> deletePlatformsByCategoryId(@PathVariable Long id) {
         int deletedCount = coursePlatformService.deletePlatformsByCategoryId(id);
@@ -101,6 +106,7 @@ public class PlatformCategoryController {
      * 方案B：级联删除分类及其下所有课程平台
      */
     @DeleteMapping("/{id}/cascade")
+    @PreAuthorize("hasAuthority('platform:update')")
     @Transactional(rollbackFor = Exception.class)
     public Result<Map<String, Object>> deleteCascade(@PathVariable Long id) {
         // 先删除该分类下的所有课程平台

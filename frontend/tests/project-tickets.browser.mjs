@@ -1,3 +1,4 @@
+import { mockAuthority } from './fixtures/rbac-policy.mjs';
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
 import { chromium } from "playwright";
@@ -18,7 +19,7 @@ async function settleDrawer(locator) {
 const accountId = "27c5c14d-2eba-4dd7-a023-52a49a3dcc6b";
 const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:24px"><div id="app"></div><script type="module">
 import {createApp} from 'vue';import ElementPlus from 'element-plus';import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';import '/src/styles/variables.scss';import '/src/styles/global.css';import '/src/styles/element-overrides.scss';
-import Tickets from '/src/components/projectcenter/ProjectTickets.vue';import {applyAuthSession} from '/src/utils/authSession.js';applyAuthSession({token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7});createApp(Tickets,{admin:new URLSearchParams(location.search).has('admin'),accounts:[{accountId:'${accountId}',title:'项目甲 · 独立服务额度'}]}).use(ElementPlus).mount('#app');
+import Tickets from '/src/components/projectcenter/ProjectTickets.vue';import {applyAuthSession} from '/src/utils/authSession.js';applyAuthSession({ ...${JSON.stringify(mockAuthority('OPERATOR', 'FINANCE'))},token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7});createApp(Tickets,{admin:new URLSearchParams(location.search).has('admin'),accounts:[{accountId:'${accountId}',title:'项目甲 · 独立服务额度'}]}).use(ElementPlus).mount('#app');
 </script></body></html>`;
 const server = await createServer({
   logLevel: "error",

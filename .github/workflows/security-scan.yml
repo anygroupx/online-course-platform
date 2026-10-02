@@ -2,7 +2,7 @@ name: Security Scan (P2)
 
 on:
   push:
-    branches: [ main, master, develop, 'feature/**' ]
+    branches: [ main, master, develop, dev, 'feature/**' ]
   pull_request:
   workflow_dispatch:
 

@@ -1,5 +1,7 @@
 package com.course.platform.controller;
 
+import static com.course.platform.common.security.SecurityAuthorities.*;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.course.platform.application.service.servicecommerce.ServiceCommerceService;
 import com.course.platform.common.result.Result;
@@ -137,7 +139,7 @@ public class ServiceCommerceController {
     }
 
     @GetMapping("/admin/service-products")
-    @PreAuthorize("hasAuthority('api-provider:update')")
+    @PreAuthorize("hasAuthority('" + SERVICE_PRODUCT_READ + "')")
     public ResponseEntity<Result<IPage<ProductView>>> adminProducts(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
@@ -145,20 +147,20 @@ public class ServiceCommerceController {
     }
 
     @PostMapping("/admin/service-products")
-    @PreAuthorize("hasAuthority('api-provider:update')")
+    @PreAuthorize("hasAuthority('" + SERVICE_PRODUCT_UPDATE + "')")
     public ResponseEntity<Result<ProductView>> create(@Valid @RequestBody ProductCommand form) {
         return ok(service.saveProduct(null, form));
     }
 
     @PutMapping("/admin/service-products/{id}")
-    @PreAuthorize("hasAuthority('api-provider:update')")
+    @PreAuthorize("hasAuthority('" + SERVICE_PRODUCT_UPDATE + "')")
     public ResponseEntity<Result<ProductView>> update(
             @PathVariable Long id, @Valid @RequestBody ProductCommand form) {
         return ok(service.saveProduct(id, form));
     }
 
     @GetMapping("/admin/service-orders")
-    @PreAuthorize("hasAuthority('api-provider:update')")
+    @PreAuthorize("hasAuthority('" + SERVICE_ORDER_READ + "')")
     public ResponseEntity<Result<IPage<OrderView>>> adminOrders(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize,
@@ -168,27 +170,27 @@ public class ServiceCommerceController {
     }
 
     @PostMapping("/admin/service-orders/{id}/fulfillment")
-    @PreAuthorize("hasAuthority('service-order:fulfill')")
+    @PreAuthorize("(#form.action() == 'CANCEL_REFUND' and hasAuthority('" + SERVICE_ORDER_REFUND + "')) or (#form.action() != 'CANCEL_REFUND' and hasAuthority('" + SERVICE_ORDER_FULFILL + "'))")
     public ResponseEntity<Result<OrderView>> manageFulfillment(
             @PathVariable String id, @Valid @RequestBody LocalFulfillmentForm form) {
         return ok(service.manageFulfillment(id, form));
     }
 
     @GetMapping("/admin/service-orders/{id}/fulfillment")
-    @PreAuthorize("hasAuthority('service-order:fulfill')")
+    @PreAuthorize("hasAuthority('" + SERVICE_ORDER_FULFILL + "')")
     public ResponseEntity<Result<FulfillmentAdminView>> fulfillmentDetails(@PathVariable String id) {
         return ok(service.fulfillmentAdmin(id));
     }
 
     @PostMapping("/admin/service-orders/{id}/fulfillment/verification")
-    @PreAuthorize("hasAuthority('service-order:fulfill')")
+    @PreAuthorize("hasAuthority('" + SERVICE_ORDER_FULFILL + "')")
     public ResponseEntity<Result<OrderView>> verifyFulfillment(
             @PathVariable String id, @Valid @RequestBody VerificationForm form) {
         return ok(service.verifyFulfillment(id, form));
     }
 
     @GetMapping("/admin/service-orders/{orderId}/fulfillment/assets/{assetId}")
-    @PreAuthorize("hasAuthority('service-order:fulfill') and hasAuthority('service-order:biometric')")
+    @PreAuthorize("hasAuthority('" + SERVICE_ORDER_FULFILL + "') and hasAuthority('" + SERVICE_ORDER_BIOMETRIC + "')")
     public ResponseEntity<byte[]> fulfillmentAsset(
             @PathVariable String orderId, @PathVariable String assetId) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.IMAGE_PNG)
@@ -200,33 +202,33 @@ public class ServiceCommerceController {
     }
 
     @GetMapping("/admin/service-order-operations/{id}")
-    @PreAuthorize("hasAuthority('api-provider:update') and hasAuthority('payment:reconcile')")
+    @PreAuthorize("hasAuthority('" + SERVICE_ORDER_RECONCILE + "')")
     public ResponseEntity<Result<QuoteView>> adminOperation(@PathVariable String id) {
         return ok(service.adminOperation(id));
     }
 
     @PostMapping("/admin/service-order-operations/{id}/resolve")
-    @PreAuthorize("hasAuthority('api-provider:update') and hasAuthority('payment:reconcile')")
+    @PreAuthorize("hasAuthority('" + SERVICE_ORDER_RECONCILE + "')")
     public ResponseEntity<Result<QuoteView>> resolve(
             @PathVariable String id, @Valid @RequestBody ResolveForm form) {
         return ok(service.resolve(id, form));
     }
 
     @GetMapping("/admin/service-orders/{id}/audit")
-    @PreAuthorize("hasAuthority('api-provider:update') and hasAuthority('payment:reconcile')")
+    @PreAuthorize("hasAuthority('" + SERVICE_ORDER_RECONCILE + "')")
     public ResponseEntity<Result<OrderAuditView>> audit(@PathVariable String id) {
         return ok(service.audit(id));
     }
 
     @PostMapping("/admin/service-orders/{id}/refund-quotes")
-    @PreAuthorize("hasAuthority('api-provider:update') and hasAuthority('payment:reconcile')")
+    @PreAuthorize("hasAuthority('" + SERVICE_ORDER_REFUND + "')")
     public ResponseEntity<Result<QuoteView>> refundQuote(
             @PathVariable String id, @Valid @RequestBody RefundSettlementForm form) {
         return ok(service.quoteRefundSettlement(id, form));
     }
 
     @PostMapping("/admin/service-order-operations/{id}/settle-refund")
-    @PreAuthorize("hasAuthority('api-provider:update') and hasAuthority('payment:reconcile')")
+    @PreAuthorize("hasAuthority('" + SERVICE_ORDER_REFUND + "') and hasAuthority('" + SERVICE_ORDER_RECONCILE + "')")
     public ResponseEntity<Result<QuoteView>> settleRefund(@PathVariable String id) {
         return ok(service.confirmRefundSettlement(id));
     }

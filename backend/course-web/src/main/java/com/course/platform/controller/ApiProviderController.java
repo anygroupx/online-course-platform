@@ -28,7 +28,7 @@ import java.util.List;
  * 第三方API接口管理控制器
  */
 @Tag(name = "API接口管理", description = "第三方API接口配置管理（管理员）")
-@PreAuthorize("hasAuthority('api-provider:update')")
+@PreAuthorize("isAuthenticated()")
 @RestController
 @RequestMapping("/admin/api-providers")
 @RequiredArgsConstructor
@@ -38,16 +38,17 @@ public class ApiProviderController {
     private final OperationLogService operationLogService;
     private final PlatformDockingService platformDockingService;
 
-    private void checkAdmin(Long userId) {
+    private void requireProviderUpdate(Long userId) {
         SecurityUtils.requireAuthority("api-provider:update");
     }
 
     @Operation(summary = "创建API接口", description = "添加新的第三方API接口")
     @PostMapping
+    @PreAuthorize("hasAuthority('api-provider:update')")
     public Result<Long> createApiProvider(@Valid @RequestBody ApiProviderSaveRequest request,
                                           Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        checkAdmin(userId);
+        requireProviderUpdate(userId);
         ApiProvider apiProvider = request.toProvider();
         Long id = apiProviderService.createApiProvider(apiProvider);
         operationLogService.log(userId, "创建API接口",
@@ -57,10 +58,11 @@ public class ApiProviderController {
 
     @Operation(summary = "更新API接口", description = "修改API接口信息")
     @PutMapping
+    @PreAuthorize("hasAuthority('api-provider:update')")
     public Result<Void> updateApiProvider(@Valid @RequestBody ApiProviderSaveRequest request,
                                           Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        checkAdmin(userId);
+        requireProviderUpdate(userId);
         ApiProvider apiProvider = request.toProvider();
         apiProviderService.updateApiProvider(apiProvider);
         operationLogService.log(userId, "更新API接口",
@@ -70,10 +72,11 @@ public class ApiProviderController {
 
     @Operation(summary = "测试连接", description = "使用保存的凭据执行只读余额/商品查询，不自动启用接口")
     @PostMapping("/{id}/test-connection")
+    @PreAuthorize("hasAuthority('api-provider:update')")
     public Result<ProviderConnectionTestResult> testConnection(@PathVariable Long id,
                                                               Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        checkAdmin(userId);
+        requireProviderUpdate(userId);
         ProviderConnectionTestResult result = apiProviderService.testConnection(id, userId);
         operationLogService.log(userId, "测试API接口连接", "API接口ID：" + id, null, null);
         return Result.success("连接测试通过，可启用接口", result);
@@ -81,11 +84,12 @@ public class ApiProviderController {
 
     @Operation(summary = "启用或禁用接口", description = "启用要求当前配置已通过连接测试；禁用不访问第三方")
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAuthority('api-provider:update')")
     public Result<Void> updateStatus(@PathVariable Long id,
                                      @Valid @RequestBody ApiProviderStatusRequest request,
                                      Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        checkAdmin(userId);
+        requireProviderUpdate(userId);
         apiProviderService.updateStatus(id, request.status());
         operationLogService.log(userId, "更新API接口状态",
                 "API接口ID：" + id + "，状态：" + request.status(), null, null);
@@ -94,10 +98,11 @@ public class ApiProviderController {
 
     @Operation(summary = "删除API接口", description = "删除指定API接口")
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('api-provider:update')")
     public Result<Void> deleteApiProvider(@PathVariable Long id,
                                           Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        checkAdmin(userId);
+        requireProviderUpdate(userId);
         apiProviderService.deleteApiProvider(id);
         operationLogService.log(userId, "删除API接口",
                 "删除API接口ID：" + id, null, null);
@@ -106,9 +111,10 @@ public class ApiProviderController {
 
     @Operation(summary = "查询接口余额", description = "调用第三方余额接口并保存最新余额")
     @PostMapping("/{id}/balance")
+    @PreAuthorize("hasAuthority('api-provider:update')")
     public Result<BigDecimal> refreshBalance(@PathVariable Long id, Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        checkAdmin(userId);
+        requireProviderUpdate(userId);
         BigDecimal balance = platformDockingService.refreshProviderBalance(id);
         operationLogService.log(userId, "查询API接口余额",
                 "查询API接口余额：ID=" + id + "，余额=" + balance, null, null);
@@ -116,13 +122,15 @@ public class ApiProviderController {
     }
 
     @Operation(summary = "查询已保存的接口配置", description = "只返回脱敏配置，不执行连接测试")
+    @PreAuthorize("hasAuthority('api-provider:read')")
     @GetMapping("/{id}")
     public Result<ApiProviderVO> getApiProvider(@PathVariable Long id, Authentication authentication) {
-        checkAdmin((Long) authentication.getPrincipal());
+        SecurityUtils.requireAuthority("api-provider:read");
         return Result.success(SensitiveDataMasker.toApiProviderVO(apiProviderService.getApiProvider(id)));
     }
 
     @Operation(summary = "查询API接口列表", description = "分页查询API接口")
+    @PreAuthorize("hasAuthority('api-provider:read')")
     @GetMapping
     public Result<IPage<ApiProviderVO>> queryApiProviders(@RequestParam(required = false) String keyword,
                                                           @RequestParam(required = false) Integer status,
@@ -131,7 +139,7 @@ public class ApiProviderController {
                                                           @RequestParam(required = false) List<String> providerTypes,
                                                           Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        checkAdmin(userId);
+        SecurityUtils.requireAuthority("api-provider:read");
         IPage<ApiProvider> result = apiProviderService.queryApiProviders(keyword, status, page, pageSize, providerTypes);
         Page<ApiProviderVO> voPage = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
         voPage.setRecords(result.getRecords().stream().map(SensitiveDataMasker::toApiProviderVO).toList());

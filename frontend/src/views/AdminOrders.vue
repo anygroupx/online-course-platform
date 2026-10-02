@@ -53,7 +53,7 @@
             <el-button
               type="warning"
               @click="handleBatchOperation"
-              v-if="selectedOrders.length > 0"
+              v-if="canUpdateOrders && selectedOrders.length > 0"
             >
               <el-icon><Operation /></el-icon>
               批量操作（{{ selectedOrders.length }}）
@@ -61,7 +61,7 @@
             <el-button
               type="success"
               @click="handleQuickComplete"
-              v-if="selectedOrders.length > 0"
+              v-if="canUpdateOrders && selectedOrders.length > 0"
             >
               <el-icon><Check /></el-icon>
               批量完成
@@ -69,7 +69,7 @@
             <el-button
               type="danger"
               @click="handleQuickCancel"
-              v-if="selectedOrders.length > 0"
+              v-if="canUpdateOrders && selectedOrders.length > 0"
             >
               <el-icon><Close /></el-icon>
               批量取消
@@ -86,7 +86,7 @@
               <el-icon><Setting /></el-icon>
               列管理
             </el-button>
-            <el-button type="primary" @click="handleCreate">
+            <el-button v-if="canUpdateOrders" type="primary" @click="handleCreate">
               <el-icon><Plus /></el-icon>
               新建订单
             </el-button>
@@ -496,36 +496,36 @@
                     <el-dropdown-item command="view">
                       <el-icon><View /></el-icon> 详情
                     </el-dropdown-item>
-                    <el-dropdown-item command="status">
+                    <el-dropdown-item v-if="canUpdateOrders" command="status">
                       <el-icon><Setting /></el-icon> 修改状态
                     </el-dropdown-item>
-                    <el-dropdown-item command="dock">
+                    <el-dropdown-item v-if="canUpdateOrders" command="dock">
                       <el-icon><Setting /></el-icon> 修改执行状态
                     </el-dropdown-item>
-                    <el-dropdown-item command="remark">
+                    <el-dropdown-item v-if="canUpdateOrders" command="remark">
                       <el-icon><Document /></el-icon> 添加备注
                     </el-dropdown-item>
-                    <el-dropdown-item
+                    <el-dropdown-item v-if="canUpdateOrders"
                       command="retry"
                       :disabled="scope.row.retryCount >= 5"
                     >
                       <el-icon><Refresh /></el-icon> 补单
                     </el-dropdown-item>
                     <el-dropdown-item
-                      v-if="scope.row.isSelfOperated"
+                      v-if="canUpdateOrders && scope.row.isSelfOperated"
                       command="toggle"
                     >
                       <el-icon><Check /></el-icon> 状态切换
                     </el-dropdown-item>
                     <el-dropdown-item
-                      v-if="
+                      v-if="canUpdateOrders &&
                         scope.row.isSelfOperated && scope.row.orderStatus === 1
                       "
                       command="countdown"
                     >
                       <el-icon><Timer /></el-icon> 调整倒计时
                     </el-dropdown-item>
-                    <el-dropdown-item
+                    <el-dropdown-item v-if="canUpdateOrders"
                       command="delete"
                       :disabled="scope.row.orderStatus === 1"
                       divided
@@ -569,7 +569,7 @@
 
               <!-- 第二行：次要操作和自营订单功能 -->
               <div class="secondary-actions">
-                <el-button
+                <el-button v-if="canUpdateOrders"
                   size="small"
                   type="danger"
                   @click="handleRetry(scope.row)"
@@ -580,7 +580,7 @@
 
                 <!-- 自营订单倒计时功能 -->
                 <template v-if="scope.row.isSelfOperated">
-                  <el-button
+                  <el-button v-if="canUpdateOrders"
                     size="small"
                     type="success"
                     @click="handleToggleStatus(scope.row)"
@@ -588,7 +588,7 @@
                     状态切换
                   </el-button>
                   <el-button
-                    v-if="scope.row.orderStatus === 1"
+                    v-if="canUpdateOrders && scope.row.orderStatus === 1"
                     size="small"
                     type="info"
                     @click="handleAdjustCountdown(scope.row)"
@@ -597,7 +597,7 @@
                   </el-button>
                 </template>
 
-                <el-button
+                <el-button v-if="canUpdateOrders"
                   size="small"
                   type="danger"
                   @click="handleDelete(scope.row)"
@@ -665,7 +665,7 @@
       </el-form>
       <template #footer>
         <el-button @click="statusDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleStatusSubmit">确定</el-button>
+        <el-button v-if="canUpdateOrders" type="primary" @click="handleStatusSubmit">确定</el-button>
       </template>
     </el-dialog>
 
@@ -712,7 +712,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dockStatusDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleDockStatusSubmit"
+        <el-button v-if="canUpdateOrders" type="primary" @click="handleDockStatusSubmit"
           >确定</el-button
         >
       </template>
@@ -775,7 +775,7 @@
       </el-form>
       <template #footer>
         <el-button @click="toggleStatusDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleToggleStatusSubmit"
+        <el-button v-if="canUpdateOrders" type="primary" @click="handleToggleStatusSubmit"
           >确定</el-button
         >
       </template>
@@ -817,7 +817,7 @@
         <el-button @click="adjustCountdownDialogVisible = false"
           >取消</el-button
         >
-        <el-button type="primary" @click="handleAdjustCountdownSubmit"
+        <el-button v-if="canUpdateOrders" type="primary" @click="handleAdjustCountdownSubmit"
           >确定</el-button
         >
       </template>
@@ -845,7 +845,7 @@
       </el-form>
       <template #footer>
         <el-button @click="remarkDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleRemarkSubmit">确定</el-button>
+        <el-button v-if="canUpdateOrders" type="primary" @click="handleRemarkSubmit">确定</el-button>
       </template>
     </el-dialog>
 
@@ -1157,7 +1157,7 @@
       </el-descriptions>
 
       <div v-if="currentOrder && !isSelfOperatedOrder(currentOrder)" class="receipt-entry">
-        <el-button @click="receiptOrderId = currentOrder.id; receiptVisible = true">恢复执行编号</el-button>
+        <el-button v-if="hasAllPermissions(sessionUserInfo, ['order:update', 'api-provider:update'])" @click="receiptOrderId = currentOrder.id; receiptVisible = true">恢复执行编号</el-button>
         <span>已有回执但编号未记录时，先核对归属，再确认关联；不会重新下单。</span>
       </div>
       <el-divider content-position="left">执行记录</el-divider>
@@ -1304,6 +1304,9 @@
 </template>
 
 <script setup>
+import { sessionUserInfo } from "@/utils/authSession";
+import { hasPermission, hasAllPermissions } from "@/utils/permissions";
+const canUpdateOrders = computed(() => hasPermission(sessionUserInfo.value, "order:update"));
 import { ref, onMounted, onUnmounted, computed, nextTick } from "vue";
 import { getAccessToken } from "@/utils/authSession";
 import {

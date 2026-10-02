@@ -87,38 +87,39 @@
           <template #title>API 文档</template>
         </el-menu-item>
 
-        <el-menu-item index="/logs">
+        <el-menu-item v-if="canVisit('/logs')" index="/logs">
           <el-icon><List /></el-icon>
           <template #title>操作日志</template>
         </el-menu-item>
 
-        <el-sub-menu v-if="userStore.isAdmin" index="service-admin">
+        <el-sub-menu v-if="serviceAdminPaths.some(canVisit)" index="service-admin">
           <template #title>
             <el-icon><Tickets /></el-icon>
             <span>服务管理</span>
           </template>
-          <el-menu-item index="/admin/service-products">服务商品</el-menu-item>
-          <el-menu-item index="/admin/service-projects">项目与子钱包</el-menu-item>
-          <el-menu-item index="/admin/service-orders">服务订单与对账</el-menu-item>
-          <el-menu-item index="/admin/plugin-integrations">接口接入检查</el-menu-item>
+          <el-menu-item v-if="canVisit('/admin/service-products')" index="/admin/service-products">服务商品</el-menu-item>
+          <el-menu-item v-if="canVisit('/admin/service-projects')" index="/admin/service-projects">项目与子钱包</el-menu-item>
+          <el-menu-item v-if="canVisit('/admin/service-orders')" index="/admin/service-orders">服务订单与对账</el-menu-item>
+          <el-menu-item v-if="canVisit('/admin/plugin-integrations')" index="/admin/plugin-integrations">接口接入检查</el-menu-item>
         </el-sub-menu>
 
-        <el-sub-menu v-if="userStore.isAdmin" index="system-admin">
+        <el-sub-menu v-if="systemAdminPaths.some(canVisit)" index="system-admin">
           <template #title>
             <el-icon><Setting /></el-icon>
             <span>系统管理</span>
           </template>
-          <el-menu-item index="/admin/platforms">课程平台</el-menu-item>
-          <el-menu-item index="/admin/api-providers">接口配置</el-menu-item>
-          <el-menu-item index="/admin/orders">订单管理</el-menu-item>
-          <el-menu-item index="/admin/cards">充值卡密</el-menu-item>
-          <el-menu-item index="/admin/announcements">公告管理</el-menu-item>
-          <el-menu-item index="/admin/customer-service">客服管理</el-menu-item>
-          <el-menu-item index="/theme-config">主题配置</el-menu-item>
-          <el-menu-item index="/admin/variables">系统变量</el-menu-item>
-          <el-menu-item index="/admin/countdown">倒计时管理</el-menu-item>
-          <el-menu-item index="/admin/aqks">AQKS刷课管理</el-menu-item>
-          <el-menu-item index="/settings">系统设置</el-menu-item>
+          <el-menu-item v-if="canVisit('/admin/platforms')" index="/admin/platforms">课程平台</el-menu-item>
+          <el-menu-item v-if="canVisit('/admin/api-providers')" index="/admin/api-providers">接口配置</el-menu-item>
+          <el-menu-item v-if="canVisit('/admin/orders')" index="/admin/orders">订单管理</el-menu-item>
+          <el-menu-item v-if="canVisit('/admin/cards')" index="/admin/cards">充值卡密</el-menu-item>
+          <el-menu-item v-if="canVisit('/admin/announcements')" index="/admin/announcements">公告管理</el-menu-item>
+          <el-menu-item v-if="canVisit('/admin/customer-service')" index="/admin/customer-service">客服管理</el-menu-item>
+          <el-menu-item v-if="canVisit('/theme-config')" index="/theme-config">主题配置</el-menu-item>
+          <el-menu-item v-if="canVisit('/admin/variables')" index="/admin/variables">系统变量</el-menu-item>
+          <el-menu-item v-if="canVisit('/admin/countdown')" index="/admin/countdown">倒计时管理</el-menu-item>
+          <el-menu-item v-if="canVisit('/admin/aqks')" index="/admin/aqks">AQKS刷课管理</el-menu-item>
+          <el-menu-item v-if="canVisit('/admin/rbac')" index="/admin/rbac">角色与权限</el-menu-item>
+          <el-menu-item v-if="canVisit('/settings')" index="/settings">系统设置</el-menu-item>
         </el-sub-menu>
       </el-menu>
 
@@ -332,6 +333,7 @@
 </template>
 
 <script setup>
+import { canAccessPath } from "@/utils/routePermissions";
 import { computed, ref, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useUserStore } from "@/stores/user";
@@ -367,6 +369,10 @@ import {
 const router = useRouter();
 const route = useRoute();
 const userStore = useUserStore();
+const serviceAdminPaths = ['/admin/service-products', '/admin/service-orders', '/admin/service-projects', '/admin/plugin-integrations'];
+const systemAdminPaths = ['/admin/platforms', '/admin/api-providers', '/admin/orders', '/admin/cards', '/admin/announcements', '/admin/customer-service', '/theme-config', '/admin/variables', '/admin/countdown', '/admin/aqks', '/settings', '/admin/rbac'];
+const canVisit = (path) => canAccessPath(userStore.userInfo, path);
+
 const tagsViewStore = useTagsViewStore();
 const appConfigStore = useAppConfigStore();
 const themeStore = useThemeStore();
