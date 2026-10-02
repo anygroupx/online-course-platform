@@ -17,21 +17,21 @@
       <div class="operation-bar">
         <div class="left-actions">
           <template v-if="isThemeFilter">
-            <el-button type="primary" :loading="savingTheme" :disabled="!changedThemeRows.length" @click="saveThemeChanges">
+            <el-button v-if="permissionUser.hasPermission('system-config:update')" type="primary" :loading="savingTheme" :disabled="!changedThemeRows.length" @click="saveThemeChanges">
               <el-icon><Check /></el-icon>
               保存更改<span v-if="changedThemeRows.length">（{{ changedThemeRows.length }}）</span>
             </el-button>
-            <el-button :disabled="!changedThemeRows.length" @click="discardThemeChanges">
+            <el-button v-if="permissionUser.hasPermission('system-config:update')" :disabled="!changedThemeRows.length" @click="discardThemeChanges">
               <el-icon><RefreshLeft /></el-icon>
               撤销
             </el-button>
-            <el-button @click="resetThemeDrafts">
+            <el-button v-if="permissionUser.hasPermission('system-config:update')" @click="resetThemeDrafts">
               <el-icon><MagicStick /></el-icon>
               恢复系统默认
             </el-button>
           </template>
           <template v-else>
-            <el-button type="primary" @click="showCreateDialog">
+            <el-button v-if="permissionUser.hasPermission('system-config:update')" type="primary" @click="showCreateDialog">
               <el-icon><Plus /></el-icon>
               添加变量
             </el-button>
@@ -129,6 +129,7 @@
               </div>
               <el-switch
                 v-if="item.variable"
+                :disabled="!permissionUser.hasPermission('system-config:update')"
                 :model-value="getThemeDraft(item)?.enabled"
                 inline-prompt
                 active-text="启"
@@ -181,6 +182,7 @@
               </div>
               <el-switch
                 v-if="item.variable"
+                :disabled="!permissionUser.hasPermission('system-config:update')"
                 :model-value="getMaterialDraft(item)?.enabled"
                 inline-prompt
                 active-text="启"
@@ -291,12 +293,12 @@
               </template>
             </el-dropdown>
             <div v-else class="variable-row-actions">
-              <el-button size="small" @click="showEditDialog(row)">编辑</el-button>
-              <el-button size="small" :type="row.isEnabled ? 'warning' : 'success'" @click="toggleStatus(row)">
+              <el-button v-if="permissionUser.hasPermission('system-config:update')" size="small" @click="showEditDialog(row)">编辑</el-button>
+              <el-button v-if="permissionUser.hasPermission('system-config:update')" size="small" :type="row.isEnabled ? 'warning' : 'success'" @click="toggleStatus(row)">
                 {{ row.isEnabled ? '禁用' : '启用' }}
               </el-button>
-              <el-button v-if="!row.isDefault" size="small" type="info" @click="setDefault(row)">设为默认</el-button>
-              <el-button v-if="!row.isDefault" size="small" type="danger" @click="deleteVariable(row)">删除</el-button>
+              <el-button v-if="!row.isDefault && permissionUser.hasPermission('system-config:update')" size="small" type="info" @click="setDefault(row)">设为默认</el-button>
+              <el-button v-if="!row.isDefault && permissionUser.hasPermission('system-config:update')" size="small" type="danger" @click="deleteVariable(row)">删除</el-button>
             </div>
           </template>
         </el-table-column>
@@ -343,13 +345,16 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitForm">确定</el-button>
+        <el-button v-if="permissionUser.hasPermission('system-config:update')" type="primary" @click="submitForm">确定</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
+import { sessionUserInfo as permissionSession } from "@/utils/authSession";
+import { hasPermission as checkPermission } from "@/utils/permissions";
+const permissionUser = { hasPermission: (code) => checkPermission(permissionSession.value, code) };
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

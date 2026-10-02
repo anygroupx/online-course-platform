@@ -1,16 +1,16 @@
 <template>
-  <div v-if="allowed && isSelfOperatedHeisha(order)" class="fulfillment-controls">
+  <div v-if="(allowed || refundAllowed) && isSelfOperatedHeisha(order)" class="fulfillment-controls">
     <el-tag :type="verificationTag[order.verificationStatus] || 'info'">
       {{ verificationNames[order.verificationStatus] || "待资格核验" }}
     </el-tag>
     <el-button
-      v-for="action in fulfillmentActions(order)"
+      v-for="action in permittedActions"
       :key="action"
       :type="action === 'CANCEL_REFUND' ? 'danger' : 'default'"
       :disabled="busy"
       @click="openAction(action)"
     >{{ fulfillmentActionNames[action] }}</el-button>
-    <el-button :disabled="busy" @click="showDetails">查看履约资料</el-button>
+    <el-button v-if="allowed" :disabled="busy" @click="showDetails">查看履约资料</el-button>
 
     <el-dialog
       v-model="actionOpen"
@@ -139,6 +139,7 @@
 </template>
 
 <script setup>
+import { hasPermission } from "@/utils/permissions";
 import { computed, ref, watch, onBeforeUnmount, onDeactivated } from 'vue';
 import { sessionUserInfo, authSessionScope, hasAuthenticatedSession } from '@/utils/authSession';
 import { latestRequest } from '@/utils/pluginIntegrations';
@@ -158,9 +159,10 @@ const verificationTag = Object.freeze({ PENDING: 'warning', VERIFIED: 'success',
 const verificationActionNames = Object.freeze({ VERIFY: '核验通过', NEEDS_INFO: '要求补充资料', REJECT: '核验不通过' });
 const props = defineProps({ order: { type: Object, required: true } });
 const emit = defineEmits(['changed']);
-const permissions = computed(() => sessionUserInfo.value?.permissions || []);
-const allowed = computed(() => hasAuthenticatedSession.value && permissions.value.includes('service-order:fulfill'));
-const biometricAllowed = computed(() => allowed.value && permissions.value.includes('service-order:biometric'));
+const refundAllowed = computed(() => hasAuthenticatedSession.value && hasPermission(sessionUserInfo.value, 'service-order:refund'));
+const permittedActions = computed(() => fulfillmentActions(props.order).filter(action => action === 'CANCEL_REFUND' ? refundAllowed.value : allowed.value));
+const allowed = computed(() => hasAuthenticatedSession.value && hasPermission(sessionUserInfo.value, 'service-order:fulfill'));
+const biometricAllowed = computed(() => allowed.value && hasPermission(sessionUserInfo.value, 'service-order:biometric'));
 const refundableAmount = computed(() => Math.max(0, Number(props.order.paidAmount || 0) - Number(props.order.refundedAmount || 0)).toFixed(2));
 const verificationActions = computed(() => details.value
   ? fulfillmentVerificationActions(props.order, details.value.verificationStatus) : []);
@@ -189,7 +191,7 @@ function clear() {
   clearAction(); clearVerification();
 }
 function closeDrawer(done) { clear(); done(); }
-function openAction(action) { clear(); selectedAction.value = action; completed.value = (props.order.completed || 0) + 1; actionOpen.value = true; }
+function openAction(action) { if (!permittedActions.value.includes(action)) return; clear(); selectedAction.value = action; completed.value = (props.order.completed || 0) + 1; actionOpen.value = true; }
 function openVerification(action) {
   verificationAction.value = action;
   verification.value = {
@@ -226,7 +228,7 @@ async function loadAsset(asset) {
   finally { if (ticket.current()) assetBusy.value = ''; }
 }
 async function save() {
-  if (busy.value || !allowed.value) return;
+  if (busy.value || !permittedActions.value.includes(selectedAction.value)) return;
   let command;
   try { command = fulfillmentCommand(props.order, selectedAction.value, completed.value, note.value); }
   catch (error) { message.value = error.message; return; }

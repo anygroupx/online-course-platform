@@ -162,8 +162,8 @@ class ProjectReportingTest extends ProjectClientTestSupport {
         wallet("99.50");
     }
 
-    @Test void systemOverviewRequiresBothRealPermissionsNotRoleNames() {
-        for (List<String> authorities : List.of(List.of("ROLE_SUPER_ADMIN"), List.of("api-provider:update"), List.of("payment:reconcile"))) {
+    @Test void systemOverviewRejectsRoleNamesAndUnrelatedDomains() {
+        for (List<String> authorities : List.of(List.of("ROLE_SUPER_ADMIN"), List.of("api-provider:update"))) {
             authAs(authorities);
             assertThrows(BusinessException.class, () -> reports.system());
         }
@@ -185,7 +185,7 @@ class ProjectReportingTest extends ProjectClientTestSupport {
         upstream("WITHDRAW", "DISPATCHING", "80.88");
         upstream("TOP_UP", "NOT_ACCEPTED", "70.77");
         upstream("TOP_UP", "READY", "60.66");
-        authAs(List.of("api-provider:update", "payment:reconcile"));
+        authAs(List.of("payment:reconcile"));
         long before = ledgerCount();
         var result = reports.system();
         assertEquals(2, result.publishedProjects());

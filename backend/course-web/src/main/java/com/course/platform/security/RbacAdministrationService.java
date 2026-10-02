@@ -41,7 +41,11 @@ public class RbacAdministrationService {
     @Transactional(rollbackFor = Exception.class)
     public List<String> replaceUserRoles(String userUid, List<String> requestedRoles) {
         SecurityUtils.requireAuthority(SecurityAuthorities.RBAC_MANAGE);
+        if (authorityMapper.lockSuperAdminRole() == null)
+            throw new BusinessException(ResultCode.FORBIDDEN);
         User target = requireUser(userUid);
+        target = userMapper.selectByIdForUpdate(target.getId());
+        if (target == null) throw new BusinessException(ResultCode.USER_NOT_FOUND);
         Set<String> normalized = normalize(requestedRoles);
         Set<String> enabled = new LinkedHashSet<>(authorityMapper.findEnabledRoleCodes());
         if (!enabled.containsAll(normalized)) {
@@ -61,10 +65,29 @@ public class RbacAdministrationService {
             }
         }
         authorityMapper.updateLegacyRole(target.getId(), legacyPrimaryRole(normalized));
-        securityAuditService.record("RBAC_ROLE_CHANGED", "WARN", SecurityUtils.getCurrentUserId(), null,
-                "/admin/rbac/users/" + target.getUid() + "/roles", "PUT",
-                "用户角色已变更", "targetUid=" + target.getUid() + ",roles=" + normalized);
+        securityAuditService.recordRbacMutation(SecurityUtils.getCurrentUserId(), target.getUid(),
+                currentRoles, List.copyOf(normalized));
         return List.copyOf(normalized);
+    }
+
+    public record RolePermissions(String code, List<String> permissions) {}
+
+    public List<String> listPermissions() {
+        SecurityUtils.requireAuthority(SecurityAuthorities.RBAC_MANAGE);
+        return authorityMapper.findEnabledPermissionCodes();
+    }
+
+    public List<String> rolePermissions(String roleCode) {
+        SecurityUtils.requireAuthority(SecurityAuthorities.RBAC_MANAGE);
+        if (!authorityMapper.findEnabledRoleCodes().contains(roleCode))
+            throw new BusinessException(ResultCode.PARAM_ERROR);
+        return authorityMapper.findPermissionCodesByRole(roleCode);
+    }
+
+    public List<RolePermissions> matrix() {
+        SecurityUtils.requireAuthority(SecurityAuthorities.RBAC_MANAGE);
+        return authorityMapper.findEnabledRoleCodes().stream()
+                .map(code -> new RolePermissions(code, authorityMapper.findPermissionCodesByRole(code))).toList();
     }
 
     private Set<String> normalize(List<String> roles) {

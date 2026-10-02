@@ -74,7 +74,7 @@ class AppuiCommerceTransactionTest {
                 default: throw new AssertionError("Unexpected action "+act);
             }
         });
-        f.auth(7,"api-provider:update");
+        f.auth(7,"service-product:read", "service-product:update", "service-order:read");
         productId=f.service.saveProduct(null,new ProductCommand(9L,"1","1","实习天数","",new BigDecimal("0.25"),true,null)).id();
         f.auth(7,"ROLE_USER");
     }
@@ -127,7 +127,7 @@ class AppuiCommerceTransactionTest {
     @Test
     void renewKeepsFrozenPriceAndEditHasNoDistanceOrExtraCharge() {
         var created=create();
-        f.auth(7,"api-provider:update");
+        f.auth(7,"service-product:read", "service-product:update", "service-order:read");
         f.service.saveProduct(productId,new ProductCommand(9L,"1","1","实习天数","",new BigDecimal("0.50"),true,0L));
         f.auth(7,"ROLE_USER");
         var renew=f.service.quoteAction(created.orderId(),new ActionForm("ADD_TIMES",4));

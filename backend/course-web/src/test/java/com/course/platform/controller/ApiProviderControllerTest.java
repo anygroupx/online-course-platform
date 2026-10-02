@@ -84,7 +84,7 @@ class ApiProviderControllerTest {
 
     @Test
     void providerTypeFilterIsOptionalForExistingListClients() throws Exception {
-        var auth = authenticate("api-provider:update");
+        var auth = authenticate("api-provider:read");
         when(providers.queryApiProviders(null, null, 1, 10, null)).thenReturn(new Page<>(1, 10, 0));
         mvc.perform(get("/admin/api-providers").principal(auth))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.total").value(0));
@@ -94,7 +94,7 @@ class ApiProviderControllerTest {
 
     @Test
     void providerTypesAreParsedBeforePaginationAndRowsRemainMasked() throws Exception {
-        var auth = authenticate("api-provider:update");
+        var auth = authenticate("api-provider:read");
         ApiProvider row = new ApiProvider();
         row.setId(9L);
         row.setName("运动服务");
@@ -132,7 +132,7 @@ class ApiProviderControllerTest {
 
     @Test
     void savedProviderLookupIsReadOnlyAndNeverReturnsCredentials() throws Exception {
-        var auth = authenticate("api-provider:update");
+        var auth = authenticate("api-provider:read");
         ApiProvider row = new ApiProvider();
         row.setId(99L);
         row.setName("运动服务配置");

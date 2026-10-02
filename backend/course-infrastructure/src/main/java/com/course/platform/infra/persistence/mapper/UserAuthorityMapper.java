@@ -13,6 +13,21 @@ import java.util.List;
 @Mapper
 public interface UserAuthorityMapper {
 
+    // Serialize role replacements, including concurrent removal of the last administrator.
+    @Select("SELECT id FROM sys_role WHERE role_code = 'SUPER_ADMIN' FOR UPDATE")
+    Long lockSuperAdminRole();
+
+    @Select("SELECT permission_code FROM sys_permission WHERE enabled = 1 ORDER BY permission_code")
+    List<String> findEnabledPermissionCodes();
+
+    @Select("""
+            SELECT p.permission_code FROM sys_role r
+            JOIN sys_role_permission rp ON rp.role_id = r.id
+            JOIN sys_permission p ON p.id = rp.permission_id AND p.enabled = 1
+            WHERE r.role_code = #{roleCode} AND r.enabled = 1 ORDER BY p.permission_code
+            """)
+    List<String> findPermissionCodesByRole(@Param("roleCode") String roleCode);
+
     @Select("""
             SELECT authority FROM (
                 SELECT DISTINCT CONCAT('ROLE_', r.role_code) AS authority
@@ -67,7 +82,9 @@ public interface UserAuthorityMapper {
             FROM sys_user_role ur
             JOIN sys_role r ON r.id = ur.role_id AND r.enabled = 1
             WHERE ur.user_id = #{userId}
-            ORDER BY FIELD(r.role_code, 'SUPER_ADMIN', 'FINANCE', 'OPERATOR', 'CUSTOMER_SERVICE', 'AUDITOR', 'USER')
+            ORDER BY CASE r.role_code WHEN 'SUPER_ADMIN' THEN 1 WHEN 'FINANCE' THEN 2
+                WHEN 'OPERATOR' THEN 3 WHEN 'CUSTOMER_SERVICE' THEN 4 WHEN 'AUDITOR' THEN 5
+                WHEN 'USER' THEN 6 ELSE 7 END
             LIMIT 1
             """)
     String findPrimaryRoleByUserId(@Param("userId") Long userId);

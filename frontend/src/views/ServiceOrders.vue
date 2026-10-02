@@ -198,15 +198,15 @@
             >
             <template v-else>
               <ServiceFulfillment :order="item" @changed="load" />
-              <el-button @click="showAudit(item)">核对资料与记录</el-button>
+              <el-button v-if="canReconcile" @click="showAudit(item)">核对资料与记录</el-button>
               <el-button
-                v-if="item.pendingOperationId"
+                v-if="canReconcile && item.pendingOperationId"
                 type="warning"
                 @click="openResolve(item)"
                 >核对处理结果</el-button
               >
               <el-button
-                v-else-if="item.status === 'REFUND_REVIEW' && !isTotalDistanceService(item)"
+                v-else-if="canSettleRefund && item.status === 'REFUND_REVIEW' && !isTotalDistanceService(item)"
                 type="warning"
                 @click="openSettlement(item)"
                 >核对退款入账</el-button
@@ -669,6 +669,8 @@
   </div>
 </template>
 <script setup>
+import { sessionUserInfo } from "@/utils/authSession";
+import { hasPermission, hasAllPermissions } from "@/utils/permissions";
 import { computed, ref, shallowRef, watch, onActivated, onDeactivated, onBeforeUnmount } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -735,6 +737,8 @@ const route = useRoute(),
 // separate so another route cannot trigger reads or erase its saved filters.
 const viewPath = route.path;
 const admin = ref(!!route.meta.serviceAdmin);
+const canReconcile = computed(() => hasPermission(sessionUserInfo.value, 'service-order:reconcile'));
+const canSettleRefund = computed(() => hasAllPermissions(sessionUserInfo.value, ['service-order:refund', 'service-order:reconcile']));
 const viewQuery = shallowRef(route.query);
 const sessionActive = hasAuthenticatedSession;
 const viewActive = computed(() => sessionActive.value && route.path === viewPath);

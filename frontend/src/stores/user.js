@@ -1,3 +1,4 @@
+import * as permissions from "@/utils/permissions";
 /** Authentication state. Access JWT is memory-only; refresh credential is an HttpOnly cookie. */
 import { defineStore } from "pinia";
 import { computed } from "vue";
@@ -77,6 +78,12 @@ export const useUserStore = defineStore("user", () => {
     userInfo,
     isLoggedIn,
     isAdmin,
+    roles: computed(() => userInfo.value?.roles || []),
+    permissions: computed(() => userInfo.value?.permissions || []),
+    hasPermission: (code) => permissions.hasPermission(userInfo.value, code),
+    hasAnyPermission: (codes) => permissions.hasAnyPermission(userInfo.value, codes),
+    hasAllPermissions: (codes) => permissions.hasAllPermissions(userInfo.value, codes),
+    hasRole: (code) => permissions.hasRole(userInfo.value, code),
     login,
     verifyMfaLogin,
     setMustChangePassword,

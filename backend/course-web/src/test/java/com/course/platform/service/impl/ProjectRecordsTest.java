@@ -224,8 +224,8 @@ class ProjectRecordsTest extends ProjectClientTestSupport {
         assertThrows(BusinessException.class,()->records.ownLedger(key,all(),1,20));
     }
 
-    @Test void administrativeReadingNeedsBothActualPermissionsAndAnActiveAuthenticatedActor() {
-        for(String permission:List.of("ROLE_SUPER_ADMIN","api-provider:update","payment:reconcile")) {
+    @Test void administrativeReadingRequiresDomainReadOrFinanceAndAnAuthenticatedActor() {
+        for(String permission:List.of("ROLE_SUPER_ADMIN","api-provider:update","service-order:read")) {
             authorities(permission);
             assertThrows(BusinessException.class,()->records.owners(null,1,20));
             assertThrows(BusinessException.class,()->records.owner(7));

@@ -1,5 +1,7 @@
 package com.course.platform.controller;
 
+import static com.course.platform.common.security.SecurityAuthorities.*;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.course.platform.application.service.projectcenter.ProjectCenterService;
 import com.course.platform.common.result.Result;
@@ -57,13 +59,13 @@ public class ProjectCenterController {
         return ok(service.confirm(id));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update')")
+    @PreAuthorize("hasAuthority('" + SERVICE_PROJECT_UPDATE + "')")
     @GetMapping("/admin/service-project-catalog")
     public ResponseEntity<Result<List<CatalogItem>>> catalog(@RequestParam Long providerId) {
         return ok(service.catalog(providerId));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update')")
+    @PreAuthorize("hasAnyAuthority('" + SERVICE_PROJECT_READ + "','payment:reconcile')")
     @GetMapping("/admin/service-projects")
     public ResponseEntity<Result<IPage<ProjectView>>> adminProjects(
             @RequestParam(defaultValue = "1") int page,
@@ -71,20 +73,20 @@ public class ProjectCenterController {
         return ok(service.projects(page, pageSize, true));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update')")
+    @PreAuthorize("hasAuthority('" + SERVICE_PROJECT_UPDATE + "')")
     @PostMapping("/admin/service-projects")
     public ResponseEntity<Result<ProjectView>> create(@Valid @RequestBody ProjectForm form) {
         return ok(service.save(null, form));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update')")
+    @PreAuthorize("hasAuthority('" + SERVICE_PROJECT_UPDATE + "')")
     @PutMapping("/admin/service-projects/{id}")
     public ResponseEntity<Result<ProjectView>> update(
             @PathVariable Long id, @Valid @RequestBody ProjectForm form) {
         return ok(service.save(id, form));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update') and hasAuthority('payment:reconcile')")
+    @PreAuthorize("hasAuthority('payment:reconcile')")
     @GetMapping("/admin/project-operations")
     public ResponseEntity<Result<IPage<OperationView>>> adminOperations(
             @RequestParam(defaultValue = "1") int page,
@@ -93,13 +95,13 @@ public class ProjectCenterController {
         return ok(service.operations(page, pageSize, projectId, true));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update') and hasAuthority('payment:reconcile')")
+    @PreAuthorize("hasAuthority('payment:reconcile')")
     @GetMapping("/admin/project-operations/{id}")
     public ResponseEntity<Result<OperationView>> adminOperation(@PathVariable String id) {
         return ok(service.operation(id, true));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update') and hasAuthority('payment:reconcile')")
+    @PreAuthorize("hasAuthority('payment:reconcile')")
     @PostMapping("/admin/project-operations/{id}/resolve")
     public ResponseEntity<Result<OperationView>> resolve(
             @PathVariable String id, @Valid @RequestBody ResolveForm form) {

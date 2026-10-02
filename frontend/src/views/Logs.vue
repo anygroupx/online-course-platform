@@ -27,7 +27,7 @@ const { isMobile } = useResponsive();
 const tableData = ref([]), currentPage = ref(1), pageSize = ref(20), total = ref(0);
 const operationType = ref(''), keyword = ref(''), dateRange = ref(null), syncing = ref(false), loading = ref(false);
 const userStore = useUserStore();
-const isAdmin = computed(() => userStore.isAdmin);
+const isAdmin = computed(() => userStore.hasPermission("security:event:read"));
 let sequence = 0;
 const loadLogs = async () => {
   const request = ++sequence;

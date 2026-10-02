@@ -64,6 +64,13 @@ public final class SecurityUtils {
         }
     }
 
+    public static void requireAnyAuthority(String... authorities) {
+        for (String authority : authorities) if (hasAuthority(authority)) return;
+        throw new BusinessException(ResultCode.FORBIDDEN);
+    }
+
+    /** Legacy role semantic only; new endpoint authorization must use permissions. */
+    @Deprecated
     public static void requireAdmin() {
         requireAuthority(SecurityAuthorities.ROLE_SUPER_ADMIN);
     }

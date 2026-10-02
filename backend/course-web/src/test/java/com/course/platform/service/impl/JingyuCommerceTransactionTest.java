@@ -123,7 +123,7 @@ class JingyuCommerceTransactionTest {
             : Map.of("account", PHONE, "password", PASSWORD, "zoneId", "7", "minMinute", "4", "maxMinute", "12"); }
     OrderForm form() { return new OrderForm(3, new BigDecimal("1.5"), fields(), List.of(time(1), time(2), time(3)), true); }
     void publish() {
-        f.auth(7, "api-provider:update");
+        f.auth(7, "service-product:read", "service-product:update", "service-order:read");
         ServiceProduct existing = productId == null ? null : f.products.selectById(productId);
         boolean update = existing != null && project.equals(existing.getProject());
         productId = f.service.saveProduct(update ? existing.getId() : null,
@@ -134,7 +134,7 @@ class JingyuCommerceTransactionTest {
     QuoteView quote() { return f.service.quote(productId, form()); }
     QuoteView create() { var done = f.service.confirm(quote().id()); assertEquals("SUCCEEDED", done.state()); return done; }
     QuoteView unknownCreate() { uncertainAction = project + "_add"; var done = f.service.confirm(quote().id()); assertEquals("UNKNOWN", done.state()); return done; }
-    void admin() { f.auth(8, "api-provider:update", "payment:reconcile"); }
+    void admin() { f.auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund"); }
     ResolveForm acceptedCreate() { return new ResolveForm("ACCEPTED", project + "-451", null, EVIDENCE, true, "17"); }
     ResolveForm acceptedAction(Integer units) { return new ResolveForm("ACCEPTED", null, units, EVIDENCE, true); }
     int ledgerRows() { return f.jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class); }
@@ -159,7 +159,7 @@ class JingyuCommerceTransactionTest {
         assertNull(f.service.order(order.getId()).schedule()); assertNotNull(f.service.order(order.getId()).statusCheck());
         assertEquals("SUCCEEDED", f.service.confirm(q.id()).state()); assertEquals(1, writes.get()); assertEquals(1, ledgerRows());
         f.money("keep".equals(project) ? "99.94" : "99.97");
-        f.auth(7, "api-provider:update");
+        f.auth(7, "service-product:read", "service-product:update", "service-order:read");
         assertEquals("keep".equals(project) ? "元/次·公里" : "元/次", f.service.products(1, 20, true, "jingyu").getRecords().get(0).priceUnit());
     }
 
@@ -180,7 +180,7 @@ class JingyuCommerceTransactionTest {
 
     @ParameterizedTest @ValueSource(strings = {"ymty", "bad", ""})
     void unimplementedProjectsCannotBePublished(String value) {
-        f.auth(7, "api-provider:update"); clearInvocations(http);
+        f.auth(7, "service-product:read", "service-product:update", "service-order:read"); clearInvocations(http);
         assertThrows(BusinessException.class, () -> f.service.saveProduct(null, new ProductCommand(9L, value, value, "测试", "", BigDecimal.ONE, true, null)));
         verifyNoInteractions(http);
     }

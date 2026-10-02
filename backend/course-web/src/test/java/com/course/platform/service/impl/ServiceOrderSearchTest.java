@@ -204,7 +204,7 @@ class ServiceOrderSearchTest {
         String upstream = row(2, 7, "heisha", "ACTIVE", "接口服务", "13***07", CREATED, null);
         fixture.jdbc.update("UPDATE service_order SET fulfillment_mode='SELF_OPERATED',provider_id=NULL,provider_version=NULL,provider_identity=NULL WHERE id=?", local);
         seal();
-        fixture.auth(7, "api-provider:update");
+        fixture.auth(7, "service-product:read", "service-product:update", "service-order:read");
         assertEquals(List.of(local), fixture.service.orders(1, 20, true,
                 new ServiceOrderFilter(null, "heisha", "PENDING", "SELF_OPERATED", null, null, null, null))
                 .getRecords().stream().map(OrderView::id).toList());
@@ -222,7 +222,7 @@ class ServiceOrderSearchTest {
         assertThrows(BusinessException.class, () -> fixture.service.orders(1, 20, false, filter));
         assertThrows(BusinessException.class, () -> fixture.service.orders(1, 20, false,
                 new ServiceOrderFilter(null, null, null, null, 7L, null, null, null)));
-        fixture.auth(7, "api-provider:update");
+        fixture.auth(7, "service-product:read", "service-product:update", "service-order:read");
         assertEquals(List.of(other), fixture.service.orders(1, 20, true, filter).getRecords().stream().map(OrderView::id).toList());
         assertEquals(2, fixture.service.orders(1, 20, true).getTotal());
         assertEquals(List.of(own), ids(ServiceOrderFilter.empty()), "admin on the user URL still sees only their own orders");
@@ -243,7 +243,7 @@ class ServiceOrderSearchTest {
         for (var filter : invalid) assertThrows(BusinessException.class, () -> fixture.service.orders(1, 20, false, filter));
         for (int[] bounds : List.of(new int[]{0, 20}, new int[]{10001, 20}, new int[]{1, 0}, new int[]{1, 101}))
             assertThrows(BusinessException.class, () -> fixture.service.orders(bounds[0], bounds[1], false));
-        fixture.auth(7, "api-provider:update");
+        fixture.auth(7, "service-product:read", "service-product:update", "service-order:read");
         assertThrows(BusinessException.class, () -> fixture.service.orders(1, 20, true,
                 new ServiceOrderFilter(null, null, null, null, 0L, null, null, null)));
         SecurityContextHolder.clearContext();

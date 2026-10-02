@@ -1,5 +1,7 @@
 package com.course.platform.config;
 
+import static com.course.platform.common.security.SecurityAuthorities.*;
+
 import com.course.platform.security.JwtAuthenticationFilter;
 import com.course.platform.security.MustChangePasswordFilter;
 import com.course.platform.security.JwtAuthenticationEntryPoint;
@@ -113,14 +115,15 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/system/config").hasAuthority("system-config:read")
                         .requestMatchers(org.springframework.http.HttpMethod.PUT, "/system/config").hasAuthority("system-config:update")
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/system/config/reset/**").hasAuthority("system-config:update")
-                        .requestMatchers("/system/**", "/system-config/**", "/system-variable/**", "/admin/variables/**").hasAuthority("system-config:update")
+                        .requestMatchers("/admin/variables/**").authenticated()
+                        .requestMatchers("/system/**", "/system-config/**", "/system-variable/**").hasAuthority("system-config:update")
                         .requestMatchers("/logs/**").hasAuthority("security:event:read")
                         .requestMatchers("/announcement/create").hasAuthority("announcement:create")
                         .requestMatchers("/announcement/update", "/announcement/page").hasAuthority("announcement:update")
                         .requestMatchers("/announcement/*/publish", "/announcement/*/offline").hasAuthority("announcement:publish")
                         .requestMatchers("/customer-service/admin/**").hasAuthority("customer-service:read")
                         .requestMatchers("/customer-service/session/*/assign").hasAuthority("customer-service:assign")
-                        .requestMatchers("/admin/api-providers/**").hasAuthority("api-provider:update")
+                        .requestMatchers("/admin/api-providers/**").authenticated()
                         .requestMatchers("/admin/service-orders/*/fulfillment/assets/*")
                                 .access(new org.springframework.security.authorization.AuthorizationManager<>() {
                                     @Override
@@ -130,19 +133,21 @@ public class SecurityConfig {
                                         var authorities = authentication.get().getAuthorities().stream()
                                                 .map(org.springframework.security.core.GrantedAuthority::getAuthority).collect(java.util.stream.Collectors.toSet());
                                         return new org.springframework.security.authorization.AuthorizationDecision(
-                                                authorities.contains("service-order:fulfill")
-                                                        && authorities.contains("service-order:biometric"));
+                                                authorities.contains(SERVICE_ORDER_FULFILL)
+                                                        && authorities.contains(SERVICE_ORDER_BIOMETRIC));
                                     }
                                 })
+                        // Action-specific refund/fulfillment requirements live on the controller and service.
                         .requestMatchers("/admin/service-orders/*/fulfillment", "/admin/service-orders/*/fulfillment/verification")
-                                .hasAuthority("service-order:fulfill")
+                                .authenticated()
                         // Native-service controllers enforce finer, dual financial permissions at method level.
                         .requestMatchers("/admin/service-products/**", "/admin/service-orders/**", "/admin/service-order-operations/**",
-                                "/admin/plugin-integrations/**", "/admin/service-projects/**", "/admin/service-project-catalog", "/admin/project-operations/**",
+                                "/admin/service-projects/**", "/admin/service-project-catalog", "/admin/project-operations/**",
                                 "/admin/project-tickets/**", "/admin/project-ticket-operations/**", "/admin/project-reports/overview", "/admin/project-reports/owners", "/admin/project-reports/owners/*",
                                 "/admin/project-reports/owners/*/accounts", "/admin/project-reports/owners/*/clients", "/admin/project-reports/ledger")
-                                .hasAuthority("api-provider:update")
-                        .requestMatchers("/admin/platforms/**", "/admin/platform-categories/**").hasAuthority("platform:update")
+                                .authenticated()
+                        .requestMatchers("/admin/plugin-integrations/**").hasAnyAuthority("api-provider:read", "api-provider:update")
+                        .requestMatchers("/admin/platforms/**", "/admin/platform-categories/**").authenticated()
                         .requestMatchers("/admin/security/**").authenticated()
                         .requestMatchers("/admin/rbac/**").hasAuthority("rbac:manage")
                         .requestMatchers("/admin/**").denyAll()

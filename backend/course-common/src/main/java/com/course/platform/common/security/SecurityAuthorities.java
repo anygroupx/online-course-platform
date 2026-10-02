@@ -39,4 +39,13 @@ public final class SecurityAuthorities {
     public static final String PLATFORM_UPDATE = "platform:update";
     public static final String MFA_MANAGE = "mfa:manage";
     public static final String RBAC_MANAGE = "rbac:manage";
+    public static final String SERVICE_PRODUCT_READ = "service-product:read";
+    public static final String SERVICE_PRODUCT_UPDATE = "service-product:update";
+    public static final String SERVICE_ORDER_READ = "service-order:read";
+    public static final String SERVICE_ORDER_FULFILL = "service-order:fulfill";
+    public static final String SERVICE_ORDER_BIOMETRIC = "service-order:biometric";
+    public static final String SERVICE_ORDER_RECONCILE = "service-order:reconcile";
+    public static final String SERVICE_ORDER_REFUND = "service-order:refund";
+    public static final String SERVICE_PROJECT_READ = "service-project:read";
+    public static final String SERVICE_PROJECT_UPDATE = "service-project:update";
 }

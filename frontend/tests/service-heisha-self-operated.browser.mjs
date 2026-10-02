@@ -1,3 +1,4 @@
+import { mockAuthority } from './fixtures/rbac-policy.mjs';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
@@ -9,7 +10,7 @@ import '/src/styles/variables.scss';import '/src/styles/global.css';import '/src
 import {createApp,h} from 'vue';import {createRouter,createMemoryHistory,RouterView} from 'vue-router';import ElementPlus from 'element-plus';import 'element-plus/dist/index.css';
 import Store from '/src/views/ServiceStore.vue';import Orders from '/src/views/ServiceOrders.vue';import Admin from '/src/views/AdminServiceProducts.vue';import {applyAuthSession} from '/src/utils/authSession.js';
 const selected=new URLSearchParams(location.search).get('page')||'/services';
-const permissions=selected.startsWith('/admin')?['api-provider:update','service-order:fulfill','service-order:biometric']:[];
+const permissions=selected.startsWith('/admin')?${JSON.stringify(mockAuthority('OPERATOR', 'FINANCE').permissions)}:[];
 applyAuthSession({token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:selected.startsWith('/admin')?8:7,permissions});
 const router=createRouter({history:createMemoryHistory(),routes:[{path:'/services',component:Store},{path:'/service-orders',component:Orders},{path:'/admin/service-products',component:Admin},{path:'/admin/service-orders',component:Orders,meta:{serviceAdmin:true}}]});
 await router.push(selected);await router.isReady();createApp({render:()=>h(RouterView)}).use(router).use(ElementPlus).mount('#app');</script></body></html>`;
@@ -301,12 +302,12 @@ try {
   assert.equal(await page.getByRole('button', { name: '查看人脸材料', exact: true }).count(), 1);
   await page.evaluate(async () => {
     const { applyAuthSession, sessionUserInfo, getAccessToken } = await import('/src/utils/authSession.js');
-    applyAuthSession({ ...sessionUserInfo.value, token: getAccessToken(), permissions: ['api-provider:update', 'service-order:fulfill'] });
+    applyAuthSession({ ...sessionUserInfo.value, token: getAccessToken(), permissions: ['service-order:read', 'service-order:fulfill'] });
   });
   await page.getByRole('button', { name: '查看人脸材料', exact: true }).waitFor({ state: 'detached' });
   await page.evaluate(async () => {
     const { applyAuthSession, sessionUserInfo, getAccessToken } = await import('/src/utils/authSession.js');
-    applyAuthSession({ ...sessionUserInfo.value, token: getAccessToken(), permissions: ['api-provider:update', 'service-order:fulfill', 'service-order:biometric'] });
+    applyAuthSession({ ...sessionUserInfo.value, token: getAccessToken(), permissions: ['service-order:read', 'service-order:fulfill', 'service-order:biometric'] });
   });
   await openAdminDetails();
   await page.getByRole('button', { name: '查看人脸材料', exact: true }).click();

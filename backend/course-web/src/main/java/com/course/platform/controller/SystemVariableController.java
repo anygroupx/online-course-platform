@@ -31,7 +31,7 @@ import java.util.List;
  * Source: 基于系统变量管理需求设计
  */
 @Tag(name = "系统变量管理", description = "系统变量配置管理接口")
-@PreAuthorize("hasAuthority('system-config:update')")
+@PreAuthorize("isAuthenticated()")
 @RequestMapping("/admin/variables")
 @RequiredArgsConstructor
 @RestController
@@ -51,6 +51,7 @@ public class SystemVariableController {
      */
     @Operation(summary = "创建系统变量", description = "创建新的系统变量配置")
     @PostMapping
+    @PreAuthorize("hasAuthority('system-config:update')")
     public Result<Long> createVariable(@Validated @RequestBody SystemVariableCreateRequest request,
                                       Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
@@ -65,6 +66,7 @@ public class SystemVariableController {
      */
     @Operation(summary = "更新系统变量", description = "更新系统变量配置")
     @PutMapping
+    @PreAuthorize("hasAuthority('system-config:update')")
     public Result<Void> updateVariable(@Validated @RequestBody SystemVariableUpdateRequest request,
                                        Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
@@ -79,6 +81,7 @@ public class SystemVariableController {
      */
     @Operation(summary = "批量更新主题变量", description = "在单个事务中发布一组主题颜色或液态玻璃材质参数")
     @PutMapping("/theme")
+    @PreAuthorize("hasAuthority('system-config:update')")
     public Result<Void> updateThemeVariables(@Validated @RequestBody List<@Valid SystemVariableUpdateRequest> requests,
                                              Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
@@ -93,6 +96,7 @@ public class SystemVariableController {
      */
     @Operation(summary = "删除系统变量", description = "删除系统变量配置")
     @DeleteMapping("/{variableId}")
+    @PreAuthorize("hasAuthority('system-config:update')")
     public Result<Void> deleteVariable(@PathVariable Long variableId,
                                        Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
@@ -107,6 +111,7 @@ public class SystemVariableController {
      */
     @Operation(summary = "根据类型查询变量", description = "根据变量类型查询变量列表")
     @GetMapping("/type/{variableType}")
+    @PreAuthorize("hasAuthority('system-config:read')")
     public Result<List<SystemVariable>> getVariablesByType(@PathVariable String variableType) {
         List<SystemVariable> variables = systemVariableService.getVariablesByType(variableType);
         return Result.success(variables);
@@ -117,6 +122,7 @@ public class SystemVariableController {
      */
     @Operation(summary = "分页查询变量", description = "分页查询系统变量")
     @GetMapping
+    @PreAuthorize("hasAuthority('system-config:read')")
     public Result<IPage<SystemVariable>> queryVariables(@RequestParam(required = false) String variableType,
                                                        @RequestParam(required = false) String keyword,
                                                        @RequestParam(defaultValue = "1") Integer page,
@@ -130,6 +136,7 @@ public class SystemVariableController {
      */
     @Operation(summary = "获取变量详情", description = "根据ID获取变量详情")
     @GetMapping("/{variableId}")
+    @PreAuthorize("hasAuthority('system-config:read')")
     public Result<SystemVariable> getVariableById(@PathVariable Long variableId) {
         SystemVariable variable = systemVariableService.getVariableById(variableId);
         return Result.success(variable);
@@ -140,6 +147,7 @@ public class SystemVariableController {
      */
     @Operation(summary = "切换变量状态", description = "启用或禁用系统变量")
     @PostMapping("/{variableId}/toggle")
+    @PreAuthorize("hasAuthority('system-config:update')")
     public Result<Void> toggleVariableStatus(@PathVariable Long variableId,
                                              @RequestParam Boolean enabled,
                                              Authentication authentication) {
@@ -155,6 +163,7 @@ public class SystemVariableController {
      */
     @Operation(summary = "设置默认变量", description = "设置指定变量为默认值")
     @PostMapping("/{variableId}/set-default")
+    @PreAuthorize("hasAuthority('system-config:update')")
     public Result<Void> setDefaultVariable(@PathVariable Long variableId,
                                            Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
@@ -169,6 +178,7 @@ public class SystemVariableController {
      */
     @Operation(summary = "获取变量类型列表", description = "获取系统中所有变量类型")
     @GetMapping("/types")
+    @PreAuthorize("hasAuthority('system-config:read')")
     public Result<List<String>> getVariableTypes() {
         // 这里可以从数据库查询所有不同的变量类型
         List<String> types = List.of(

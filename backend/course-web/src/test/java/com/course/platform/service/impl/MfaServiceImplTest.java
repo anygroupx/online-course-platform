@@ -64,6 +64,8 @@ class MfaServiceImplTest {
         when(challengeMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(challenge);
         when(userMapper.selectByIdForUpdate(42L)).thenReturn(user);
         when(authorityService.getPrimaryRole(42L)).thenReturn("SUPER_ADMIN");
+        org.mockito.Mockito.lenient().when(authorityService.loadSnapshot(42L)).thenReturn(
+                new UserAuthorityService.AuthoritySnapshot(java.util.List.of("SUPER_ADMIN"), java.util.List.of("mfa:manage")));
     }
 
     @Test
@@ -86,6 +88,8 @@ class MfaServiceImplTest {
         var response = service.verifyLogin(request());
 
         assertEquals("access", response.getToken());
+        assertEquals(java.util.List.of("SUPER_ADMIN"), response.getRoles());
+        assertEquals(java.util.List.of("mfa:manage"), response.getPermissions());
         assertTrue(response.getRefreshToken().matches("rt_[a-f0-9]{64}"));
         verify(challengeMapper).consumeIfActive(eq(challenge.getChallengeId()), any(LocalDateTime.class));
         verify(refreshSessionService).issue(user);

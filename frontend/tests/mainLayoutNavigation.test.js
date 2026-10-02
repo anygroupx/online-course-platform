@@ -34,7 +34,7 @@ test("服务管理员功能使用独立下拉菜单", () => {
   const serviceAdminMenu = submenuSource("service-admin");
   const systemAdminMenu = submenuSource("system-admin");
 
-  assert.match(serviceAdminMenu, /v-if="userStore\.isAdmin"/);
+  assert.match(serviceAdminMenu, /v-if="serviceAdminPaths\.some\(canVisit\)"/);
   assert.match(serviceAdminMenu, /<span>服务管理<\/span>/);
   for (const path of [
     "/admin/service-products",

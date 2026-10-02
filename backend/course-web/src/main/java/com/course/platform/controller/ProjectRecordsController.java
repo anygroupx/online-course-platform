@@ -1,5 +1,7 @@
 package com.course.platform.controller;
 
+import static com.course.platform.common.security.SecurityAuthorities.*;
+
 import com.course.platform.application.service.projectcenter.ProjectRecordsService;
 import com.course.platform.application.service.projectclient.ProjectApiKeyService;
 import com.course.platform.common.result.Result;
@@ -19,7 +21,7 @@ import java.time.LocalDate;
 public class ProjectRecordsController {
     private final ProjectRecordsService records;
     private final ProjectApiKeyService keys;
-    private static final String ADMIN = "hasAuthority('api-provider:update') and hasAuthority('payment:reconcile')";
+    private static final String ADMIN = "hasAnyAuthority('" + SERVICE_PROJECT_READ + "','payment:reconcile')";
 
     @GetMapping("/admin/project-reports/owners")
     @PreAuthorize(ADMIN)

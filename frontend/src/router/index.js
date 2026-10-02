@@ -6,6 +6,7 @@
  */
 import { createRouter, createWebHistory } from "vue-router";
 import routes from "./routes.js";
+import { canAccessMeta } from "@/utils/routePermissions";
 import {
   getAccessToken,
   isAccessTokenExpired,
@@ -48,7 +49,7 @@ router.beforeEach(async (to, _from, next) => {
     }
   }
 
-  if (to.meta.adminOnly && !sessionUserInfo.value?.isAdmin) {
+  if (!canAccessMeta(sessionUserInfo.value, to.meta)) {
     next("/dashboard");
     return;
   }

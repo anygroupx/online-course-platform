@@ -129,7 +129,7 @@ class ProjectTicketTransactionTest extends ProjectCenterTestSupport {
     }
 
     void support() {
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "payment:reconcile");
     }
 
     @Test
@@ -354,10 +354,10 @@ class ProjectTicketTransactionTest extends ProjectCenterTestSupport {
     }
 
     @Test
-    void reviewRequiresBothAuthoritiesAndPrivatePreviewIsHiddenFromCustomer() {
+    void reviewRequiresReconcilePermissionAndPrivatePreviewIsHiddenFromCustomer() {
         var t = submit();
         for (String permission :
-                List.of("ROLE_ADMIN", "api-provider:update", "payment:reconcile")) {
+                List.of("ROLE_ADMIN", "api-provider:update", "service-project:read")) {
             auth(7, permission);
             assertThrows(
                     RuntimeException.class,
@@ -375,7 +375,7 @@ class ProjectTicketTransactionTest extends ProjectCenterTestSupport {
         assertEquals("", ticketService.operation(op.id(), false).content());
         assertNull(ticketService.operation(op.id(), false).reviewResult());
         assertThrows(BusinessException.class, () -> ticketService.confirm(op.id(), false));
-        auth(8, "api-provider:update", "payment:reconcile");
+        auth(8, "payment:reconcile");
         assertThrows(BusinessException.class, () -> ticketService.confirm(op.id(), true));
     }
 
@@ -633,7 +633,7 @@ class ProjectTicketTransactionTest extends ProjectCenterTestSupport {
         auth(8,"ROLE_USER");assertThrows(BusinessException.class,()->ticketService.image(op.ticketId(),null,false));
         assertThrows(BusinessException.class,()->ticketService.operationImage(op.id(),false));
         auth(8,"ROLE_ADMIN");assertThrows(BusinessException.class,()->ticketService.image(op.ticketId(),null,true));
-        auth(8,"api-provider:update");assertTrue(ticketService.image(op.ticketId(),null,true).length>0);
+        auth(8,"service-project:read", "service-project:update");assertTrue(ticketService.image(op.ticketId(),null,true).length>0);
         assertTrue(ticketService.operationImage(op.id(),true).length>0);
         assertThrows(BusinessException.class,()->ticketService.image(op.ticketId(),"999",true));
     }

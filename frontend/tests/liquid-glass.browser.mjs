@@ -1,3 +1,4 @@
+import { mockAuthority } from './fixtures/rbac-policy.mjs';
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { mkdirSync } from 'node:fs'
@@ -79,7 +80,7 @@ const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><met
 import {createApp,h} from 'vue';import {createPinia} from 'pinia';import {RouterView} from 'vue-router';import ElementPlus from 'element-plus';import * as icons from '@element-plus/icons-vue';
 import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';import '/src/styles/variables.scss';import '/src/styles/element-overrides.scss';import '/src/styles/global.css';import '/src/styles/fluent-spatial.scss';import '/src/styles/responsive.scss';import '/src/styles/liquid-glass-theme.scss';
 import router from '/src/router/index.js';import {applyAuthSession} from '/src/utils/authSession.js';import {useThemeStore} from '/src/stores/theme.js';
-applyAuthSession({token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',uid:'20000000-0000-4000-8000-000000000007',role:'ADMIN',isAdmin:true,nickname:'测试管理员'});
+applyAuthSession({ ...${JSON.stringify(mockAuthority('SUPER_ADMIN'))},token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',uid:'20000000-0000-4000-8000-000000000007',role:'SUPER_ADMIN',isAdmin:true,nickname:'测试管理员'});
 localStorage.setItem('app-theme-preference','liquid-glass');
 const pinia=createPinia();const app=createApp({render:()=>h(RouterView)}).use(pinia).use(ElementPlus);for(const [name,icon] of Object.entries(icons))app.component(name,icon);
 await router.push('/admin/variables?type=theme_color_liquid_glass');app.use(router);await router.isReady();app.mount('#app');await useThemeStore(pinia).initTheme();

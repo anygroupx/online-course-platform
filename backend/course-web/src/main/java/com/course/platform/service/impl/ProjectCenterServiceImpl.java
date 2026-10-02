@@ -1,5 +1,7 @@
 package com.course.platform.service.impl;
 
+import static com.course.platform.common.security.SecurityAuthorities.*;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -62,7 +64,7 @@ public class ProjectCenterServiceImpl implements ProjectCenterService, ProjectAc
     @Override
     public List<CatalogItem> catalog(Long providerId) {
         Long uid = user();
-        admin();
+        SecurityUtils.requireAuthority(SERVICE_PROJECT_UPDATE);
         rate(uid, "catalog", 20);
         return gateway.projects(provider(providerId));
     }
@@ -70,7 +72,7 @@ public class ProjectCenterServiceImpl implements ProjectCenterService, ProjectAc
     @Override
     public IPage<ProjectView> projects(int page, int size, boolean admin) {
         Long uid = user();
-        if (admin) admin();
+        if (admin) requireProjectRead();
         bounds(page, size);
         var query = new LambdaQueryWrapper<ServiceProject>().orderByDesc(ServiceProject::getId);
         if (!admin) {
@@ -95,7 +97,7 @@ public class ProjectCenterServiceImpl implements ProjectCenterService, ProjectAc
     @Override
     public ProjectView save(Long id, ProjectForm f) {
         Long uid = user();
-        admin();
+        SecurityUtils.requireAuthority(SERVICE_PROJECT_UPDATE);
         if (f == null || f.providerId() == null || f.remoteProjectId() == null)
             throw bad("项目参数不完整");
         if (id != null && !f.enabled())
@@ -581,7 +583,7 @@ public class ProjectCenterServiceImpl implements ProjectCenterService, ProjectAc
     @Override
     public ProjectAccountAccess.Context forTickets(String accountId, boolean asAdmin) {
         Long uid = user();
-        if (asAdmin) admin();
+        if (asAdmin) requireProjectRead();
         uuid(accountId);
         var account = accounts.selectById(accountId);
         if (asAdmin) {
@@ -782,12 +784,11 @@ public class ProjectCenterServiceImpl implements ProjectCenterService, ProjectAc
         return id;
     }
 
-    private static void admin() {
-        SecurityUtils.requireAuthority("api-provider:update");
+    private static void requireProjectRead() {
+        SecurityUtils.requireAnyAuthority(SERVICE_PROJECT_READ, "payment:reconcile");
     }
 
     private static void reconciler() {
-        admin();
         SecurityUtils.requireAuthority("payment:reconcile");
     }
 

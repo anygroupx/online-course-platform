@@ -98,7 +98,7 @@ class LeidianCommerceTransactionTest {
     void cleanup() { if (release != null) release.countDown(); f.cleanup(); }
 
     void publish() {
-        f.auth(7, "api-provider:update");
+        f.auth(7, "service-product:read", "service-product:update", "service-order:read");
         productId = f.service.saveProduct(null, new ProductCommand(9L, project, project, "运动计划", "",
                 new BigDecimal("0.25"), true, null)).id();
         f.auth(7, "ROLE_USER");
@@ -113,7 +113,7 @@ class LeidianCommerceTransactionTest {
     QuoteView quote() { return f.service.quote(productId, new OrderForm(10, new BigDecimal("3.2"), fields(), List.of(), true)); }
     QuoteView create() { var done = f.service.confirm(quote().id()); assertEquals("SUCCEEDED", done.state()); return done; }
     QuoteView unknownCreate() { uncertainAction = "add_order"; var done = f.service.confirm(quote().id()); assertEquals("UNKNOWN", done.state()); return done; }
-    void admin() { f.auth(7, "api-provider:update", "payment:reconcile"); }
+    void admin() { f.auth(7, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund"); }
     ResolveForm accepted() { return new ResolveForm("ACCEPTED", "yid-451", null, EVIDENCE, true, "17"); }
     int ledgerRows() { return f.jdbc.queryForObject("SELECT COUNT(*) FROM account_ledger", Integer.class); }
     void allowRefresh(String id) { f.jdbc.update("UPDATE service_order SET status_check_after=NULL WHERE id=?", id); }
@@ -277,10 +277,10 @@ class LeidianCommerceTransactionTest {
             f.auth(8, permission);
             assertThrows(BusinessException.class, () -> f.service.quoteRefundSettlement(order.orderId(), form));
         }
-        f.auth(8, "api-provider:update", "payment:reconcile");
+        f.auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         var q = f.service.quoteRefundSettlement(order.orderId(), form); assertEquals("3.00", q.amount());
         admin(); assertThrows(BusinessException.class, () -> f.service.confirmRefundSettlement(q.id()));
-        f.auth(8, "api-provider:update", "payment:reconcile");
+        f.auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         assertEquals("SUCCEEDED", f.service.confirmRefundSettlement(q.id()).state());
         assertEquals("SUCCEEDED", f.service.confirmRefundSettlement(q.id()).state());
         f.money("98.00"); assertEquals(new BigDecimal("100.00"), f.jdbc.queryForObject("SELECT balance FROM sys_user WHERE id=8", BigDecimal.class));
@@ -386,7 +386,7 @@ class LeidianCommerceTransactionTest {
     @Test
     void scoreInfoIsReadOnlyAndAllSensitiveReadsRequireTheOwnerEvenForAdministrators() {
         var order = create(); assertEquals("成绩信息：等待核对", f.service.scoreInfo(order.orderId()).text());
-        int requests = calls.size(); f.auth(8, "api-provider:update", "payment:reconcile");
+        int requests = calls.size(); f.auth(8, "service-product:read", "service-product:update", "service-order:read", "service-order:reconcile", "service-order:refund");
         assertThrows(BusinessException.class, () -> f.service.scoreInfo(order.orderId()));
         assertThrows(BusinessException.class, () -> f.service.logs(order.orderId(), 1));
         assertThrows(BusinessException.class, () -> f.service.orderOptions(order.orderId()));

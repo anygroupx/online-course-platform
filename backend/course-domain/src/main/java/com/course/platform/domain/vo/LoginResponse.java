@@ -50,14 +50,23 @@ public class LoginResponse {
     private BigDecimal rate;
 
     /**
-     * 是否管理员
+     * @deprecated Compatibility display field; never a server authorization source.
      */
+    @Deprecated
     private Boolean isAdmin;
 
     /**
-     * 角色
+     * @deprecated Primary display role only; roles contains every enabled role.
      */
+    @Deprecated
     private String role;
+
+    /** Display/navigation metadata, never a server authorization source. */
+    @Builder.Default
+    private java.util.List<String> roles = java.util.List.of();
+
+    @Builder.Default
+    private java.util.List<String> permissions = java.util.List.of();
 
     /**
      * 是否必须修改密码

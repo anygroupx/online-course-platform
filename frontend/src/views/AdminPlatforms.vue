@@ -19,7 +19,7 @@
             >
               分类管理
             </el-button>
-            <el-button type="primary" :icon="Plus" @click="handleCreate">
+            <el-button :disabled="!permissionUser.hasPermission('platform:update')" type="primary" :icon="Plus" @click="handleCreate">
               添加平台
             </el-button>
             <el-button @click="priceRefreshVisible = true">仅更新价格/说明</el-button>
@@ -218,10 +218,10 @@
           <template #default="scope">
             <div class="operation-buttons">
               <div class="primary-actions">
-                <el-button size="small" @click="handleEdit(scope.row)"
+                <el-button :disabled="!permissionUser.hasPermission('platform:update')" size="small" @click="handleEdit(scope.row)"
                   >编辑</el-button
                 >
-                <el-button
+                <el-button :disabled="!permissionUser.hasPermission('platform:update')"
                   size="small"
                   type="danger"
                   @click="handleDelete(scope.row)"
@@ -547,6 +547,9 @@
 </template>
 
 <script setup>
+import { sessionUserInfo as permissionSession } from "@/utils/authSession";
+import { hasPermission as checkPermission } from "@/utils/permissions";
+const permissionUser = { hasPermission: (code) => checkPermission(permissionSession.value, code) };
 import ExistingPriceRefresh from '@/components/catalog/ExistingPriceRefresh.vue';
 import { isReadOnlyProviderType } from "@/utils/pluginIntegrations";
 import { ref, onMounted, computed } from "vue";

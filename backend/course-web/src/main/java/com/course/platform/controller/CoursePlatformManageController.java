@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.*;
  * @since 2025-01-17
  */
 @Tag(name = "课程平台管理", description = "课程平台增删改查接口（管理员）")
-@PreAuthorize("hasAuthority('platform:update')")
+@PreAuthorize("isAuthenticated()")
 @RequestMapping("/admin/platforms")
 @RequiredArgsConstructor
 @RestController
@@ -47,6 +47,7 @@ public class CoursePlatformManageController {
      */
     @Operation(summary = "创建课程平台", description = "添加新的课程平台")
     @PostMapping
+    @PreAuthorize("hasAuthority('platform:update')")
     public Result<Long> createPlatform(@Valid @RequestBody CoursePlatform platform,
                                         Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
@@ -67,6 +68,7 @@ public class CoursePlatformManageController {
      */
     @Operation(summary = "更新课程平台", description = "修改课程平台信息")
     @PutMapping
+    @PreAuthorize("hasAuthority('platform:update')")
     public Result<Void> updatePlatform(@Valid @RequestBody CoursePlatform platform,
                                         Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
@@ -87,6 +89,7 @@ public class CoursePlatformManageController {
      */
     @Operation(summary = "删除课程平台", description = "删除指定课程平台")
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('platform:update')")
     public Result<Void> deletePlatform(@PathVariable Long id,
                                         Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
@@ -106,6 +109,7 @@ public class CoursePlatformManageController {
      */
     @Operation(summary = "查询课程平台列表", description = "分页查询课程平台")
     @GetMapping
+    @PreAuthorize("hasAuthority('platform:read')")
     public Result<IPage<CoursePlatform>> queryPlatforms(@RequestParam(required = false) String keyword,
                                                           @RequestParam(required = false) Integer status,
                                                           @RequestParam(required = false) Long categoryId,
@@ -113,7 +117,7 @@ public class CoursePlatformManageController {
                                                           @RequestParam(defaultValue = "10") Integer pageSize,
                                                           Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
-        checkAdmin(userId);
+        SecurityUtils.requireAuthority("platform:read");
 
         IPage<CoursePlatform> result = coursePlatformService.queryPlatforms(keyword, status, categoryId, page, pageSize);
         return Result.success(result);

@@ -13,5 +13,9 @@ public interface SecurityAuditService {
     /** Must persist successfully before biometric material is returned. */
     void recordFulfillmentAssetRead(Long operatorId, String orderId, String assetId, String assetType);
 
+    /** Required transaction participant: never swallow failures on RBAC mutations. */
+    void recordRbacMutation(Long actorId, String targetUid, java.util.List<String> previousRoles,
+                           java.util.List<String> newRoles);
+
     IPage<SecurityAuditLog> query(String eventType, String severity, Integer page, Integer pageSize);
 }

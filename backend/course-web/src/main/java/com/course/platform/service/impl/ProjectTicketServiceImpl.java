@@ -1,5 +1,7 @@
 package com.course.platform.service.impl;
 
+import static com.course.platform.common.security.SecurityAuthorities.*;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -56,7 +58,7 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
     @Override
     public IPage<TicketView> tickets(int page, int size, String accountId, boolean admin) {
         Long uid = user();
-        if (admin) admin();
+        if (admin) requireProjectRead();
         bounds(page, size);
         if (accountId != null) uuid(accountId);
         var query =
@@ -105,6 +107,7 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
 
     @Override
     public TicketView refresh(String id, boolean admin) {
+        if (admin) SecurityUtils.requireAuthority(SERVICE_PROJECT_UPDATE);
         Long uid = user();
         var t = owned(id, admin);
         rate(uid, "read", 30);
@@ -502,7 +505,7 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
 
     private ServiceProjectTicket owned(String id, boolean admin) {
         Long uid = user();
-        if (admin) admin();
+        if (admin) requireProjectRead();
         uuid(id);
         var t = tickets.selectById(id);
         if (t == null || (!admin && !uid.equals(t.getUserId()))) throw missing();
@@ -511,7 +514,7 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
 
     private ServiceProjectTicketOperation ownedOperation(String id, boolean admin) {
         user();
-        if (admin) admin();
+        if (admin) requireProjectRead();
         uuid(id);
         var op = operations.selectById(id);
         if (op == null) throw missing();
@@ -666,12 +669,11 @@ public class ProjectTicketServiceImpl implements ProjectTicketService {
         return uid;
     }
 
-    private static void admin() {
-        SecurityUtils.requireAuthority("api-provider:update");
+    private static void requireProjectRead() {
+        SecurityUtils.requireAnyAuthority(SERVICE_PROJECT_READ, "payment:reconcile");
     }
 
     private static void reconciler() {
-        admin();
         SecurityUtils.requireAuthority("payment:reconcile");
     }
 

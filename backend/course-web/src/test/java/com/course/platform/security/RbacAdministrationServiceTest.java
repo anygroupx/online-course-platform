@@ -53,7 +53,9 @@ class RbacAdministrationServiceTest {
         User user = new User();
         user.setId(2L);
         user.setUid(UID);
+        when(authorityMapper.lockSuperAdminRole()).thenReturn(1L);
         when(userMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(user);
+        when(userMapper.selectByIdForUpdate(2L)).thenReturn(user);
     }
 
     @Test
@@ -94,7 +96,11 @@ class RbacAdministrationServiceTest {
         verify(authorityMapper).assignRole(2L, "FINANCE");
         verify(authorityMapper).assignRole(2L, "AUDITOR");
         verify(authorityMapper).updateLegacyRole(2L, "FINANCE");
-        verify(securityAuditService).record(eq("RBAC_ROLE_CHANGED"), eq("WARN"), eq(1L), isNull(),
-                contains("/admin/rbac/users/"), eq("PUT"), anyString(), contains("FINANCE"));
+        verify(securityAuditService).recordRbacMutation(1L, UID, List.of("USER"), List.of("FINANCE", "AUDITOR"));
+        var ordered = inOrder(authorityMapper, userMapper);
+        ordered.verify(authorityMapper).lockSuperAdminRole();
+        ordered.verify(userMapper).selectOne(any(LambdaQueryWrapper.class));
+        ordered.verify(userMapper).selectByIdForUpdate(2L);
+
     }
 }

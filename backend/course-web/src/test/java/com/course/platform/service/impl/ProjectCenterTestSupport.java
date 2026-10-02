@@ -172,7 +172,7 @@ abstract class ProjectCenterTestSupport {
                         new DataSourceTransactionManager(ds));
         ReflectionTestUtils.setField(service, "enabled", true);
         ReflectionTestUtils.setField(service, "cryptoSecret", "test-project-master-key");
-        auth(7, "api-provider:update", "payment:reconcile");
+        auth(7, "service-project:update", "payment:reconcile");
         projectId = service.save(null, form("0.25", true, null)).id();
         auth(7, "ROLE_USER");
         threads = Executors.newFixedThreadPool(2);
@@ -204,7 +204,7 @@ abstract class ProjectCenterTestSupport {
         var providerService =
                 (ApiProviderService) ReflectionTestUtils.getField(service, "providers");
         when(providerService.loadDecrypted(10L)).thenReturn(alias);
-        auth(7, "api-provider:update");
+        auth(7, "service-project:read", "service-project:update");
         var original = form("0.25", true, null);
         return service.save(
                         null,

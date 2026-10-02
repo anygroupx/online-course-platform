@@ -1,5 +1,7 @@
 package com.course.platform.service.impl;
 
+import static com.course.platform.common.security.SecurityAuthorities.*;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.course.platform.application.service.projectcenter.ProjectRecordsService;
@@ -36,7 +38,7 @@ public class ProjectRecordsServiceImpl implements ProjectRecordsService {
 
     @Override
     public IPage<Owner> owners(String keyword, int page, int size) {
-        admin(); bounds(page, size);
+        requireProjectRead(); bounds(page, size);
         String text = keyword(keyword);
         var search = new Search(null, null, null, null, null, null, null, like(text), numeric(text));
         return snapshot(() -> new Page<Owner>(page, size, records.ownerCount(search))
@@ -45,7 +47,7 @@ public class ProjectRecordsServiceImpl implements ProjectRecordsService {
 
     @Override
     public OwnerDetail owner(long id) {
-        admin(); positive(id);
+        requireProjectRead(); positive(id);
         return snapshot(() -> {
             var identity = identity(id);
             var through = ServiceTime.now();
@@ -60,7 +62,7 @@ public class ProjectRecordsServiceImpl implements ProjectRecordsService {
 
     @Override
     public IPage<Account> accounts(long ownerId, int page, int size) {
-        admin(); positive(ownerId); bounds(page, size);
+        requireProjectRead(); positive(ownerId); bounds(page, size);
         return snapshot(() -> {
             identity(ownerId);
             return new Page<Account>(page, size, records.accountCount(ownerId)).setRecords(
@@ -73,7 +75,7 @@ public class ProjectRecordsServiceImpl implements ProjectRecordsService {
 
     @Override
     public IPage<Customer> customers(long ownerId, Long projectId, String status, int page, int size) {
-        admin(); positive(ownerId); if (projectId != null) positive(projectId); bounds(page, size);
+        requireProjectRead(); positive(ownerId); if (projectId != null) positive(projectId); bounds(page, size);
         var state = choice(status, Set.of("ACTIVE", "SUSPENDED", "CLOSED"));
         return snapshot(() -> {
             identity(ownerId);
@@ -86,7 +88,7 @@ public class ProjectRecordsServiceImpl implements ProjectRecordsService {
 
     @Override
     public LedgerPage adminLedger(LedgerFilter filter, int page, int size) {
-        admin(); bounds(page, size);
+        requireProjectRead(); bounds(page, size);
         var search = search(filter, filter == null ? null : filter.ownerId());
         return snapshot(() -> ledger(search, page, size));
     }
@@ -123,9 +125,8 @@ public class ProjectRecordsServiceImpl implements ProjectRecordsService {
         return owner(owners.get(0));
     }
 
-    private void admin() {
-        SecurityUtils.requireAuthority("api-provider:update");
-        SecurityUtils.requireAuthority("payment:reconcile");
+    private void requireProjectRead() {
+        SecurityUtils.requireAnyAuthority(SERVICE_PROJECT_READ, "payment:reconcile");
         keys.recheck(keys.web(), false, true);
     }
 

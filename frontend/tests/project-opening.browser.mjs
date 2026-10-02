@@ -1,3 +1,4 @@
+import { mockAuthority } from './fixtures/rbac-policy.mjs';
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync } from 'node:fs'
 import { chromium } from 'playwright'
@@ -8,7 +9,7 @@ import { estimateProjectTransfer } from '../src/utils/projectCenter.js'
 const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:20px"><div id="app"></div><script type="module">
 import {createApp,h} from 'vue';import {createRouter,createMemoryHistory,RouterView,RouterLink} from 'vue-router';import ElementPlus from 'element-plus';import 'element-plus/dist/index.css';import 'element-plus/theme-chalk/dark/css-vars.css';import '/src/styles/variables.scss';import '/src/styles/global.css';import '/src/styles/element-overrides.scss';
 import ProjectCenter from '/src/views/ProjectCenter.vue';import Admin from '/src/views/AdminProjectCenter.vue';import {applyAuthSession} from '/src/utils/authSession.js';
-applyAuthSession({token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7});
+applyAuthSession({ ...${JSON.stringify(mockAuthority('OPERATOR', 'FINANCE'))},token:'test.'+btoa(JSON.stringify({exp:Date.now()/1000+3600}))+'.signature',userId:7});
 const router=createRouter({history:createMemoryHistory(),routes:[{path:'/',component:ProjectCenter},{path:'/admin',component:Admin},{path:'/away',component:{render:()=>h('h2','已离开项目页')}}]});await router.push(new URLSearchParams(location.search).get('entry')==='admin'?'/admin':'/');await router.isReady();createApp({render:()=>h('main',[h(RouterLink,{to:'/away'},()=> '离开页面'),h(RouterView)])}).use(router).use(ElementPlus).mount('#app');</script></body></html>`
 const server = await createTestServer({ logLevel: 'error', plugins: [{ name: 'funded-opening-fixture', configureServer(vite) {
   vite.middlewares.use(async (req, res, next) => {

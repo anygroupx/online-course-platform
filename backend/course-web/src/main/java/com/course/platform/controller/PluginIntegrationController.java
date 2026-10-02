@@ -18,7 +18,7 @@ import java.util.List;
 @Tag(name = "插件集成", description = "研究矩阵与经审核的只读连接器；不支持安装、下单或资金操作")
 @RestController
 @RequestMapping("/admin/plugin-integrations")
-@PreAuthorize("hasAuthority('api-provider:update')")
+@PreAuthorize("hasAuthority('api-provider:read')")
 @RequiredArgsConstructor
 public class PluginIntegrationController {
     private final PluginIntegrationService service;
@@ -37,6 +37,7 @@ public class PluginIntegrationController {
         return readOnly(service.listProviders(pluginId, new PluginPageQuery(page, pageSize, keyword)));
     }
 
+    @PreAuthorize("hasAuthority('api-provider:update')")
     @GetMapping("/{pluginId}/providers/{providerId}/catalog")
     @Operation(summary = "从已验证启用的接口只读查询商品或所选项目报价")
     public ResponseEntity<Result<List<PluginProduct>>> catalog(@PathVariable String pluginId,
@@ -44,6 +45,7 @@ public class PluginIntegrationController {
         return readOnly(service.fetchCatalog(pluginId, providerId, project));
     }
 
+    @PreAuthorize("hasAuthority('api-provider:update')")
     @GetMapping("/{pluginId}/providers/{providerId}/schools")
     @Operation(summary = "极光学校只读检索；不查询或提交学生信息")
     public ResponseEntity<Result<PluginSchoolPage>> schools(@PathVariable String pluginId,

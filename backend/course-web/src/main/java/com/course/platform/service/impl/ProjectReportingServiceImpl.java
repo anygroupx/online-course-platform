@@ -1,5 +1,7 @@
 package com.course.platform.service.impl;
 
+import static com.course.platform.common.security.SecurityAuthorities.*;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.course.platform.application.service.projectcenter.ProjectReportingService;
@@ -55,8 +57,7 @@ public class ProjectReportingServiceImpl implements ProjectReportingService {
 
     @Override
     public SystemReport system() {
-        SecurityUtils.requireAuthority("api-provider:update");
-        SecurityUtils.requireAuthority("payment:reconcile");
+        SecurityUtils.requireAnyAuthority(SERVICE_PROJECT_READ, "payment:reconcile");
         return snapshot(() -> {
             keys.recheck(keys.web(), false, true);
             var window = window();

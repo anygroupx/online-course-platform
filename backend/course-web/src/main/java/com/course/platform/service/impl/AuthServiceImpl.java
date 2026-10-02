@@ -108,9 +108,12 @@ public class AuthServiceImpl implements AuthService {
         }
 
         RefreshSessionService.SessionTokens session = refreshSessionService.issue(user);
+        var authoritySnapshot = userAuthorityService.loadSnapshot(user.getId());
 
         LoginResponse response = LoginResponse.builder()
                 .token(session.accessToken())
+                .roles(authoritySnapshot.roles())
+                .permissions(authoritySnapshot.permissions())
                 .refreshToken(session.refreshToken())
                 .uid(user.getUid())
                 .username(user.getUsername())
@@ -147,11 +150,14 @@ public class AuthServiceImpl implements AuthService {
     public LoginResponse refresh(String refreshToken) {
         RefreshSessionService.SessionTokens session = refreshSessionService.rotate(refreshToken);
         User user = session.user();
+        var authoritySnapshot = userAuthorityService.loadSnapshot(user.getId());
         String role = resolveRole(user);
         securityAuditService.record("REFRESH_SUCCESS", "INFO", user.getId(), user.getUsername(),
                 "/auth/refresh", "POST", "Refresh Token 轮换成功", null);
         return LoginResponse.builder()
                 .token(session.accessToken())
+                .roles(authoritySnapshot.roles())
+                .permissions(authoritySnapshot.permissions())
                 .refreshToken(session.refreshToken())
                 .uid(user.getUid())
                 .username(user.getUsername())

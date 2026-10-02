@@ -31,6 +31,21 @@ public class RbacAdminController {
         return Result.success(rbacService.listEnabledRoles());
     }
 
+    @GetMapping("/permissions")
+    public Result<List<String>> permissions() {
+        return Result.success(rbacService.listPermissions());
+    }
+
+    @GetMapping("/roles/{roleCode}/permissions")
+    public Result<List<String>> rolePermissions(@PathVariable String roleCode) {
+        return Result.success(rbacService.rolePermissions(roleCode));
+    }
+
+    @GetMapping("/matrix")
+    public Result<List<RbacAdministrationService.RolePermissions>> matrix() {
+        return Result.success(rbacService.matrix());
+    }
+
     @GetMapping("/users/{uid}/roles")
     public Result<List<String>> userRoles(@PathVariable String uid) {
         return Result.success(rbacService.getUserRoles(uid));

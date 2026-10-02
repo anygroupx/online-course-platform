@@ -1,5 +1,7 @@
 package com.course.platform.service.impl;
 
+import static com.course.platform.common.security.SecurityAuthorities.*;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -94,7 +96,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
         user();
         if (providerType != null && PhpNativeServiceGateway.capabilities(providerType).isEmpty())
             throw bad("不支持的服务分类");
-        if (admin) admin();
+        if (admin) SecurityUtils.requireAuthority(SERVICE_PRODUCT_READ);
         bounds(page, size);
         var filter =
                 new LambdaQueryWrapper<ServiceProduct>()
@@ -108,7 +110,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
     @Override
     public ProductView saveProduct(Long id, ProductCommand c) {
         user();
-        admin();
+        SecurityUtils.requireAuthority(SERVICE_PRODUCT_UPDATE);
         if (c == null
                 || c.project() == null
                 || c.remoteProductId() == null) throw bad("商品参数不完整");
@@ -767,7 +769,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
     @Override
     public IPage<OrderView> orders(int page, int size, boolean admin, ServiceOrderFilter filter) {
         Long uid = user();
-        if (admin) admin();
+        if (admin) SecurityUtils.requireAuthority(SERVICE_ORDER_READ);
         bounds(page, size);
         ServiceOrderFilter f = filter == null ? ServiceOrderFilter.empty() : filter;
         if (f.ownerId() != null && (!admin || f.ownerId() < 1))
@@ -876,7 +878,9 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
 
     @Override
     public OrderView manageFulfillment(String id, LocalFulfillmentForm form) {
-        Long actor = fulfillmentOperator();
+        Long actor = user();
+        SecurityUtils.requireAuthority(form != null && "CANCEL_REFUND".equals(form.action())
+                ? SERVICE_ORDER_REFUND : SERVICE_ORDER_FULFILL);
         uuid(id);
         if (form == null || form.action() == null || form.orderVersion() == null)
             throw bad("处理参数不完整");
@@ -1077,7 +1081,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
     @Override
     public byte[] fulfillmentAsset(String orderId, String assetId) {
         Long actor = fulfillmentOperator();
-        SecurityUtils.requireAuthority("service-order:biometric");
+        SecurityUtils.requireAuthority(SERVICE_ORDER_BIOMETRIC);
         uuid(orderId);
         uuid(assetId);
         ServiceOrder order = orderMapper.selectById(orderId);
@@ -1406,8 +1410,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
     @Override
     public QuoteView adminOperation(String id) {
         user();
-        admin();
-        SecurityUtils.requireAuthority("payment:reconcile");
+        SecurityUtils.requireAuthority(SERVICE_ORDER_RECONCILE);
         uuid(id);
         ServiceOperation op = operationMapper.selectById(id);
         if (op == null) throw missing();
@@ -1416,7 +1419,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
 
     @Override
     public OrderAuditView audit(String orderId) {
-        financeAdmin();
+        serviceOrderReconciler();
         uuid(orderId);
         ServiceOrder order = orderMapper.selectById(orderId);
         if (order == null) throw missing();
@@ -1454,7 +1457,8 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
 
     @Override
     public QuoteView quoteRefundSettlement(String orderId, RefundSettlementForm form) {
-        Long actor = financeAdmin();
+        Long actor = user();
+        SecurityUtils.requireAuthority(SERVICE_ORDER_REFUND);
         uuid(orderId);
         if (form == null) throw bad("退款核对信息不完整");
         evidence(form.upstreamChecked(), form.evidence());
@@ -1487,7 +1491,8 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
 
     @Override
     public QuoteView confirmRefundSettlement(String id) {
-        Long actor = financeAdmin();
+        Long actor = serviceOrderReconciler();
+        SecurityUtils.requireAuthority(SERVICE_ORDER_REFUND);
         uuid(id);
         return tx(
                 () -> {
@@ -1509,10 +1514,9 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
                 });
     }
 
-    private Long financeAdmin() {
+    private Long serviceOrderReconciler() {
         Long actor = user();
-        admin();
-        SecurityUtils.requireAuthority("payment:reconcile");
+        SecurityUtils.requireAuthority(SERVICE_ORDER_RECONCILE);
         return actor;
     }
 
@@ -1535,8 +1539,7 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
     @Override
     public QuoteView resolve(String operationId, ResolveForm form) {
         Long actor = user();
-        admin();
-        SecurityUtils.requireAuthority("payment:reconcile");
+        SecurityUtils.requireAuthority(SERVICE_ORDER_RECONCILE);
         uuid(operationId);
         if (form == null || !form.upstreamChecked()
                 || form.evidence() == null
@@ -2020,13 +2023,9 @@ public class ServiceCommerceServiceImpl implements ServiceCommerceService, Servi
         return id;
     }
 
-    private void admin() {
-        SecurityUtils.requireAuthority("api-provider:update");
-    }
-
     private Long fulfillmentOperator() {
         Long actor = user();
-        SecurityUtils.requireAuthority("service-order:fulfill");
+        SecurityUtils.requireAuthority(SERVICE_ORDER_FULFILL);
         return actor;
     }
 

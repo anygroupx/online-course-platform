@@ -1,5 +1,7 @@
 package com.course.platform.controller;
 
+import static com.course.platform.common.security.SecurityAuthorities.*;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.course.platform.application.service.projectcenter.ProjectTicketService;
 import com.course.platform.common.result.Result;
@@ -42,13 +44,13 @@ public class ProjectTicketController {
         return ProjectClientTicketController.imageResponse(service.operationImage(id, false));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update')")
+    @PreAuthorize("hasAnyAuthority('" + SERVICE_PROJECT_READ + "','payment:reconcile')")
     @GetMapping("/admin/project-tickets/{id}/image")
     public ResponseEntity<byte[]> adminImage(@PathVariable String id, @RequestParam(required = false) String replyId) {
         return ProjectClientTicketController.imageResponse(service.image(id, replyId, true));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update')")
+    @PreAuthorize("hasAnyAuthority('" + SERVICE_PROJECT_READ + "','payment:reconcile')")
     @GetMapping("/admin/project-ticket-operations/{id}/image")
     public ResponseEntity<byte[]> adminOperationImage(@PathVariable String id) {
         return ProjectClientTicketController.imageResponse(service.operationImage(id, true));
@@ -81,7 +83,7 @@ public class ProjectTicketController {
         return ok(service.confirm(id, false));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update')")
+    @PreAuthorize("hasAnyAuthority('" + SERVICE_PROJECT_READ + "','payment:reconcile')")
     @GetMapping("/admin/project-tickets")
     public ResponseEntity<Result<IPage<TicketView>>> adminTickets(
             @RequestParam(defaultValue = "1") int page,
@@ -90,38 +92,38 @@ public class ProjectTicketController {
         return ok(service.tickets(page, pageSize, accountId, true));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update')")
+    @PreAuthorize("hasAnyAuthority('" + SERVICE_PROJECT_READ + "','payment:reconcile')")
     @GetMapping("/admin/project-tickets/{id}")
     public ResponseEntity<Result<TicketView>> adminTicket(@PathVariable String id) {
         return ok(service.ticket(id, true));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update')")
+    @PreAuthorize("hasAuthority('" + SERVICE_PROJECT_UPDATE + "')")
     @PostMapping("/admin/project-tickets/{id}/refresh")
     public ResponseEntity<Result<TicketView>> adminRefresh(@PathVariable String id) {
         return ok(service.refresh(id, true));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update')")
+    @PreAuthorize("hasAnyAuthority('" + SERVICE_PROJECT_READ + "','payment:reconcile')")
     @GetMapping("/admin/project-ticket-operations/{id}")
     public ResponseEntity<Result<OperationView>> adminOperation(@PathVariable String id) {
         return ok(service.operation(id, true));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update') and hasAuthority('payment:reconcile')")
+    @PreAuthorize("hasAuthority('payment:reconcile')")
     @PostMapping("/admin/project-tickets/{id}/review-quotes")
     public ResponseEntity<Result<OperationView>> review(
             @PathVariable String id, @Valid @RequestBody ReviewForm form) {
         return ok(service.review(id, form));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update') and hasAuthority('payment:reconcile')")
+    @PreAuthorize("hasAuthority('payment:reconcile')")
     @PostMapping("/admin/project-ticket-operations/{id}/confirm")
     public ResponseEntity<Result<OperationView>> adminConfirm(@PathVariable String id) {
         return ok(service.confirm(id, true));
     }
 
-    @PreAuthorize("hasAuthority('api-provider:update') and hasAuthority('payment:reconcile')")
+    @PreAuthorize("hasAuthority('payment:reconcile')")
     @PostMapping("/admin/project-ticket-operations/{id}/resolve")
     public ResponseEntity<Result<OperationView>> resolve(
             @PathVariable String id, @Valid @RequestBody ResolveForm form) {
