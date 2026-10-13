@@ -314,7 +314,7 @@
         ><el-timeline-item
           v-for="log in runLogs.items"
           :key="log.id"
-          :timestamp="log.time"
+          :timestamp="displayDateOnly(log.time)"
           >{{ log.status
           }}<el-button
             v-if="
@@ -728,6 +728,7 @@ import { isJingyuService, jingyuLogsValid, jingyuTaskEditable, jingyuResolutionE
 import { isLeidianService, canReadLeidianRecord, editableLeidianPlan, leidianPlanError,
   leidianLogsValid, leidianResolutionError, leidianResolutionPayload } from "@/utils/leidianServices";
 import { latestRequest } from "@/utils/pluginIntegrations";
+import { displayDateOnly } from "@/utils/localDateTime";
 import { serviceDestination, serviceTypeFromQuery } from "@/utils/pluginWorkflows";
 import { appuiPlanError, editableAppuiPlan, appuiRemainingText } from "@/utils/appuiServices";
 import ServiceQuoteConfirm from "@/components/ServiceQuoteConfirm.vue";
