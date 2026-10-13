@@ -51,7 +51,8 @@
         </el-table-column>
         <el-table-column label="我的价格" width="150" align="center">
           <template #default="scope">
-            <span class="my-price">¥{{ calculateUserPrice(scope.row) }}</span>
+            <span class="my-price">{{ calculateUserPrice(scope.row) }}</span>
+            <small v-if="scope.row.myPricing?.paymentSource==='COURSE_WALLET'">课程专户支付 · ¥{{ scope.row.myPricing.walletBalance }}</small>
           </template>
         </el-table-column>
         <el-table-column label="项目说明" min-width="280" show-overflow-tooltip>
@@ -80,14 +81,14 @@
 import { computed, onMounted, ref } from "vue";
 import { Reading, Search } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
-import { getCoursePlatforms } from "@/api/course";
+import { getCoursePlatforms, getMyCoursePrices } from "@/api/course";
 import { getUserInfo } from "@/api/user";
 import {
   getUserLevelLabel,
   getUserLevelTagType,
 } from "@/utils/userLevel";
 import {
-  formatUserProjectPrice,
+  formatServerCoursePrice,
   getProjectDisplayName,
   matchesProjectSearch,
 } from "@/utils/projectPricing";
@@ -109,21 +110,22 @@ const filteredTableData = computed(() =>
 );
 
 const calculateUserPrice = (platform) =>
-  formatUserProjectPrice(platform, userRate.value);
+  formatServerCoursePrice(platform.myPricing);
 
 const loadData = async () => {
   loading.value = true;
   try {
-    const [userRes, platformRes] = await Promise.all([
+    const [userRes, platformRes, pricesRes] = await Promise.all([
       getUserInfo(),
       getCoursePlatforms(),
+      getMyCoursePrices(),
     ]);
 
     if (userRes.code === 1) {
       userRate.value = Number(userRes.data?.rate || 1);
     }
     if (platformRes.code === 1) {
-      tableData.value = Array.isArray(platformRes.data) ? platformRes.data : [];
+      tableData.value = Array.isArray(platformRes.data) ? platformRes.data.map(platform => ({ ...platform, myPricing: pricesRes.data?.[platform.id] })) : [];
     }
   } catch (error) {
     console.error("加载项目失败：", error);

@@ -63,6 +63,7 @@
         <!-- 自定义金额列显示 -->
         <template #column-amount="{ row }">
           <span style="color: var(--color-danger)">¥{{ row.amount }}</span>
+          <small style="display:block">{{ orderFundingLabels(row).price }} · {{ orderFundingLabels(row).payment }}</small>
         </template>
       </EnterpriseTable>
     </el-card>
@@ -173,7 +174,7 @@
       </el-form>
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleCreateSubmit">确定</el-button>
+        <el-button type="primary" :loading="creatingCourseOrder" @click="handleCreateSubmit">确定</el-button>
       </template>
     </el-dialog>
 
@@ -228,6 +229,10 @@
       append-to-body
     >
       <el-descriptions :column="isMobile ? 1 : 2" border v-if="currentOrder">
+        <el-descriptions-item label="价格来源">{{ orderFundingLabels(currentOrder).price }}</el-descriptions-item>
+        <el-descriptions-item label="支付来源">{{ orderFundingLabels(currentOrder).payment }}</el-descriptions-item>
+        <el-descriptions-item label="退款目标">{{ orderFundingLabels(currentOrder).refund }}</el-descriptions-item>
+        <el-descriptions-item label="退款记录">{{ currentOrder.refundStatus==='REFUNDED'?'已退回原账户':'未记录退款' }}</el-descriptions-item>
         <el-descriptions-item label="订单编号">{{
           currentOrder.orderNo
         }}</el-descriptions-item>
@@ -352,6 +357,10 @@
 </template>
 
 <script setup>
+import { orderFundingLabels, purchaseSummary, createOrderRequestKeys } from '@/utils/courseWallet';
+import { getMyCoursePrice } from '@/api/course';
+const createKeys = createOrderRequestKeys();
+const creatingCourseOrder = ref(false);
 import { ref, computed, onMounted } from "vue";
 import { Plus, Download } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -572,6 +581,7 @@ const generatePassword = () => {
 };
 
 const handleCreateSubmit = async () => {
+  if (creatingCourseOrder.value) return;
   if (!createForm.value.platformId) {
     ElMessage.warning("请选择课程平台");
     return;
@@ -586,12 +596,21 @@ const handleCreateSubmit = async () => {
   }
 
   try {
-    await createOrder(createForm.value);
+    creatingCourseOrder.value = true;
+    const preview = (await getMyCoursePrice(createForm.value.platformId)).data;
+    const cost = purchaseSummary(preview, 1);
+    await ElMessageBox.confirm(`${currentPlatform.value?.displayName || currentPlatform.value?.name || "选定课程"}：${cost.priceLabel} ¥${cost.unit}，从${cost.paymentLabel}支付；余额 ¥${cost.before} → ¥${cost.after}。退款目标为原支付账户。`, '确认课程费用', { type: 'warning', confirmButtonText: '确认下单', cancelButtonText: '取消' });
+    const orderData = { ...createForm.value };
+    const clientRequestId = await createKeys.forOrder(orderData);
+    await createOrder({ ...orderData, clientRequestId, expectedAmount: preview.finalPrice, expectedContractVersion: preview.contractVersion, expectedPriceSource: preview.priceSource, expectedPaymentSource: preview.paymentSource });
+    await createKeys.confirmed(orderData, clientRequestId);
     ElMessage.success("订单创建成功");
     createDialogVisible.value = false;
     loadOrders();
   } catch (error) {
-    console.error("创建订单失败：", error);
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(error.message || '创建订单失败');
+  } finally {
+    creatingCourseOrder.value = false;
   }
 };
 

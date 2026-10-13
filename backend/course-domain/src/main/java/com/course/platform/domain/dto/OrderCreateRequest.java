@@ -16,6 +16,14 @@ import lombok.Data;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class OrderCreateRequest {
 
+    /** 请求身份及报价校验只用于冲突检测，最终金额仍由服务端决定。 */
+    @Size(max = 64, message = "请求标识最多64个字符")
+    private String clientRequestId;
+    private java.math.BigDecimal expectedAmount;
+    private Integer expectedContractVersion;
+    private String expectedPriceSource;
+    private String expectedPaymentSource;
+
     /**
      * 课程平台ID
      */

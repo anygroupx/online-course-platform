@@ -82,6 +82,17 @@
           <template #title>账户充值</template>
         </el-menu-item>
 
+        <el-menu-item index="/course-wallets">
+          <el-icon><Wallet /></el-icon>
+          <template #title>我的课程专户</template>
+        </el-menu-item>
+        <el-menu-item v-if="canVisit('/admin/course-private-contracts')" index="/admin/course-private-contracts">
+          <el-icon><Tickets /></el-icon><template #title>课程密价协议</template>
+        </el-menu-item>
+        <el-menu-item v-if="canVisit('/admin/course-wallets')" index="/admin/course-wallets">
+          <el-icon><Wallet /></el-icon><template #title>课程专户资金</template>
+        </el-menu-item>
+
         <el-menu-item index="/api-guide">
           <el-icon><Money /></el-icon>
           <template #title>API 文档</template>

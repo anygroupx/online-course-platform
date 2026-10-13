@@ -53,7 +53,7 @@ class ObjectAuthorizationTest {
         return new CourseOrderServiceImpl(orderMapper, mock(CoursePlatformMapper.class), mock(UserMapper.class),
                 mock(OperationLogService.class), mock(PlatformDockingService.class), mock(ApiProviderMapper.class),
                 mock(ApplicationEventPublisher.class), mock(AccountLedgerServiceImpl.class),
-                new ResourceAuthorizationService(), progressLogService);
+                new ResourceAuthorizationService(), progressLogService, mock(com.course.platform.service.impl.CoursePricingService.class), mock(com.course.platform.service.impl.CourseReservedWalletService.class), mock(com.course.platform.service.impl.CourseOrderPaymentService.class));
     }
 
     @Test

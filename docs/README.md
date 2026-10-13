@@ -70,3 +70,7 @@
 2. 后端结构以 `backend/course-*` 多模块为准，勿再描述为单模块 `backend/src/main/java` 结构。
 3. 新增接口或页面后，优先更新 `API_DOCUMENTATION.md` 与 `FINAL_FEATURE_LIST.md`。
 4. 数据库变更放入 `database/migrations/`，并在 `DATABASE.md` 登记。
+
+## 课程商品密价与预存钱包
+
+[设计、API、迁移、对账与部署说明](COURSE_PRIVATE_PRICING_WALLET.md)。

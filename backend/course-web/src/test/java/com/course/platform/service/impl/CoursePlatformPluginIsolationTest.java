@@ -17,7 +17,7 @@ class CoursePlatformPluginIsolationTest {
     @Test void neitherCourseQueryNorDockConfigurationCanBindAReadOnlyPlugin() {
         var mapper = mock(CoursePlatformMapper.class);
         var providers = mock(ApiProviderMapper.class);
-        var service = new CoursePlatformServiceImpl(mapper, providers, new PlatformDockingStrategyFactory(List.of()));
+        var service = new CoursePlatformServiceImpl(mapper, providers, new PlatformDockingStrategyFactory(List.of()), mock(com.course.platform.infra.persistence.mapper.CoursePrivateContractMapper.class));
         for (String type : List.of("flash", "heisha", "jiguang", "wuxin", "sxdk_tw")) {
             ApiProvider provider = new ApiProvider(); provider.setId(9L); provider.setProviderType(type);
             when(providers.selectById(9L)).thenReturn(provider);
@@ -37,7 +37,7 @@ class CoursePlatformPluginIsolationTest {
         var mapper = mock(CoursePlatformMapper.class);
         var providers = mock(ApiProviderMapper.class);
         var course = mock(PlatformDockingStrategy.class); when(course.getProviderType()).thenReturn("27");
-        var service = new CoursePlatformServiceImpl(mapper, providers, new PlatformDockingStrategyFactory(List.of(course)));
+        var service = new CoursePlatformServiceImpl(mapper, providers, new PlatformDockingStrategyFactory(List.of(course)), mock(com.course.platform.infra.persistence.mapper.CoursePrivateContractMapper.class));
         ApiProvider provider = new ApiProvider(); provider.setId(9L); provider.setProviderType("27"); provider.setStatus(2);
         when(providers.selectById(9L)).thenReturn(provider);
         CoursePlatform platform = new CoursePlatform(); platform.setName("课程"); platform.setDockApiId(9L);

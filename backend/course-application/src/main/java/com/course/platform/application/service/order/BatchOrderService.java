@@ -19,6 +19,8 @@ public interface BatchOrderService {
      * @param userId 用户ID
      * @return 订单ID列表
      */
+    com.course.platform.domain.vo.BatchCourseOrderResult batchCreateDetailed(BatchOrderRequest request, Long userId);
+
     List<Long> batchCreateOrders(BatchOrderRequest request, Long userId);
 }
 
