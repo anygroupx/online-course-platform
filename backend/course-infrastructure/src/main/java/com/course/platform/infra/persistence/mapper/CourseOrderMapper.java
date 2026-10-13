@@ -18,6 +18,67 @@ import java.time.LocalDateTime;
 public interface CourseOrderMapper extends BaseMapper<CourseOrder> {
 
     /**
+     * 原子更新进度：仅当订单仍处于期望状态时才写入，避免用陈旧对象整行覆盖，
+     * 把并发完成的订单（如倒计时自动完成）打回旧状态。
+     *
+     * @param expectedStatus 期望的当前状态（CAS 条件）
+     * @return 受影响行数，0 表示状态已被其他流程改变，本次写入应放弃
+     */
+    @Update("UPDATE course_order SET progress = #{progress}, update_time = NOW() " +
+            "WHERE id = #{orderId} AND order_status = #{expectedStatus}")
+    int updateProgressIfStatus(@Param("orderId") Long orderId,
+                               @Param("progress") String progress,
+                               @Param("expectedStatus") Integer expectedStatus);
+
+    /**
+     * 原子更新备注：仅当订单仍处于期望状态时才写入，防止覆盖并发变更。
+     */
+    @Update("UPDATE course_order SET remarks = #{remarks}, update_time = NOW() " +
+            "WHERE id = #{orderId} AND order_status = #{expectedStatus}")
+    int updateRemarksIfStatus(@Param("orderId") Long orderId,
+                              @Param("remarks") String remarks,
+                              @Param("expectedStatus") Integer expectedStatus);
+
+    /**
+     * 原子更新备注与状态：状态从 expectedStatus 迁移到 newStatus 时才写入。
+     */
+    @Update("UPDATE course_order SET remarks = #{remarks}, order_status = #{newStatus}, update_time = NOW() " +
+            "WHERE id = #{orderId} AND order_status = #{expectedStatus}")
+    int updateRemarksAndStatusIfStatus(@Param("orderId") Long orderId,
+                                       @Param("remarks") String remarks,
+                                       @Param("newStatus") Integer newStatus,
+                                       @Param("expectedStatus") Integer expectedStatus);
+
+    /**
+     * 原子更新进度、备注与状态：状态从 expectedStatus 迁移到 newStatus 时才写入。
+     * 用于刷课完成时把状态推进到待考试，同时保证不会覆盖并发完成的订单。
+     */
+    @Update("UPDATE course_order SET progress = #{progress}, remarks = #{remarks}, " +
+            "order_status = #{newStatus}, update_time = NOW() " +
+            "WHERE id = #{orderId} AND order_status = #{expectedStatus}")
+    int updateProgressRemarksAndStatusIfStatus(@Param("orderId") Long orderId,
+                                               @Param("progress") String progress,
+                                               @Param("remarks") String remarks,
+                                               @Param("newStatus") Integer newStatus,
+                                               @Param("expectedStatus") Integer expectedStatus);
+
+    /**
+     * 原子更新订单完成态：仅当订单仍处于期望状态时才写入，并返回受影响行数。
+     * 用于倒计时自动完成，避免并发流程（如刷课任务）已改变状态后重复完成。
+     */
+    @Update("UPDATE course_order SET order_status = #{targetStatus}, dock_status = #{dockStatus}, " +
+            "countdown_end_time = #{countdownEndTime}, progress = #{progress}, " +
+            "finished_chapters = #{finishedChapters}, update_time = NOW() " +
+            "WHERE id = #{orderId} AND order_status = #{expectedStatus}")
+    int completeIfStatus(@Param("orderId") Long orderId,
+                         @Param("targetStatus") Integer targetStatus,
+                         @Param("dockStatus") Integer dockStatus,
+                         @Param("countdownEndTime") LocalDateTime countdownEndTime,
+                         @Param("progress") String progress,
+                         @Param("finishedChapters") Integer finishedChapters,
+                         @Param("expectedStatus") Integer expectedStatus);
+
+    /**
      * 更新订单进度（基础版，3字段匹配）
      * 使用学生账号、密码和API提供商ID匹配订单
      */
