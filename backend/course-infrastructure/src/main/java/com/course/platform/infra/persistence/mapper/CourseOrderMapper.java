@@ -16,6 +16,33 @@ import java.time.LocalDateTime;
  */
 @Mapper
 public interface CourseOrderMapper extends BaseMapper<CourseOrder> {
+    /** 补单次数作为CAS版本，取消或退款已成功时禁止重新履约。 */
+    @Update("UPDATE course_order SET retry_count=COALESCE(retry_count,0)+1,order_status=#{processing},dock_status=#{dockPending},update_time=NOW() WHERE id=#{id} AND is_deleted=0 AND order_status=#{previousStatus} AND order_status<>#{cancelled} AND refunded_at IS NULL AND NOT (order_status=#{processing} AND dock_status=#{dockPending}) AND COALESCE(retry_count,0)=#{previousRetry} AND COALESCE(retry_count,0)<5")
+    int claimRetry(@Param("id") Long id,@Param("previousStatus") int previousStatus,@Param("previousRetry") int previousRetry,@Param("processing") int processing,@Param("cancelled") int cancelled,@Param("dockPending") int dockPending);
+
+    @Update("UPDATE course_order SET dock_status=#{dockStatus},third_order_id=COALESCE(#{remoteId},third_order_id),remarks=#{remark},update_time=NOW() WHERE id=#{id} AND is_deleted=0 AND order_status=#{processing} AND retry_count=#{retryCount} AND refunded_at IS NULL")
+    int finishRetry(@Param("id") Long id,@Param("processing") int processing,@Param("retryCount") int retryCount,@Param("dockStatus") int dockStatus,@Param("remoteId") String remoteId,@Param("remark") String remark);
+
+    /** 退款事务提交后才会留下标记，与余额和原流水共同回滚。 */
+    @Update("UPDATE course_order SET refunded_at=COALESCE(refunded_at,NOW()) WHERE id=#{id}")
+    int markRefunded(@Param("id") Long id);
+
+    /** 提交前原子占用订单，与取消订单竞争同一行；不跨HTTP持锁。 */
+    @Update("UPDATE course_order SET order_status=#{processing},update_time=NOW() WHERE id=#{id} AND is_deleted=0 AND order_status=#{pending} AND dock_status=#{dockPending}")
+    int claimSubmission(@Param("id") Long id,@Param("pending") int pending,@Param("processing") int processing,@Param("dockPending") int dockPending);
+
+    /** 不确定响应只更新对接标记，保留进行中状态，必须先核查上游。 */
+    @Update("UPDATE course_order SET dock_status=#{resultDock},third_order_id=#{remoteId},remarks=#{remark},update_time=NOW() WHERE id=#{id} AND is_deleted=0 AND order_status=#{processing} AND dock_status=#{dockPending}")
+    int finishSubmission(@Param("id") Long id,@Param("processing") int processing,@Param("dockPending") int dockPending,@Param("resultDock") int resultDock,@Param("remoteId") String remoteId,@Param("remark") String remark);
+
+    /** 请求键保留归档记录，网络重试绝不能重新扣款。 */
+    @org.apache.ibatis.annotations.Select("SELECT * FROM course_order WHERE user_id=#{userId} AND client_request_id=#{requestKey} LIMIT 1")
+    CourseOrder selectByRequestKey(@Param("userId") Long userId, @Param("requestKey") String requestKey);
+
+    /** 取消/归档在账户锁后读取最新订单，避免陈旧状态触发退款。 */
+    @org.apache.ibatis.annotations.Select("SELECT * FROM course_order WHERE id=#{id} AND is_deleted=0 FOR UPDATE")
+    CourseOrder selectByIdForUpdate(@Param("id") Long id);
+
 
     /**
      * 原子更新进度：仅当订单仍处于期望状态时才写入，避免用陈旧对象整行覆盖，

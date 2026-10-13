@@ -54,6 +54,11 @@ class OrderReceiptRecoveryTest {
             assertTrue(match.find());
             jdbc.execute(match.group().replaceAll("KEY `([^`]+)`", "KEY `"+table+"_$1`").replaceAll("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4.*?;",";"));
         }
+        // 此夹具只提取初始CREATE，需显式带上038的订单列，保留旧恢复流程全部断言。
+        for (var column : java.util.Map.of("price_source","VARCHAR(16) DEFAULT 'RATE'","payment_source","VARCHAR(24) DEFAULT 'GENERAL'",
+                "private_contract_id","BIGINT","wallet_id","BIGINT","contract_version","INT","client_request_id","VARCHAR(128)",
+                "request_fingerprint","CHAR(64)","refunded_at","DATETIME").entrySet())
+            jdbc.execute("ALTER TABLE course_order ADD COLUMN " + column.getKey() + " " + column.getValue());
         jdbc.execute("ALTER TABLE course_platform ADD COLUMN category_id BIGINT");
         String migration=Files.readString(root.resolve("database/migrations/028_course_order_receipt_recovery.sql"))
                 .replaceAll("(?m)^--.*$","").replace("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4","");

@@ -12,6 +12,13 @@ import org.apache.ibatis.annotations.Mapper;
  */
 @Mapper
 public interface CoursePlatformMapper extends BaseMapper<CoursePlatform> {
+    /** 商品锁协调新协议创建与删除，不跨供应商HTTP持锁。 */
+    @org.apache.ibatis.annotations.Select("SELECT * FROM course_platform WHERE id=#{id} FOR UPDATE")
+    CoursePlatform selectByIdForUpdate(@org.apache.ibatis.annotations.Param("id") Long id);
+
+    @org.apache.ibatis.annotations.Select("SELECT * FROM course_platform WHERE category_id=#{categoryId} ORDER BY id FOR UPDATE")
+    java.util.List<CoursePlatform> selectByCategoryForUpdate(@org.apache.ibatis.annotations.Param("categoryId") Long categoryId);
+
     
 }
 

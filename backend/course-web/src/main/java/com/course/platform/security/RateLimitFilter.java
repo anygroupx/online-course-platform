@@ -167,6 +167,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
             values.add(new Limit("project-report:" + (user == null ? "ip" : "user"),
                     user == null ? ip : user, new RateLimitProperties.Rule(12, 60), "project-report"));
         }
+        if (isWrite(method) && (path.startsWith("/course-wallets/") || path.startsWith("/admin/course-wallets/")
+                || path.startsWith("/admin/course-private-contracts"))) {
+            values.add(new Limit("course-wallet:" + (user == null ? "ip" : "user"),
+                    user == null ? ip : user, properties.getPaymentUser(), "course-wallet"));
+        }
         if (path.contains("export")) {
             values.add(new Limit("export:" + (user == null ? "ip" : "user"),
                     user == null ? ip : user, properties.getExportUser(), "export"));

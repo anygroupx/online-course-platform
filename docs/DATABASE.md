@@ -164,3 +164,7 @@ SKU 3/4 初始下单与补资料均须显式授权。资格状态为 PENDING、V
 037 对四种关系进行孤儿数据预检；有孤儿数据时失败，不静默清理。通过后添加外键，级联仅删除映射，不删除用户。要求 MySQL >= 8.0.16，执行时暂停 RBAC 写入；DDL 不可事务回滚，部分失败后应检查状态，不可盲目重跑。
 
 迁移验证：`python3 database/tests/rbac_mysql.py` 创建并销毁独立 MySQL 8 容器，覆盖重复执行、默认六角色矩阵、敏感权限收口、全新 schema 一致性、孤儿预检及映射级联，不连接生产数据库。**036 与应用权限链切换须协调发布，037 须在备份与数据预检后执行；所有生产发布和迁移仍需明确授权。**
+
+## 课程商品密价与预存钱包（038）
+
+[功能、API、迁移与恢复说明](COURSE_PRIVATE_PRICING_WALLET.md)。038创建协议、专户、资金流水、划转和审计表，并增加订单不可变支付快照及退款完成标记。旧订单默认RATE/GENERAL，不回填虚假的协议或退款记录。新库schema同时补齐依赖的account_ledger，已有库按007/015前置升级；最新初始化库不要重复执行历史迁移。开启前先在隔离MySQL8运行 database/tests/course_private_wallet_mysql.py，并执行database/checks/038_course_private_wallet_checks.sql 和 038_course_private_wallet_reconciliation.sql。不要删除金融数据进行回滚。

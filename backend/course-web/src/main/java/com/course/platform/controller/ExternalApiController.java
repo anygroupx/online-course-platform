@@ -226,7 +226,8 @@ public class ExternalApiController {
             @RequestParam String user,
             @RequestParam String pass,
             @RequestParam(required = false) String kcid,
-            @RequestParam String kcname) {
+            @RequestParam String kcname,
+            @RequestParam(name="request_id", required=false) String requestId) {
         // 验证API密钥
         User userObj = validateApiKey(uid, key, apiKey, "orders:write");
 
@@ -241,6 +242,7 @@ public class ExternalApiController {
         request.setStudentPassword(pass);
         request.setCourseId(kcid);
         request.setCourseName(kcname);
+        request.setClientRequestId(requestId);
 
         // 创建订单
         Long orderId = courseOrderService.createOrder(request, userObj.getId());

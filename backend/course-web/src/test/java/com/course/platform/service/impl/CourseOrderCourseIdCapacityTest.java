@@ -81,7 +81,7 @@ class CourseOrderCourseIdCapacityTest {
                 mock(ApplicationEventPublisher.class),
                 mock(AccountLedgerServiceImpl.class),
                 new ResourceAuthorizationService(),
-                mock(CourseOrderProgressLogService.class));
+                mock(CourseOrderProgressLogService.class), mock(com.course.platform.service.impl.CoursePricingService.class), mock(com.course.platform.service.impl.CourseReservedWalletService.class), mock(com.course.platform.service.impl.CourseOrderPaymentService.class));
         OrderCreateRequest request = new OrderCreateRequest();
         request.setCourseId("x".repeat(2049));
 
