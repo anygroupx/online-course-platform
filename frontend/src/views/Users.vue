@@ -104,6 +104,7 @@
         <!-- 操作列自定义渲染 -->
         <template #actions="{ row }">
           <div class="action-buttons">
+            <el-button v-if="hasAnyPermission(sessionUserInfo, ['course-private-price:read','course-private-price:manage'])" size="small" @click="router.push({path:'/admin/course-private-contracts',query:{userUid:row.uid}})">课程密价</el-button>
             <el-button size="small" type="primary" @click="handleRecharge(row)">
               充值
             </el-button>
@@ -304,6 +305,8 @@
 </template>
 
 <script setup>
+import { sessionUserInfo } from '@/utils/authSession';
+import { hasAnyPermission } from '@/utils/permissions';
 import { ref, computed, onMounted, watch } from "vue";
 import { getAccessToken } from "@/utils/authSession";
 import { useRouter } from "vue-router";

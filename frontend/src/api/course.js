@@ -6,6 +6,10 @@
  */
 import request from '@/utils/request'
 
+// 本人报价不从公开商品基础价格推算，也不包含其他代理的协议。
+export const getMyCoursePrice = platformId => request({ url: `/courses/${platformId}/my-pricing`, method: 'get' });
+export const getMyCoursePrices = () => request({ url: '/courses/my-pricing', method: 'get' });
+
 /**
  * 获取课程平台列表
  */

@@ -27,6 +27,12 @@ public class BatchOrderRequest {
     @Data
     @Schema(description = "批量订单项")
     public static class BatchOrderItem {
+        /** 每笔独立请求身份和服务端报价一致性校验。 */
+        private String clientRequestId;
+        private java.math.BigDecimal expectedAmount;
+        private Integer expectedContractVersion;
+        private String expectedPriceSource;
+        private String expectedPaymentSource;
         
         @Schema(description = "学校名称", required = true)
         private String schoolName;
