@@ -94,3 +94,6 @@ dumps/
 
 # Node modules（如果主仓库有）
 node_modules/
+
+# Agent 运行产物（task/events/日志），不纳入版本控制
+.agent/
