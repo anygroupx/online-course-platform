@@ -1,5 +1,8 @@
 package com.course.platform.infra.docking.impl;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.course.platform.common.constant.Constants;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.domain.dto.DockResult;
@@ -9,29 +12,43 @@ import com.course.platform.domain.dto.ProviderOrderLog;
 import com.course.platform.domain.entity.ApiProvider;
 import com.course.platform.domain.entity.CourseOrder;
 import com.course.platform.domain.entity.CoursePlatform;
+import com.course.platform.domain.exception.ProviderRequestException;
 import com.course.platform.infra.external.ApiHttpClient;
+import com.course.platform.infra.persistence.mapper.CourseOrderMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class DaytimeDockingStrategyTest {
 
+    private static final String ACCOUNT_A = "18229565354";
+    private static final String ACCOUNT_B = "13800000000";
+
     private ApiHttpClient apiHttpClient;
+    private CourseOrderMapper courseOrderMapper;
     private DaytimeDockingStrategy strategy;
     private ApiProvider provider;
     private CoursePlatform platform;
@@ -39,10 +56,18 @@ class DaytimeDockingStrategyTest {
 
     @BeforeEach
     void setUp() {
+        // MyBatis-Plus 的 LambdaQueryWrapper 依赖 TableInfo 缓存，纯单元测试（无 Spring 容器）下
+        // 必须手动初始化，否则 lambda 解析列名会抛 "can not find lambda cache"。
+        TableInfoHelper.initTableInfo(
+                new MapperBuilderAssistant(new MybatisConfiguration(), "daytime-batch-test"),
+                CourseOrder.class);
         apiHttpClient = mock(ApiHttpClient.class);
+        courseOrderMapper = mock(CourseOrderMapper.class);
         strategy = new DaytimeDockingStrategy(apiHttpClient);
+        strategy.setCourseOrderMapper(courseOrderMapper);
 
         provider = new ApiProvider();
+        provider.setId(7L);
         provider.setApiUrl("https://daytime.example/");
         provider.setUsername("provider-uid");
         provider.setApiKey("provider-key");
@@ -86,7 +111,7 @@ class DaytimeDockingStrategyTest {
     }
 
     @Test
-    @DisplayName("进度查询应发送 Daytime 的 yid username school 参数")
+    @DisplayName("进度查询应发送 Daytime 的 yid username 参数且不得携带 school")
     @SuppressWarnings({"rawtypes", "unchecked"})
     void queryProgress_shouldUseDaytimeParameters() {
         when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
@@ -99,7 +124,8 @@ class DaytimeDockingStrategyTest {
         Map<String, Object> params = captor.getValue();
         assertEquals("third-123", params.get("yid"));
         assertEquals("student-account", params.get("username"));
-        assertEquals("测试大学", params.get("school"));
+        // 实测：username 与 school 同时传会被上游判为无结果并返回空数组。
+        assertFalse(params.containsKey("school"));
         assertFalse(params.containsKey("pass"));
         assertFalse(params.containsKey("kcname"));
         assertFalse(params.containsKey("user"));
@@ -184,7 +210,7 @@ class DaytimeDockingStrategyTest {
         verify(apiHttpClient).postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), captor.capture());
         assertEquals("third-123", captor.getValue().get("yid"));
         assertEquals("student-account", captor.getValue().get("username"));
-        assertEquals("测试大学", captor.getValue().get("school"));
+        assertFalse(captor.getValue().containsKey("school"));
         assertFalse(captor.getValue().containsKey("oid"));
         assertEquals(1, logs.size());
         ProviderOrderLog log = logs.get(0);
@@ -234,6 +260,258 @@ class DaytimeDockingStrategyTest {
                 .thenReturn("{\"code\":1,\"money\":\"88.00\"}");
 
         assertEquals(new BigDecimal("88.00"), strategy.queryBalance(provider));
+    }
+
+    // ==================== 批量查询订单进度 ====================
+
+    @Test
+    @DisplayName("批量查单应按账号聚合，一次调用返回该账号全部订单")
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void batchQuery_shouldAggregateAllOrdersOfEachAccount() {
+        when(courseOrderMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(
+                localOrder("remote-1", ACCOUNT_A, "pw-a", "大学英语"),
+                localOrder("remote-2", ACCOUNT_A, "pw-a", "大学英语"),
+                localOrder("remote-3", ACCOUNT_B, "pw-b", "形势与政策")));
+        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":["
+                        + "{\"id\":\"remote-1\",\"status\":\"进行中\",\"process\":\"16.47%\",\"remarks\":\"学习中\","
+                        + "\"kcname\":\"大学英语\",\"kcks\":\"2026-09-01 08:00:00\",\"ksjs\":\"2026-09-09 18:00:00\"},"
+                        + "{\"id\":\"remote-2\",\"status\":\"已完成\",\"process\":\"100%\"}]}")
+                .thenReturn("{\"code\":1,\"data\":[]}");
+
+        List<OrderProgressResult> results = strategy.batchQueryOrderProgress(provider, 1000L, 0);
+
+        // 两个账号各查一次，且全程串行（无并发）。
+        ArgumentCaptor<Map> captor = ArgumentCaptor.forClass(Map.class);
+        verify(apiHttpClient, times(2)).postForString(
+                eq(provider), eq("https://daytime.example/api.php?act=chadan"), captor.capture());
+        List<Map> requests = captor.getAllValues();
+        assertEquals(ACCOUNT_A, requests.get(0).get("username"));
+        assertEquals(ACCOUNT_B, requests.get(1).get("username"));
+        for (Map request : requests) {
+            // 批量查询只传 uid + key + username。
+            assertEquals(3, request.size());
+            assertEquals("provider-uid", request.get("uid"));
+            assertEquals("provider-key", request.get("key"));
+            assertFalse(request.containsKey("school"));
+            assertFalse(request.containsKey("yid"));
+        }
+
+        // A 账号返回 2 条，B 账号空数组 —— 空数组不产生条目也不报错。
+        assertEquals(2, results.size());
+        OrderProgressResult first = results.get(0);
+        assertEquals("remote-1", first.getThirdOrderId());
+        assertEquals("16.47%", first.getProgress());
+        assertEquals("学习中", first.getRemarks());
+        assertEquals(Constants.ORDER_STATUS_PROCESSING, first.getOrderStatus());
+        assertEquals(LocalDateTime.of(2026, 9, 1, 8, 0), first.getCourseStartTime());
+        assertEquals(LocalDateTime.of(2026, 9, 9, 18, 0), first.getExamEndTime());
+
+        OrderProgressResult second = results.get(1);
+        assertEquals("remote-2", second.getThirdOrderId());
+        assertEquals(Constants.ORDER_STATUS_COMPLETED, second.getOrderStatus());
+        // 没有 remarks 时回填第三方状态文案，与单笔查询保持一致。
+        assertEquals("第三方状态：已完成", second.getRemarks());
+        assertNull(second.getCourseStartTime());
+    }
+
+    @Test
+    @DisplayName("批量结果必须回填本地身份字段，否则 UPDATE 五字段匹配零行命中")
+    void batchQuery_shouldCarryLocalIdentityFieldsForFullMatch() {
+        // 上游响应不含密码，course_name 也是供应商侧的 kcname（与本地不同）。
+        when(courseOrderMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(
+                localOrder("remote-1", ACCOUNT_A, "pw-local-a", "本地课程名")));
+        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":["
+                        + "{\"id\":\"remote-1\",\"status\":\"进行中\",\"process\":\"33%\",\"kcname\":\"供应商课程名\"}]}");
+
+        List<OrderProgressResult> results = strategy.batchQueryOrderProgress(provider, 1000L, 0);
+
+        assertEquals(1, results.size());
+        OrderProgressResult result = results.get(0);
+        // updateOrderProgressByFullMatch 以这五个字段精确匹配；缺失/取错值都会零行更新。
+        assertEquals(ACCOUNT_A, result.getStudentAccount());
+        assertEquals("pw-local-a", result.getStudentPassword());
+        assertEquals("本地课程名", result.getCourseName());
+        assertEquals("remote-1", result.getThirdOrderId());
+        assertEquals("33%", result.getProgress());
+    }
+
+    @Test
+    @DisplayName("上游返回本地未录入的订单时应跳过，不猜身份字段")
+    void batchQuery_shouldSkipUnknownUpstreamOrder() {
+        when(courseOrderMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(
+                localOrder("remote-known", ACCOUNT_A, "pw-a", "课程甲")));
+        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":["
+                        + "{\"id\":\"remote-known\",\"status\":\"进行中\",\"process\":\"10%\"},"
+                        + "{\"id\":\"remote-unknown\",\"status\":\"进行中\",\"process\":\"20%\"}]}");
+
+        List<OrderProgressResult> results = strategy.batchQueryOrderProgress(provider, 1000L, 0);
+
+        assertEquals(1, results.size());
+        assertEquals("remote-known", results.get(0).getThirdOrderId());
+    }
+
+    @Test
+    @DisplayName("上游返回空数组属正常情况，不抛异常")
+    void batchQuery_shouldTreatEmptyArrayAsNoUpdates() {
+        when(courseOrderMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(List.of(localOrder("remote-1", ACCOUNT_A, "pw-a", "课程甲")));
+        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":[]}");
+
+        assertTrue(strategy.batchQueryOrderProgress(provider, 1000L, 0).isEmpty());
+    }
+
+    @Test
+    @DisplayName("单个账号失败被隔离，其余账号继续同步")
+    void batchQuery_shouldIsolateSingleAccountFailure() {
+        when(courseOrderMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(
+                localOrder("r-1", ACCOUNT_A, "pw-a", "课程甲"),
+                localOrder("r-2", ACCOUNT_B, "pw-b", "课程乙"),
+                localOrder("r-3", "13900000000", "pw-c", "课程丙")));
+        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
+                .thenThrow(new ProviderRequestException(ProviderRequestException.Reason.TIMEOUT))
+                .thenReturn("{\"code\":1,\"data\":[{\"id\":\"r-2\",\"status\":\"进行中\",\"process\":\"50%\"}]}")
+                .thenThrow(new ProviderRequestException(ProviderRequestException.Reason.UPSTREAM_REJECTED));
+
+        List<OrderProgressResult> results = strategy.batchQueryOrderProgress(provider, 1000L, 0);
+
+        assertEquals(1, results.size());
+        assertEquals("r-2", results.get(0).getThirdOrderId());
+        // 失败的账号被跳过而不是终止整批：三个账号都发起了请求。
+        verify(apiHttpClient, times(3)).postForString(any(), anyString(), anyMap());
+    }
+
+    @Test
+    @DisplayName("上游拒绝整批时账号级失败仍被隔离")
+    void batchQuery_shouldIsolateRejectedResponsePerAccount() {
+        when(courseOrderMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(
+                localOrder("remote-1", ACCOUNT_A, "pw-a", "课程甲"),
+                localOrder("remote-2", ACCOUNT_B, "pw-b", "课程乙")));
+        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
+                .thenReturn("{\"code\":-1,\"msg\":\"至少需要一个有效参数\"}")
+                .thenReturn("{\"code\":1,\"data\":[{\"id\":\"remote-2\",\"status\":\"待处理\"}]}");
+
+        List<OrderProgressResult> results = strategy.batchQueryOrderProgress(provider, 1000L, 0);
+
+        assertEquals(1, results.size());
+        assertEquals("remote-2", results.get(0).getThirdOrderId());
+        assertEquals(Constants.ORDER_STATUS_PENDING, results.get(0).getOrderStatus());
+    }
+
+    @Test
+    @DisplayName("没有待同步订单时不应请求上游")
+    void batchQuery_shouldSkipUpstreamWhenNoLocalAccount() {
+        when(courseOrderMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of());
+
+        assertTrue(strategy.batchQueryOrderProgress(provider, 1000L, 0).isEmpty());
+        verify(apiHttpClient, never()).postForString(any(), anyString(), anyMap());
+    }
+
+    @Test
+    @DisplayName("批量查单不得更新同步水位")
+    void batchQuery_shouldNotAdvanceWatermark() {
+        when(courseOrderMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(List.of(localOrder("remote-1", ACCOUNT_A, "pw-a", "课程甲")));
+        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":[]}");
+
+        strategy.batchQueryOrderProgress(provider, 1000L, 0);
+
+        assertNull(provider.getLastSyncTime());
+    }
+
+    @Test
+    @DisplayName("批量查单只允许只读查询，不得触发任何下单/补刷动作")
+    void batchQuery_shouldOnlyUseReadOnlyAction() {
+        when(courseOrderMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(List.of(localOrder("remote-1", ACCOUNT_A, "pw-a", "课程甲")));
+        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":[]}");
+
+        strategy.batchQueryOrderProgress(provider, 1000L, 0);
+
+        verify(apiHttpClient, times(1)).postForString(any(), anyString(), anyMap());
+        verify(apiHttpClient, never()).postForString(any(), eq("https://daytime.example/api.php?act=add"), anyMap());
+        verify(apiHttpClient, never()).postForString(any(), eq("https://daytime.example/api.php?act=budan"), anyMap());
+    }
+
+    @Test
+    @DisplayName("未保存的接口配置无法批量查单")
+    void batchQuery_shouldRequirePersistedProvider() {
+        provider.setId(null);
+
+        assertThrows(BusinessException.class,
+                () -> strategy.batchQueryOrderProgress(provider, 1000L, 0));
+        verify(apiHttpClient, never()).postForString(any(), anyString(), anyMap());
+    }
+
+    @Test
+    @DisplayName("缺少订单查询依赖时应显式失败而不是静默返回空")
+    void batchQuery_shouldFailFastWithoutMapper() {
+        DaytimeDockingStrategy withoutMapper = new DaytimeDockingStrategy(apiHttpClient);
+
+        assertThrows(BusinessException.class,
+                () -> withoutMapper.batchQueryOrderProgress(provider, 1000L, 0));
+        verify(apiHttpClient, never()).postForString(any(), anyString(), anyMap());
+    }
+
+    @Test
+    @DisplayName("账号数超过单批窗口时不得漏单：不做与上层 offset 无法对齐的 LIMIT 分页")
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void batchQuery_shouldNotPageWithIncompatibleLimit() {
+        // 上层 batchSyncOrderProgress 以 10000 步进 offset、并以"返回条数 < 500"结束循环。
+        // 若本策略对账号做 LIMIT 分页，offset=10000 会直接跳过全部账号 -> 静默漏单。
+        List<CourseOrder> many = new ArrayList<>();
+        for (int i = 0; i < 25; i++) {
+            many.add(localOrder("r-" + i, "1380000" + String.format("%04d", i), "pw-" + i, "课程" + i));
+        }
+        when(courseOrderMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(many);
+        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":[]}");
+
+        // 即便上层传入 10000 的 offset，也必须覆盖全部 25 个账号。
+        strategy.batchQueryOrderProgress(provider, 1000L, 10000);
+
+        verify(apiHttpClient, times(25)).postForString(any(), anyString(), anyMap());
+
+        ArgumentCaptor<LambdaQueryWrapper<CourseOrder>> captor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(courseOrderMapper).selectList(captor.capture());
+        String sql = captor.getValue().getSqlSegment();
+        assertFalse(sql.contains("LIMIT"), () -> "账号级 LIMIT 会与上层 offset 步进错位: " + sql);
+    }
+
+    @Test
+    @DisplayName("批量查单按 providerId 过滤本地订单，且不区分订单状态")
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void batchQuery_shouldFilterLocalOrdersByProviderOnly() {
+        when(courseOrderMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(List.of(localOrder("remote-1", ACCOUNT_A, "pw-a", "课程甲")));
+        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":[]}");
+
+        strategy.batchQueryOrderProgress(provider, 1000L, 0);
+
+        ArgumentCaptor<LambdaQueryWrapper<CourseOrder>> captor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(courseOrderMapper).selectList(captor.capture());
+        String sql = captor.getValue().getSqlSegment();
+        assertTrue(sql.contains("api_provider_id"), () -> "unexpected sql: " + sql);
+        assertTrue(sql.contains("student_account"), () -> "unexpected sql: " + sql);
+        assertTrue(sql.contains("ORDER BY"), () -> "unexpected sql: " + sql);
+        // 终态订单不额外过滤：上游按账号聚合返回全部订单。
+        assertFalse(sql.contains("order_status"), () -> "unexpected sql: " + sql);
+    }
+
+    private CourseOrder localOrder(String thirdOrderId, String account, String password, String courseName) {
+        CourseOrder row = new CourseOrder();
+        row.setThirdOrderId(thirdOrderId);
+        row.setStudentAccount(account);
+        row.setStudentPassword(password);
+        row.setCourseName(courseName);
+        row.setOrderStatus(Constants.ORDER_STATUS_PROCESSING);
+        return row;
     }
 
 }
