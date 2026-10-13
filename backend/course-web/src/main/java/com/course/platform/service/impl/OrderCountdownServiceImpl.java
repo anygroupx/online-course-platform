@@ -519,17 +519,31 @@ public class OrderCountdownServiceImpl implements OrderCountdownService {
     }
 
     private void completeOrderInternal(CourseOrder order, Long operatorId, String reason, Integer targetStatus) {
-        // 1. 更新订单状态
+        // 用原子条件更新：仅当订单仍处于处理中时才写入完成态。
+        // 若并发流程（刷课任务、管理员操作）已改变状态，这里放弃，
+        // 避免把已完成订单重复"完成"或覆盖并发结果。
+        int expectedStatus = getOrderStatus("processing");
+        int affected = courseOrderMapper.completeIfStatus(
+                order.getId(),
+                targetStatus,
+                getDockStatus("success"),
+                LocalDateTime.now(), // 标记倒计时结束时间
+                "100%",
+                order.getTotalChapters(),
+                expectedStatus);
+        if (affected == 0) {
+            log.info("订单状态已被并发变更，跳过完成写入：orderId={}, orderNo={}", order.getId(), order.getOrderNo());
+            return;
+        }
+
+        // 同步内存对象，保持调用方后续读取一致
         order.setOrderStatus(targetStatus);
         order.setDockStatus(getDockStatus("success"));
-        order.setCountdownEndTime(LocalDateTime.now()); // 标记倒计时结束时间
+        order.setCountdownEndTime(LocalDateTime.now());
         order.setProgress("100%");
         order.setFinishedChapters(order.getTotalChapters());
 
-        // 2. 更新订单
-        courseOrderMapper.updateById(order);
-
-        // 3. 记录操作日志
+        // 记录操作日志
         String logDesc = String.format("完成自营订单：%s，原因：%s", order.getOrderNo(), reason);
         operationLogService.log(operatorId, "完成订单", logDesc, BigDecimal.ZERO, null);
 

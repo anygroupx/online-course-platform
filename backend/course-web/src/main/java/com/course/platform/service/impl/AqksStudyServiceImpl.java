@@ -195,31 +195,49 @@ public class AqksStudyServiceImpl implements AqksStudyService {
                         orderId, STUDY_DELTA_SECONDS, currentTime, required);
                 
                 // 更新订单进度
+                // 只在订单仍为进行中时写入：若倒计时/其他流程已并发完成该订单，
+                // 这里的陈旧快照不能把状态覆盖回去，否则会被定时任务反复"自动完成"。
+                Integer processingStatus = SystemVariableCache.getStatusValue("order_status", "processing");
+                Integer currentStatus = order.getOrderStatus();
+                if (!java.util.Objects.equals(currentStatus, processingStatus)) {
+                    log.info("[AQKS刷课任务] 订单状态已变为 {}，停止任务: orderId={}", currentStatus, orderId);
+                    stopAutoStudy(orderId);
+                    return;
+                }
+
+                String progress = null;
                 if (required > 0) {
-                    String progress = String.format("%d%% (%d/%d分钟)", 
+                    progress = String.format("%d%% (%d/%d分钟)",
                             Math.min(100, (currentTime * 100) / required),
                             currentTime, required);
                     order.setProgress(progress);
-                    courseOrderMapper.updateById(order);
                 }
-                
+
                 // 检查是否完成
                 if (required > 0 && currentTime >= required) {
                     log.info("[AQKS刷课任务] 学习时长已满足，停止任务: orderId={}", orderId);
-                    
+
                     // 更新订单状态为待考试（使用系统变量缓存）
                     // Source: AURA-X-KYS - 统一状态管理
                     int examPendingStatus = SystemVariableCache.getStatusValue("order_status", "exam_pending");
-                    order.setOrderStatus(examPendingStatus);  // 5-待考试
-                    courseOrderMapper.updateById(order);
-                    
+                    int affected = courseOrderMapper.updateProgressRemarksAndStatusIfStatus(
+                            orderId, progress, order.getRemarks(), examPendingStatus, processingStatus);
+                    if (affected == 0) {
+                        log.warn("[AQKS刷课任务] 完成写入被跳过（订单已被并发变更）: orderId={}", orderId);
+                        stopAutoStudy(orderId);
+                        return;
+                    }
+                    order.setOrderStatus(examPendingStatus);
+
                     // 停止任务
                     stopAutoStudy(orderId);
-                    
+
                     // 记录日志
                     operationLogService.log(1L, "自动刷课完成",
                             String.format("订单号: %s, 学习时长已满足", order.getOrderNo()),
                             BigDecimal.ZERO, null);
+                } else if (progress != null) {
+                    courseOrderMapper.updateProgressIfStatus(orderId, progress, processingStatus);
                 }
             } else {
                 log.warn("[AQKS刷课任务] 刷时长失败: orderId={}", orderId);
@@ -367,13 +385,24 @@ public class AqksStudyServiceImpl implements AqksStudyService {
         
         order.setRemarks(newRemarks);
         
+        // 用原子条件更新写回，条件为读取时的状态，避免用陈旧对象整行覆盖
+        // 并发完成的订单（如倒计时自动完成），否则会被定时任务反复处理。
+        int affected;
+        if (statusChanged) {
+            affected = courseOrderMapper.updateRemarksAndStatusIfStatus(
+                    orderId, newRemarks, newStatus, currentStatus);
+        } else {
+            affected = courseOrderMapper.updateRemarksIfStatus(orderId, newRemarks, currentStatus);
+        }
+        if (affected == 0) {
+            log.info("[AQKS考试检查] 订单状态已被并发变更，跳过写入: orderId={}", orderId);
+            return examInfo;
+        }
         if (statusChanged) {
             order.setOrderStatus(newStatus);
             log.info("[AQKS考试检查] 订单状态变更: orderId={}, {} -> {}", 
                     orderId, currentStatus, newStatus);
         }
-        
-        courseOrderMapper.updateById(order);
         
         // 记录操作日志
         operationLogService.log(order.getUserId(), "AQKS考试检查",
