@@ -32,6 +32,11 @@ public class CourseOrderVO {
     private Integer finishedChapters;
     private String progress;
     private BigDecimal amount;
+    /** 原支付与价格来源，不包含其他代理的协议信息。 */
+    private String priceSource;
+    private String paymentSource;
+    private String refundTarget;
+    private String refundStatus;
     private Integer isFastMode;
     private Integer retryCount;
     private Integer orderStatus;

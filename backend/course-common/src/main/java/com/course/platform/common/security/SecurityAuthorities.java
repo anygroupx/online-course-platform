@@ -48,4 +48,11 @@ public final class SecurityAuthorities {
     public static final String SERVICE_ORDER_REFUND = "service-order:refund";
     public static final String SERVICE_PROJECT_READ = "service-project:read";
     public static final String SERVICE_PROJECT_UPDATE = "service-project:update";
+
+    // 课程密价与专户使用独立权限，禁止沿用平台修改或用户修改权限调整资金。
+    public static final String COURSE_PRIVATE_PRICE_READ = "course-private-price:read";
+    public static final String COURSE_PRIVATE_PRICE_MANAGE = "course-private-price:manage";
+    public static final String COURSE_WALLET_READ_ANY = "course-wallet:read:any";
+    public static final String COURSE_WALLET_AUDIT = "course-wallet:audit";
+    public static final String COURSE_WALLET_RELEASE = "course-wallet:release";
 }

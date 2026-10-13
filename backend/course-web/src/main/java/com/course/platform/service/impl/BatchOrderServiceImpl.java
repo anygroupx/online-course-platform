@@ -35,71 +35,41 @@ public class BatchOrderServiceImpl implements BatchOrderService {
     private final CourseOrderService courseOrderService;
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public List<Long> batchCreateOrders(BatchOrderRequest request, Long userId) {
-        // 1. 查询用户信息
+        return batchCreateDetailed(request,userId).orderIds();
+    }
+
+    @Override
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    public com.course.platform.domain.vo.BatchCourseOrderResult batchCreateDetailed(BatchOrderRequest request, Long userId) {
+        if (request == null || request.getPlatformId() == null || request.getOrders() == null
+                || request.getOrders().isEmpty() || request.getOrders().size() > 100)
+            throw new BusinessException(ResultCode.PARAM_ERROR, "每次批量下单须包含1到100个订单");
         User user = userMapper.selectById(userId);
-        if (user == null) {
-            throw new BusinessException(ResultCode.USER_NOT_FOUND);
-        }
-
-        // 2. 查询课程平台信息
-        CoursePlatform platform = coursePlatformMapper.selectById(request.getPlatformId());
-        if (platform == null) {
-            throw new BusinessException(ResultCode.COURSE_NOT_FOUND);
-        }
-
-        // 3. 计算总金额
-        BigDecimal totalAmount = calculateTotalAmount(platform, user, request.getOrders().size());
-
-        // 4. 检查余额
-        if (user.getBalance().compareTo(totalAmount) < 0) {
-            throw new BusinessException(ResultCode.BALANCE_INSUFFICIENT.getCode(), 
-                    String.format("余额不足，需要%s元，当前余额%s元", totalAmount, user.getBalance()));
-        }
-
-        // 5. 批量创建订单
-        List<Long> orderIds = new ArrayList<>();
-        for (BatchOrderRequest.BatchOrderItem item : request.getOrders()) {
+        if (user == null) throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        if (!Integer.valueOf(1).equals(user.getStatus())) throw new BusinessException(ResultCode.ACCOUNT_DISABLED);
+        // 每笔经独立服务代理进入完整事务；禁止用普通余额推算专户购买能力。
+        List<Long> ids = new ArrayList<>();
+        List<com.course.platform.domain.vo.BatchCourseOrderResult.Item> results = new ArrayList<>();
+        for (int index=0;index<request.getOrders().size();index++) {
+            BatchOrderRequest.BatchOrderItem item = request.getOrders().get(index);
             try {
-                OrderCreateRequest orderRequest = new OrderCreateRequest();
-                orderRequest.setPlatformId(request.getPlatformId());
-                orderRequest.setSchoolName(item.getSchoolName());
-                orderRequest.setStudentName(item.getStudentName());
-                orderRequest.setStudentAccount(item.getStudentAccount());
-                orderRequest.setStudentPassword(item.getStudentPassword());
-                orderRequest.setCourseId(item.getCourseId());
-                orderRequest.setCourseName(item.getCourseName());
-
-                Long orderId = courseOrderService.createOrder(orderRequest, userId);
-                orderIds.add(orderId);
+                if (item == null) throw new BusinessException(ResultCode.PARAM_ERROR,"订单项不能为空");
+                OrderCreateRequest order = new OrderCreateRequest();
+                order.setPlatformId(request.getPlatformId());order.setSchoolName(item.getSchoolName());order.setStudentName(item.getStudentName());
+                order.setStudentAccount(item.getStudentAccount());order.setStudentPassword(item.getStudentPassword());order.setCourseId(item.getCourseId());order.setCourseName(item.getCourseName());
+                order.setClientRequestId(item.getClientRequestId());order.setExpectedAmount(item.getExpectedAmount());order.setExpectedContractVersion(item.getExpectedContractVersion());
+                order.setExpectedPriceSource(item.getExpectedPriceSource());order.setExpectedPaymentSource(item.getExpectedPaymentSource());
+                Long id = courseOrderService.createOrder(order,userId);ids.add(id);
+                results.add(new com.course.platform.domain.vo.BatchCourseOrderResult.Item(index,id,true,null,"创建成功"));
+            } catch (BusinessException e) {
+                results.add(new com.course.platform.domain.vo.BatchCourseOrderResult.Item(index,null,false,e.getCode(),e.getMessage()));
             } catch (Exception e) {
-                log.error("批量下单失败：account={}, course={}, error={}", 
-                        item.getStudentAccount(), item.getCourseName(), e.getMessage());
-                // 继续处理下一个订单
+                log.error("批量订单创建失败：userId={}, item={}",userId,index);
+                results.add(new com.course.platform.domain.vo.BatchCourseOrderResult.Item(index,null,false,ResultCode.ERROR.getCode(),"订单创建失败，请检查订单记录后重试"));
             }
         }
-
-        log.info("批量订单创建完成：userId={}, total={}, success={}", userId, request.getOrders().size(), orderIds.size());
-
-        return orderIds;
-    }
-
-    /**
-     * 计算总金额
-     */
-    private BigDecimal calculateTotalAmount(CoursePlatform platform, User user, int count) {
-        BigDecimal basePrice = platform.getBasePrice();
-        BigDecimal userRate = user.getRate();
-
-        BigDecimal singleAmount;
-        if ("MULTIPLY".equals(platform.getRateType())) {
-            singleAmount = basePrice.multiply(userRate);
-        } else {
-            singleAmount = basePrice.add(userRate);
-        }
-
-        return singleAmount.multiply(BigDecimal.valueOf(count)).setScale(2, BigDecimal.ROUND_HALF_UP);
+        return new com.course.platform.domain.vo.BatchCourseOrderResult(ids,results);
     }
 }
-

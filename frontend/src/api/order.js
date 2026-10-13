@@ -5,16 +5,22 @@
  * @since 2025-01-17
  */
 import request from "@/utils/request";
+import { createOrderRequestKeys } from '@/utils/courseWallet';
+const orderRequestKeys = createOrderRequestKeys();
 
 /**
  * 创建订单
  */
-export function createOrder(data) {
-  return request({
+export async function createOrder(data) {
+  // 未知网络结果再次提交相同语义请求时复用身份，避免产生新的资金操作。
+  const clientRequestId = data.clientRequestId || await orderRequestKeys.forOrder(data);
+  const result = await request({
     url: "/orders",
     method: "post",
-    data,
+    data: { ...data, clientRequestId },
   });
+  await orderRequestKeys.confirmed(data, clientRequestId);
+  return result;
 }
 
 /**

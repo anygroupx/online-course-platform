@@ -48,7 +48,7 @@ class CourseOrderProgressTest {
     private final CourseOrderServiceImpl service = new CourseOrderServiceImpl(orders, platforms,
             mock(UserMapper.class), mock(OperationLogService.class), docking, providers,
             mock(ApplicationEventPublisher.class), mock(AccountLedgerServiceImpl.class), authorization,
-            progressLogs);
+            progressLogs, mock(com.course.platform.service.impl.CoursePricingService.class), mock(com.course.platform.service.impl.CourseReservedWalletService.class), mock(com.course.platform.service.impl.CourseOrderPaymentService.class));
     private CourseOrder order;
     private CoursePlatform platform;
     private ApiProvider provider;

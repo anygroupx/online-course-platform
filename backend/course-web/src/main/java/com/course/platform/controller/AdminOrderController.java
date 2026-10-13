@@ -83,6 +83,7 @@ public class AdminOrderController {
     private final OrderExportService orderExportService;
     private final PlatformDockingService platformDockingService;
     private final com.course.platform.service.impl.AccountLedgerServiceImpl accountLedgerService;
+    private final com.course.platform.service.impl.CourseOrderPaymentService paymentService;
 
     /**
      * 订单状态常量获取辅助方法
@@ -417,8 +418,12 @@ public class AdminOrderController {
         if (order == null) {
             throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
         }
+        // 先锁原资金账户，再读取最新订单；与取消和履约状态竞争时不得用旧快照退款。
+        userMapper.selectByIdForUpdate(order.getUserId());
+        order = courseOrderMapper.selectByIdForUpdate(orderId);
+        if (order == null) throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
         if (order.getOrderStatus() == getOrderStatus("processing")) {
-            throw new BusinessException("进行中的订单不能归档，请先取消订单");
+            throw new BusinessException("进行中的订单不能归档，请先核查履约状态");
         }
 
         refundCompletedOrderForArchive(order, "管理员归档订单退款");
@@ -461,8 +466,14 @@ public class AdminOrderController {
             orders.add(order);
         }
 
+        // 整批先按用户ID稳定排序锁账户，避免两批交叉归档形成反向锁序。
+        orders.stream().map(CourseOrder::getUserId).distinct().sorted().forEach(userMapper::selectByIdForUpdate);
+        orders.sort(java.util.Comparator.comparing(CourseOrder::getUserId).thenComparing(CourseOrder::getId));
         BigDecimal totalRefund = BigDecimal.ZERO;
-        for (CourseOrder order : orders) {
+        for (CourseOrder snapshot : orders) {
+            CourseOrder order = courseOrderMapper.selectByIdForUpdate(snapshot.getId());
+            if (order == null) throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
+            if (order.getOrderStatus() == getOrderStatus("processing")) throw new BusinessException("订单正在履约，不能归档");
             if (order.getOrderStatus() == getOrderStatus("completed")) {
                 refundCompletedOrderForArchive(order, "管理员批量归档订单退款");
                 totalRefund = totalRefund.add(order.getAmount());
@@ -484,14 +495,7 @@ public class AdminOrderController {
         if (order.getOrderStatus() != getOrderStatus("completed")) {
             return;
         }
-        accountLedgerService.credit(
-                order.getUserId(),
-                order.getAmount(),
-                com.course.platform.service.impl.AccountLedgerServiceImpl.BIZ_REFUND,
-                order.getOrderNo(),
-                operationType + "：" + order.getOrderNo(),
-                false
-        );
+        paymentService.refund(order, com.course.platform.security.SecurityUtils.getCurrentUserId());
         User latestUser = userMapper.selectById(order.getUserId());
         operationLogService.log(order.getUserId(), operationType,
                 String.format("订单：%s，金额：%s元", order.getOrderNo(), order.getAmount()),

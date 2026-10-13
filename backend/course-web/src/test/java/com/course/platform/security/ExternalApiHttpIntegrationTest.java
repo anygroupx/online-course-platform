@@ -205,7 +205,7 @@ class ExternalApiHttpIntegrationTest {
     @ParameterizedTest @ValueSource(strings = {"key", "api_key"})
     void realRetryServiceAcceptsKeyOwnerWithoutGrantingAdminRights(String alias) throws Exception {
         CourseOrder owned = orders.selectById(88L);
-        owned.setPlatformId(1L);
+        owned.setPlatformId(1L); owned.setDockStatus(1);
         CoursePlatform platform = new CoursePlatform(); platform.setId(1L); platform.setDockApiId(9L);
         when(platforms.selectById(1L)).thenReturn(platform);
         ApiProviderMapper providers = mock(ApiProviderMapper.class);
@@ -213,10 +213,12 @@ class ExternalApiHttpIntegrationTest {
         when(providers.selectById(9L)).thenReturn(provider);
         PlatformDockingService docking = mock(PlatformDockingService.class);
         when(docking.retryOrder(owned, platform, provider)).thenReturn(DockResult.success("成功", "upstream-test"));
+        when(orders.claimRetry(88L,1,0,1,3,0)).thenReturn(1);
+        when(orders.finishRetry(eq(88L),eq(1),eq(1),anyInt(),any(),anyString())).thenReturn(1);
         ResourceAuthorizationService policy = new ResourceAuthorizationService();
         CourseOrderServiceImpl real = new CourseOrderServiceImpl(orders, platforms, users, mock(OperationLogService.class),
                 docking, providers, mock(ApplicationEventPublisher.class), mock(AccountLedgerServiceImpl.class), policy,
-                mock(CourseOrderProgressLogService.class));
+                mock(CourseOrderProgressLogService.class), mock(com.course.platform.service.impl.CoursePricingService.class), mock(com.course.platform.service.impl.CourseReservedWalletService.class), mock(com.course.platform.service.impl.CourseOrderPaymentService.class));
         doAnswer(call -> {
             var auth = SecurityContextHolder.getContext().getAuthentication();
             assertEquals(7L, auth.getPrincipal()); assertNull(auth.getCredentials());
@@ -233,6 +235,28 @@ class ExternalApiHttpIntegrationTest {
         owned.setUserId(99L);
         mvc.perform(request("budan", alias)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(-207));
         verifyNoMoreInteractions(docking);
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"key", "api_key"})
+    void realCreateServiceRejectsEmptyPrivateWalletDespiteGeneralBalance(String alias) throws Exception {
+        User owner = users.selectById(7L); owner.setBalance(new BigDecimal("500.00")); owner.setRate(new BigDecimal("1.5")); owner.setStatus(1);
+        when(users.selectByIdForUpdate(7L)).thenReturn(owner);
+        CoursePlatform platform = new CoursePlatform(); platform.setId(1L); platform.setStatus(1); platform.setBasePrice(new BigDecimal("10")); platform.setRateType("MULTIPLY");
+        when(platforms.selectById(1L)).thenReturn(platform);
+        var contracts = mock(com.course.platform.infra.persistence.mapper.CoursePrivateContractMapper.class);
+        var wallets = mock(com.course.platform.infra.persistence.mapper.CourseReservedWalletMapper.class);
+        var contract = new com.course.platform.domain.entity.CoursePrivateContract(); contract.setId(3L);contract.setUserId(7L);contract.setPlatformId(1L);contract.setFixedPrice(new BigDecimal("7.20"));contract.setStatus("ACTIVE");contract.setActivatedAt(java.time.LocalDateTime.now());contract.setVersion(1);
+        var wallet = new com.course.platform.domain.entity.CourseReservedWallet();wallet.setId(5L);wallet.setContractId(3L);wallet.setUserId(7L);wallet.setPlatformId(1L);wallet.setBalance(BigDecimal.ZERO);
+        when(contracts.selectByBinding(7L,1L)).thenReturn(contract);when(contracts.selectByIdForUpdate(3L)).thenReturn(contract);
+        when(wallets.selectByBinding(7L,1L)).thenReturn(wallet);when(wallets.selectByIdForUpdate(5L)).thenReturn(wallet);
+        var pricing = new com.course.platform.service.impl.CoursePricingService(users,platforms,mock(com.course.platform.infra.persistence.mapper.PlatformCategoryMapper.class),contracts,wallets,java.time.Clock.systemDefaultZone());
+        var general = mock(AccountLedgerServiceImpl.class);var reserved = mock(com.course.platform.service.impl.CourseReservedWalletService.class);
+        var real = new CourseOrderServiceImpl(orders,platforms,users,mock(OperationLogService.class),mock(PlatformDockingService.class),mock(ApiProviderMapper.class),mock(ApplicationEventPublisher.class),general,new ResourceAuthorizationService(),mock(CourseOrderProgressLogService.class),pricing,reserved,mock(com.course.platform.service.impl.CourseOrderPaymentService.class));
+        doAnswer(call -> real.createOrder(call.getArgument(0),call.getArgument(1))).when(orderService).createOrder(any(),eq(7L));
+        mvc.perform(request("add",alias).param("userId","99").param("walletId","999").param("request_id","external-private-request"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value(-200));
+        verifyNoInteractions(general,reserved);verify(orders,never()).insert(any(CourseOrder.class));
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
     }
 
     @Test void rateLimitsAndRedisFailClosedStillEnforced() throws Exception {

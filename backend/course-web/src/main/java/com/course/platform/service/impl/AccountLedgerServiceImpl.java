@@ -23,6 +23,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class AccountLedgerServiceImpl {
 
+    public static final String BIZ_COURSE_TRANSFER = "COURSE_TRANSFER";
     public static final String BIZ_PAYMENT = "PAYMENT";
     public static final String BIZ_ORDER = "ORDER";
     public static final String BIZ_RECHARGE = "RECHARGE";
@@ -32,7 +33,7 @@ public class AccountLedgerServiceImpl {
     public static final String BIZ_PROJECT_TRANSFER = "PROJECT_TRANSFER";
 
     private static final Set<String> ALLOWED_BIZ_TYPES = Set.of(
-            BIZ_PAYMENT, BIZ_ORDER, BIZ_RECHARGE, BIZ_REFUND, BIZ_API_FEE, BIZ_ADJUST, BIZ_PROJECT_TRANSFER
+            BIZ_PAYMENT, BIZ_ORDER, BIZ_RECHARGE, BIZ_REFUND, BIZ_API_FEE, BIZ_ADJUST, BIZ_PROJECT_TRANSFER, BIZ_COURSE_TRANSFER
     );
     private static final BigDecimal MAX_AMOUNT = new BigDecimal("9999999999.99");
 

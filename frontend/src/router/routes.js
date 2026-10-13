@@ -38,6 +38,18 @@ const routes = [
     redirect: "/dashboard",
     children: [
       {
+        path: "course-wallets", name: "CourseWallets", component: () => import("@/views/CourseWallets.vue"),
+        meta: { title: "我的课程专户", requiresAuth: true },
+      },
+      {
+        path: "admin/course-private-contracts", name: "CoursePrivateContracts", component: () => import("@/views/AdminCourseWallets.vue"),
+        meta: { title: "课程密价协议", requiresAuth: true, breadcrumbGroup: "课程资金管理" },
+      },
+      {
+        path: "admin/course-wallets", name: "AdminCourseWallets", component: () => import("@/views/AdminCourseWallets.vue"),
+        meta: { title: "课程专户资金", requiresAuth: true, breadcrumbGroup: "课程资金管理" },
+      },
+      {
         path: "dashboard",
         name: "Dashboard",
         component: () => import("@/views/Dashboard.vue"),

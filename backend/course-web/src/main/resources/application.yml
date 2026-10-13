@@ -117,6 +117,9 @@ logging:
     max-history: 30
 
 course:
+  private-wallet:
+    # 必须先执行038迁移并核对权限，再允许创建协议和资金转入。
+    enabled: ${COURSE_PRIVATE_WALLET_ENABLED:false}
   security:
     # Spring Boot 会将英文逗号分隔的字符串绑定为 List<String>。
     allowed-origins: ${COURSE_SECURITY_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}

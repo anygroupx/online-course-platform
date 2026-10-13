@@ -6,7 +6,7 @@
     <el-card class="balance-card">
       <div class="balance-info">
         <div class="balance-item">
-          <div class="balance-label">当前余额</div>
+          <div class="balance-label">普通账户余额</div>
           <div class="balance-value">¥{{ userInfo?.balance || "0.00" }}</div>
         </div>
         <div class="balance-item">
@@ -17,6 +17,8 @@
         </div>
       </div>
     </el-card>
+
+    <el-alert title="真实充值进入普通余额。如需课程预存，请在我的课程专户按1:1转入。" type="info" :closable="false"><router-link to="/course-wallets">前往我的课程专户</router-link></el-alert>
 
     <!-- 充值方式选择 -->
     <el-card class="recharge-methods">

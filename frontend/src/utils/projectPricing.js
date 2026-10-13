@@ -1,3 +1,12 @@
+import { courseMoney } from './courseWallet.js';
+
+// 课程成交价只展示服务端结果；保留旧计算函数供其他非资金展示用途。
+export const formatServerCoursePrice = preview => {
+  if (!preview) return '报价不可用';
+  try { return `${preview.priceSource === 'PRIVATE' ? '专属密价 ' : ''}¥${courseMoney(preview.finalPrice)}`; }
+  catch { return '报价不可用'; }
+};
+
 export const getProjectDisplayName = (project = {}) =>
   project.displayName || project.name || "未命名项目";
 
