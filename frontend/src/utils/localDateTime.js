@@ -10,3 +10,10 @@ export function validLocalDateTime(value) {
   const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
   return day <= [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]
 }
+
+// 只取日期部分（yyyy-MM-dd），用于执行记录这类只需精确到天的展示。
+// 直接切字符串，不做 Date 解析或时区换算，避免跨时区把日期显示错一天。
+export function localDateOnly(value) {
+  if (!validLocalDateTime(value)) return ''
+  return value.slice(0, 10)
+}

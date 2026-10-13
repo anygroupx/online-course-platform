@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { validLocalDateTime } from '../src/utils/localDateTime.js'
+import { validLocalDateTime, localDateOnly } from '../src/utils/localDateTime.js'
 
 test('local API timestamps support both separators and up to nanosecond precision', () => {
   for (const separator of [' ', 'T']) {
@@ -28,5 +28,20 @@ test('unsupported formats, timezone suffixes and malformed values remain invalid
     '2026-09-12 18:19:25.1234567890', ' 2026-09-12 18:19:25', '2026-09-12 18:19:25 ',
     '2026-09-12 18:19:25\n', '2026-09-12 18:19:25\r', '2026-09-12 18:19:25<script>']) {
     assert.equal(validLocalDateTime(value), false, JSON.stringify(value))
+  }
+})
+
+test('localDateOnly keeps only the calendar date, dropping hours/minutes/seconds', () => {
+  assert.equal(localDateOnly('2026-10-13 16:42:15'), '2026-10-13')
+  assert.equal(localDateOnly('2026-10-13T16:42:15'), '2026-10-13')
+  assert.equal(localDateOnly('2026-10-13 00:00:00'), '2026-10-13')
+  assert.equal(localDateOnly('2026-10-13 23:59:59'), '2026-10-13')
+  assert.equal(localDateOnly('2026-10-13 16:42:15.123'), '2026-10-13')
+})
+
+test('localDateOnly returns empty for invalid or missing timestamps instead of slicing garbage', () => {
+  for (const value of [null, undefined, '', '2026-10-13', '2026-10-13 16:42', 'not-a-date',
+    '2026-10-13T16:42:15Z', 20261013, {}, []]) {
+    assert.equal(localDateOnly(value), '', JSON.stringify(value))
   }
 })

@@ -328,7 +328,7 @@
           <el-timeline-item
             v-for="log in progressLogs"
             :key="log.id"
-            :timestamp="log.createTime || ''"
+            :timestamp="localDateOnly(log.createTime)"
             placement="top"
             :type="getProgressLogType(log.orderStatus)"
           >
@@ -381,6 +381,7 @@ import {
 } from "@/api/order";
 import { getCoursePlatforms } from "@/api/course";
 import { useVariableStore } from "@/stores/variableStore";
+import { localDateOnly } from "@/utils/localDateTime";
 
 // 变量store
 const variableStore = useVariableStore();
