@@ -38,12 +38,19 @@ COPY --from=builder /build/dist /usr/share/nginx/html
 # 复制自定义 Nginx 配置
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# 非 root 运行所需的 PID 和临时目录权限；保留 Compose 的 8888:80 映射。
+# Docker 默认允许非 root 绑定容器内 80 端口，无需扩大运行时权限。
+RUN sed -i '/^user[[:space:]]/d; s|^pid[[:space:]].*;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf && \
+    chown -R nginx:nginx /var/cache/nginx
+
+USER nginx
+
 # 暴露端口
 EXPOSE 80
 
-# 健康检查
+# 与 Compose 保持一致，使用 IPv4 回环避免 localhost 优先解析为未监听的 IPv6。
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
+    CMD wget --quiet --tries=1 --spider http://127.0.0.1/health || exit 1
 
 # 启动 Nginx
 CMD ["nginx", "-g", "daemon off;"]
