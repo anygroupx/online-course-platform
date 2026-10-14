@@ -86,6 +86,7 @@ class CoursePrivateContractServiceTest {
     }
     @Test void alreadyActivatedQualificationSurvivesLowBalance() { existing.setActivatedAt(LocalDateTime.now(clock).minusDays(1)); existing.setStatus("SUSPENDED"); service.update(3L,command("ACTIVE","100",2),1L); assertEquals("ACTIVE",existing.getStatus()); }
     @Test void terminatedContractCannotRevive() { existing.setStatus("TERMINATED"); assertThrows(BusinessException.class,()->service.update(3L,command("ACTIVE","0",2),1L)); }
+    @Test void modernOperationsCannotBeChangedThroughLegacyConfiguration(){existing.setOperationsMode("TIME_PREPAID");assertThrows(BusinessException.class,()->service.update(3L,command("SUSPENDED","100",2),1L));verify(contracts,never()).updateConfig(any(),any());}
     @Test void explicitVersionUpdateFailureDoesNotAuditSuccess() { when(contracts.updateConfig(any(),eq(2))).thenReturn(0); assertThrows(BusinessException.class,()->service.update(3L,command("SUSPENDED","100",2),1L)); verify(funds,never()).history(any(),any(),any(),any()); }
     @Test void disabledTargetCannotGetContract() { target.setStatus(0); assertThrows(BusinessException.class,()->service.create(command("ACTIVE","0",null),1L)); }
     @Test void disabledOperatorCannotWriteEvenWithPermission() { users.selectById(1L).setStatus(0); assertThrows(BusinessException.class,()->service.create(command("ACTIVE","0",null),1L)); verify(contracts,never()).insert(any(CoursePrivateContract.class)); }

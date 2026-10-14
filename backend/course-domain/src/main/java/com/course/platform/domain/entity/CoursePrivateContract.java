@@ -38,6 +38,11 @@ public class CoursePrivateContract implements Serializable {
 
     private Integer version;
 
+    /** 同一资金绑定保留历史代次，当前权益通过独立周期发布。 */
+    private String operationsMode;
+    private Long currentTermId;
+    private Integer relationGeneration;
+
     private Long createdBy;
 
     private Long updatedBy;

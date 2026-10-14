@@ -52,6 +52,8 @@ import cn.hutool.core.util.StrUtil;
 @Slf4j
 @Service
 public class PlatformDockingServiceImpl implements PlatformDockingService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private CoursePrivateFulfillmentService fulfillment;
 
     private final PlatformDockingStrategyFactory strategyFactory;
     private final ApiProviderMapper apiProviderMapper;
@@ -515,6 +517,11 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
                                         .select(CourseOrder::getId,
                                                 CourseOrder::getThirdOrderId,
                                                 CourseOrder::getApiProviderId,
+                                                CourseOrder::getPrivateTermId,
+                                                CourseOrder::getFulfilledAt,
+                                                CourseOrder::getFulfillmentSource,
+                                                CourseOrder::getCompletionConfirmedAt,
+                                                CourseOrder::getCompletionConfirmationSource,
                                                 CourseOrder::getProgress,
                                                 CourseOrder::getOrderStatus,
                                                 CourseOrder::getRemarks)
@@ -542,6 +549,7 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
                         if (updated > 0) {
                             totalUpdated += updated;
                             for (CourseOrder previousOrder : matchingOrders) {
+                                if(previousOrder.getPrivateTermId()!=null){if(fulfillment==null)throw new BusinessException("可信履约服务不可用");fulfillment.recordUpstream(previousOrder,result);}
                                 CourseOrder currentOrder = progressSnapshotAfterSync(previousOrder, result);
                                 progressLogService.recordIfChanged(currentOrder,
                                         previousOrder.getProgress(),

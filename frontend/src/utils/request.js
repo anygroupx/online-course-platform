@@ -73,7 +73,9 @@ request.interceptors.response.use(
     if (!response.config.suppressGlobalError) {
       ElMessage.error(result?.message || "请求失败");
     }
-    return Promise.reject(new Error(result?.message || "请求失败"));
+    // 保留明确业务拒绝码；写入页面据此区分事务未提交与网络结果未知。
+    const rejected=new Error(result?.message || "请求失败");rejected.businessCode=result?.code;
+    return Promise.reject(rejected);
   },
   async (error) => {
     if (axios.isCancel(error)) return Promise.reject(error);

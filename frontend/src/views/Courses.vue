@@ -42,6 +42,9 @@
             <el-button v-if="pricingMap[currentPlatform.id]?.paymentSource === 'COURSE_WALLET'" size="small" link type="primary" @click="router.push('/course-wallets')">转入课程专户</el-button>
           </div>
 
+          <!-- 只有服务端明确允许时才呈现普通价选择，默认保持原专户路径。 -->
+          <el-radio-group v-if="currentPlatform&&pricingMap[currentPlatform.id]?.ordinaryOffer" v-model="checkoutIntent" :disabled="submitLoading" aria-label="课程支付选择"><el-radio value="PRIVATE_DEFAULT">重新开通密价或转入预存</el-radio><el-radio value="GENERAL_EXPLICIT">明确使用普通余额按普通价 ¥{{ courseMoney(pricingMap[currentPlatform.id].ordinaryOffer.finalPrice) }}/单购买</el-radio></el-radio-group>
+
           <!-- 平台描述（支持折叠/展开） -->
           <div
             v-if="currentPlatform && currentPlatform.description"
@@ -345,6 +348,7 @@ import { getUserInfo } from "@/api/user";
 // 个人定价系数（费率）
 const pricingMap = ref({});
 const confirmedPricing = ref(null);
+const checkoutIntent=ref("PRIVATE_DEFAULT");
 const requestKeys = createOrderRequestKeys();
 const router = useRouter();
 
@@ -399,7 +403,8 @@ const confirmCoursePurchase = async (count, description) => {
   if (submitLoading.value) throw "cancel";
   submitLoading.value = true;
   try {
-    const preview = (await getMyCoursePrice(queryForm.value.platformId)).data;
+    let preview = (await getMyCoursePrice(queryForm.value.platformId)).data;
+    if(checkoutIntent.value==='GENERAL_EXPLICIT'){if(!preview.ordinaryOffer)throw new Error('普通价购买政策或权益状态已变化，请重新选择');preview={...preview.ordinaryOffer,checkoutIntent:'GENERAL_EXPLICIT',unavailableReason:'普通余额不足'};}
     const summary = purchaseSummary(preview, count);
     await ElMessageBox.confirm(`${description}。课程商品：${currentPlatform.value?.displayName || currentPlatform.value?.name || "选定课程"}。${summary.priceLabel} ¥${summary.unit}/单，共 ${count} 单；${summary.paymentLabel}当前余额 ¥${summary.before}，预计扣款 ¥${summary.total}，下单后预计余额 ¥${summary.after}。${preview.paymentSource === "COURSE_WALLET" ? "专款专用，退款回原专户，不使用普通余额补差。" : "退款回普通余额。"}`, "确认课程费用", { confirmButtonText: "确认下单", cancelButtonText: "取消", type: "warning" });
     confirmedPricing.value = preview;
@@ -410,7 +415,7 @@ const createOrder = async data => {
   const preview = confirmedPricing.value;
   if (!preview || String(preview.platformId) !== String(data.platformId)) throw new Error("请重新确认课程成交报价");
   const clientRequestId = await requestKeys.forOrder(data);
-  const result = await sendCourseOrder({ ...data, clientRequestId, expectedAmount: preview.finalPrice, expectedContractVersion: preview.contractVersion, expectedPriceSource: preview.priceSource, expectedPaymentSource: preview.paymentSource });
+  const result = await sendCourseOrder({ ...data, clientRequestId, expectedAmount: preview.finalPrice, expectedContractVersion: preview.contractVersion, expectedPriceSource: preview.priceSource, expectedPaymentSource: preview.paymentSource, ...(preview.checkoutIntent==='GENERAL_EXPLICIT'?{checkoutIntent:'GENERAL_EXPLICIT',expectedPolicyTermId:preview.policyTermId,expectedPolicyVersionId:preview.policyVersionId}:preview.privateTermId?{expectedPolicyTermId:preview.privateTermId,expectedPolicyVersionId:preview.privatePlanVersionId,expectedPolicyExpiresAt:preview.expiresAt??null}:{}) });
   await requestKeys.confirmed(data, clientRequestId);
   return result;
 };
@@ -437,6 +442,7 @@ const formatPlatformLabel = (platform) => {
 };
 
 const handlePlatformChange = (platformId) => {
+  checkoutIntent.value="PRIVATE_DEFAULT";confirmedPricing.value=null;
   currentPlatform.value = platformList.value.find((p) => p.id === platformId);
   descCollapsed.value = true; // 重置折叠状态
 };

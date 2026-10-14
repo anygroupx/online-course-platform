@@ -25,7 +25,7 @@ def static_check():
     assert MIGRATION.exists(), "缺少课程密价增量迁移"
     migration = MIGRATION.read_text()
     schema = (ROOT / "database/schema.sql").read_text()
-    assert schema.split(MARKER, 1)[1].strip() == migration.strip(), "新库定义与迁移不一致"
+    assert schema.split(MARKER, 1)[1].split("-- 课程密价运营中心（039）", 1)[0].strip() == migration.strip(), "新库定义与迁移不一致"
     assert "REFERENCES course_platform" not in migration, "课程删除由业务保护，不追加影响旧业务的外键"
     print("PASS 新库与增量迁移定义一致")
 

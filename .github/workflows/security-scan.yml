@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   secret-scan:
@@ -22,10 +21,9 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
 
   sca:
-    name: SCA (OSV + Dependency Check lightweight)
+    name: 依赖安全门禁（OSV 与 npm audit）
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,35 +33,42 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Backend dependency tree
         working-directory: backend
-        run: mvn -q -DskipTests dependency:tree -DoutputFile=target/dependency-tree.txt || true
+        run: mvn -B -DskipTests dependency:tree -DoutputFile=target/dependency-tree.txt
       - name: Install OSV Scanner
+        working-directory: ${{ runner.temp }}
         run: |
-          curl -sSfL https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64 -o /usr/local/bin/osv-scanner
-          chmod +x /usr/local/bin/osv-scanner
-      - name: OSV scan Maven lock-ish
+          # 固定官方发布资产并校验摘要，避免 latest 漂移及下载失败被掩盖。
+          curl -sSfL https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64 -o osv-scanner
+          echo '160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b  osv-scanner' | sha256sum --check
+          chmod +x osv-scanner
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: OSV scan Maven dependencies
         working-directory: backend
-        run: |
-          osv-scanner --format table -r . || true
+        run: osv-scanner scan source --format table -r .
       - name: Frontend npm audit
         working-directory: frontend
-        run: |
-          if [ -f package-lock.json ]; then npm audit --omit=dev || true; else echo "no lockfile"; fi
+        run: npm audit --omit=dev
 
   sast:
     name: SAST (Semgrep)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Semgrep
-        uses: returntocorp/semgrep-action@v1
+      - uses: actions/setup-python@v5
         with:
-          config: >-
-            p/owasp-top-ten
-            p/java
-            p/security-audit
-        continue-on-error: true
+          python-version: '3.12'
+      - name: 安装 Semgrep
+        run: pipx install semgrep
+      - name: Semgrep
+        # --error 对发现项返回失败，--strict 同时将规则/解析错误作为门禁失败。
+        run: semgrep scan --error --strict --config p/owasp-top-ten --config p/java --config p/security-audit .
 
   container-scan:
     name: Container Scan (Trivy)
@@ -71,12 +76,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.28.0
+        # 官方 v0.36.0 的不可变提交；完整 SHA 已对照发布页核验。
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
           severity: CRITICAL,HIGH
-          exit-code: '0'
+          exit-code: '1'
           format: table
 
   dast-baseline:
@@ -88,7 +94,7 @@ jobs:
         uses: zaproxy/action-baseline@v0.12.0
         with:
           target: ${{ vars.DAST_TARGET_URL }}
-          fail_action: false
+          fail_action: true
 
   backend-security-tests:
     name: Backend compile + security unit tests
@@ -108,4 +114,4 @@ jobs:
         run: |
           mvn -pl course-web -am test \
             -Dtest=AuthServiceImplTest,SystemConfigControllerTest,BolaBflaAuthorizationTest,TotpUtilTest \
-            -DfailIfNoTests=false
+            -Dsurefire.failIfNoSpecifiedTests=false

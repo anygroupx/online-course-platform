@@ -78,6 +78,8 @@ public class CoursePrivateContractService {
         active(users.selectByIdForUpdate(initial.getUserId()));
         CoursePrivateContract value = contracts.selectByIdForUpdate(id);
         if (value == null || !Objects.equals(value.getUserId(),initial.getUserId())) throw conflict("协议绑定已变化");
+        // 现代权益由发布版本及周期审计维护，旧整表配置接口不能绕过成本、周期和资格规则。
+        if(value.getOperationsMode()!=null&&!"LEGACY_PERMANENT".equals(value.getOperationsMode()))throw conflict("运营权益须通过周期审核调整，不能使用旧协议配置接口");
         if (!Objects.equals(request.getVersion(),value.getVersion())) throw conflict("协议版本已变化，请刷新后修改");
         if (!Objects.equals(request.getPlatformId(),value.getPlatformId())) throw invalid("课程资金绑定不能修改");
         if (request.getUserId() != null || request.getUserUid() != null) {

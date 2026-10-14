@@ -16,6 +16,38 @@ import java.time.LocalDateTime;
  */
 @Mapper
 public interface CourseOrderMapper extends BaseMapper<CourseOrder> {
+    /** 财务核验读取历史归档，普通订单查询仍使用逻辑删除边界。 */
+    @org.apache.ibatis.annotations.Select("SELECT * FROM course_order WHERE id=#{id}")
+    CourseOrder selectHistoricalById(@Param("id") Long id);
+    @org.apache.ibatis.annotations.Select("SELECT * FROM course_order WHERE id=#{id} FOR UPDATE")
+    CourseOrder selectHistoricalByIdForUpdate(@Param("id") Long id);
+
+    /** 手动上游刷新使用原状态和原接口绑定CAS，不覆盖并发退款、取消或归档。 */
+    @Update("""
+      UPDATE course_order SET order_status=#{order.orderStatus},progress=#{order.progress},remarks=#{order.remarks},
+        course_start_time=#{order.courseStartTime},course_end_time=#{order.courseEndTime},exam_start_time=#{order.examStartTime},exam_end_time=#{order.examEndTime},update_time=NOW()
+      WHERE id=#{order.id} AND is_deleted=0 AND refunded_at IS NULL AND order_status NOT IN (3,4,6)
+        AND (order_status=#{expectedStatus} OR order_status IS NULL AND #{expectedStatus} IS NULL)
+        AND (api_provider_id=#{providerId} OR api_provider_id IS NULL AND #{providerId} IS NULL)
+        AND (third_order_id=#{remoteId} OR third_order_id IS NULL AND #{remoteId} IS NULL)
+      """)
+    int updateUpstreamIfUnchanged(@Param("order") CourseOrder order,@Param("expectedStatus") Integer expectedStatus,@Param("providerId") Long providerId,@Param("remoteId") String remoteId);
+
+    /** 上游确认只记录时间上界，真实时间由可信适配器提供；重开后不能沿用旧完成事实。 */
+    @Update("""
+      UPDATE course_order SET completion_confirmed_at=CASE WHEN #{replace}=1 OR completion_confirmed_at IS NULL THEN #{confirmedAt} ELSE completion_confirmed_at END,
+        completion_confirmation_source='UPSTREAM_STATUS',
+        fulfillment_source=CASE WHEN #{replace}=1 THEN CASE WHEN #{actualAt} IS NULL THEN NULL ELSE 'UPSTREAM_CONFIRMED' END WHEN fulfilled_at IS NULL AND #{actualAt} IS NOT NULL THEN 'UPSTREAM_CONFIRMED' ELSE fulfillment_source END,
+        fulfilled_at=CASE WHEN #{replace}=1 THEN #{actualAt} WHEN fulfilled_at IS NULL THEN #{actualAt} ELSE fulfilled_at END
+      WHERE id=#{id} AND private_term_id IS NOT NULL AND order_status=2 AND is_deleted=0 AND refunded_at IS NULL
+        AND api_provider_id=#{providerId} AND third_order_id=#{remoteId}
+        AND (#{replace}=1 OR completion_confirmed_at IS NULL OR fulfilled_at IS NULL AND #{actualAt} IS NOT NULL)
+      """)
+    int recordUpstreamCompletion(@Param("id") Long id,@Param("providerId") Long providerId,@Param("remoteId") String remoteId,@Param("confirmedAt") LocalDateTime confirmedAt,@Param("actualAt") LocalDateTime actualAt,@Param("replace") boolean replace);
+    @Update("UPDATE course_order SET fulfilled_at=NULL,fulfillment_source=NULL,completion_confirmed_at=NULL,completion_confirmation_source=NULL WHERE id=#{id} AND private_term_id IS NOT NULL AND order_status=#{status} AND is_deleted=0 AND refunded_at IS NULL AND (fulfilled_at IS NOT NULL OR completion_confirmed_at IS NOT NULL)")
+    int invalidateCompletion(@Param("id") Long id,@Param("status") Integer status);
+    @Update("UPDATE course_order SET fulfilled_at=#{actualAt},fulfillment_source='ADMIN_VERIFIED' WHERE id=#{id} AND private_term_id IS NOT NULL AND order_status=2 AND refunded_at IS NULL")
+    int recordVerifiedCompletion(@Param("id") Long id,@Param("actualAt") LocalDateTime actualAt);
     /** 补单次数作为CAS版本，取消或退款已成功时禁止重新履约。 */
     @Update("UPDATE course_order SET retry_count=COALESCE(retry_count,0)+1,order_status=#{processing},dock_status=#{dockPending},update_time=NOW() WHERE id=#{id} AND is_deleted=0 AND order_status=#{previousStatus} AND order_status<>#{cancelled} AND refunded_at IS NULL AND NOT (order_status=#{processing} AND dock_status=#{dockPending}) AND COALESCE(retry_count,0)=#{previousRetry} AND COALESCE(retry_count,0)<5")
     int claimRetry(@Param("id") Long id,@Param("previousStatus") int previousStatus,@Param("previousRetry") int previousRetry,@Param("processing") int processing,@Param("cancelled") int cancelled,@Param("dockPending") int dockPending);
@@ -95,8 +127,10 @@ public interface CourseOrderMapper extends BaseMapper<CourseOrder> {
      */
     @Update("UPDATE course_order SET order_status = #{targetStatus}, dock_status = #{dockStatus}, " +
             "countdown_end_time = #{countdownEndTime}, progress = #{progress}, " +
-            "finished_chapters = #{finishedChapters}, update_time = NOW() " +
-            "WHERE id = #{orderId} AND order_status = #{expectedStatus}")
+            "finished_chapters = #{finishedChapters}, " +
+            "fulfilled_at=CASE WHEN #{targetStatus}=2 AND is_self_operated=1 AND private_term_id IS NOT NULL THEN #{countdownEndTime} ELSE fulfilled_at END, " +
+            "fulfillment_source=CASE WHEN #{targetStatus}=2 AND is_self_operated=1 AND private_term_id IS NOT NULL THEN 'SELF_OPERATED_COMPLETED' ELSE fulfillment_source END, update_time = NOW() " +
+            "WHERE id = #{orderId} AND order_status = #{expectedStatus} AND is_deleted=0 AND refunded_at IS NULL")
     int completeIfStatus(@Param("orderId") Long orderId,
                          @Param("targetStatus") Integer targetStatus,
                          @Param("dockStatus") Integer dockStatus,
@@ -134,7 +168,8 @@ public interface CourseOrderMapper extends BaseMapper<CourseOrder> {
             "remarks = #{remarks}, course_start_time = #{courseStartTime}, course_end_time = #{courseEndTime}, " +
             "exam_start_time = #{examStartTime}, exam_end_time = #{examEndTime}, update_time = NOW() " +
             "WHERE student_account = #{studentAccount} AND student_password = #{studentPassword} " +
-            "AND course_name = #{courseName} AND third_order_id = #{thirdOrderId} AND api_provider_id = #{apiProviderId}")
+            "AND course_name = #{courseName} AND third_order_id = #{thirdOrderId} AND api_provider_id = #{apiProviderId} " +
+            "AND is_deleted=0 AND refunded_at IS NULL AND order_status NOT IN (3,4,6)")
     int updateOrderProgressByFullMatch(@Param("studentAccount") String studentAccount,
                                         @Param("studentPassword") String studentPassword,
                                         @Param("courseName") String courseName,

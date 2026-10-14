@@ -151,7 +151,7 @@ public class SecurityConfig {
                         .requestMatchers("/admin/security/**").authenticated()
                         .requestMatchers("/admin/rbac/**").hasAuthority("rbac:manage")
                         // 专户控制器与业务服务以独立权限逐方法授权。
-                        .requestMatchers("/admin/course-private-contracts/**", "/admin/course-wallets/**", "/admin/course-wallet-transfers").authenticated()
+                        .requestMatchers("/admin/course-private-contracts/**", "/admin/course-wallets/**", "/admin/course-wallet-transfers", "/admin/course-private-operations/**").authenticated()
                         .requestMatchers("/admin/**").denyAll()
                         // 所有其他请求需要认证
                         .anyRequest().authenticated()

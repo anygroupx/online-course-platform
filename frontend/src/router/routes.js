@@ -37,6 +37,13 @@ const routes = [
     component: () => import("@/layouts/MainLayout.vue"),
     redirect: "/dashboard",
     children: [
+      {path:'admin/course-private-operations/analytics',name:'AdminPrivateAnalytics',component:()=>import('@/views/AdminCoursePrivateAnalytics.vue'),meta:{title:'经营分析',requiresAuth:true,breadcrumbGroup:'密价运营中心'}},
+      {path:'admin/course-private-operations/plans',name:'AdminPrivatePlans',component:()=>import('@/views/AdminCoursePrivatePlans.vue'),meta:{title:'套餐与规则',requiresAuth:true,breadcrumbGroup:'密价运营中心'}},
+      {path:'admin/course-private-operations/applications',name:'AdminPrivateApplications',component:()=>import('@/views/AdminCoursePrivateReviews.vue'),meta:{title:'权益申请审核',requiresAuth:true,breadcrumbGroup:'密价运营中心'}},
+      {path:'admin/course-private-operations/releases',name:'AdminPrivateReleases',component:()=>import('@/views/AdminCoursePrivateReviews.vue'),meta:{title:'资金转回审核',requiresAuth:true,breadcrumbGroup:'密价运营中心'}},
+      { path:'course-private-operations',name:'CoursePrivateRights',component:()=>import('@/views/CoursePrivateRights.vue'),meta:{title:'我的密价权益',requiresAuth:true} },
+      { path:'admin/course-private-operations/contracts',name:'AdminPrivateContracts',component:()=>import('@/views/AdminCoursePrivateTerms.vue'),meta:{title:'代理协议',requiresAuth:true,breadcrumbGroup:'密价运营中心'} },
+      { path:'admin/course-private-operations/terms',name:'AdminPrivateTerms',component:()=>import('@/views/AdminCoursePrivateTerms.vue'),meta:{title:'权益周期',requiresAuth:true,breadcrumbGroup:'密价运营中心'} },
       {
         path: "course-wallets", name: "CourseWallets", component: () => import("@/views/CourseWallets.vue"),
         meta: { title: "我的课程专户", requiresAuth: true },
