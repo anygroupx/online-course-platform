@@ -1,5 +1,5 @@
 <template>
-  <el-dialog :model-value="visible" :title="title" width="min(920px, 96vw)" @close="$emit('close')">
+  <el-dialog :model-value="visible" :title="title" width="min(920px, 96vw)" @close="$emit('close')" append-to-body>
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <el-table v-loading="loading" :data="rows" style="width:100%" empty-text="暂无记录">
       <el-table-column v-if="kind==='history'" type="expand"><template #default="{row}"><div class="audit-json"><p>修改前</p><pre>{{ row.beforeJson || '新建协议' }}</pre><p>修改后</p><pre>{{ row.afterJson }}</pre></div></template></el-table-column>

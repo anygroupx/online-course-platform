@@ -3,6 +3,7 @@ import {existsSync} from 'node:fs';
 import {mkdir} from 'node:fs/promises';
 import {chromium} from 'playwright';
 import {createTestServer} from './fixtures/test-server.mjs';
+import {assertViewportOverlay, OVERLAY_VIEWPORTS, settleDialog} from './fixtures/viewport-overlay.mjs';
 
 // 所有接口与身份仅来自隔离夹具，禁止连接外部服务或真实资金账户。
 const html=`<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="app"></div><script type="module">
@@ -76,7 +77,26 @@ try{
   await page.setViewportSize({width:1280,height:960});await page.goto(base+'/__private_operations?admin=1&dark=1&view=/admin/course-private-operations/terms');await page.getByRole('heading',{name:'权益周期'}).waitFor();await page.screenshot({path:'../.cache/course-private-operations-admin-dark.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});await page.goto(base+'/__private_operations?admin=1&profile=PLANNER&dark=1&view=/admin/course-private-operations/plans');await page.getByRole('button',{name:'新建套餐'}).waitFor();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:'../.cache/course-private-operations-plans-mobile.png',fullPage:true});await page.getByRole('button',{name:'新建套餐'}).click();await editor.getByLabel('草稿绑定课程商品编号').waitFor();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await editor.getByRole('button',{name:'取消',exact:true}).click();
   await page.goto(base+'/__private_operations?admin=1&profile=FINANCE&dark=1&view=/admin/course-private-operations/releases');await page.getByRole('heading',{name:'资金转回审核'}).waitFor();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:'../.cache/course-private-operations-releases-mobile.png',fullPage:true});
-  await page.goto(base+'/__private_operations?admin=1&profile=ANALYST&dark=1&view=/admin/course-private-operations/analytics');await page.getByRole('heading',{name:'密价经营分析'}).waitFor();await page.getByText('证据不足',{exact:false}).waitFor();await page.getByText('未知，尚无逐单实际供应商结算成本',{exact:false}).waitFor();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:'../.cache/course-private-operations-analytics-mobile.png',fullPage:true});
+  await page.goto(base+'/__private_operations?admin=1&profile=ANALYST&dark=1&view=/admin/course-private-operations/analytics');await page.getByRole('heading',{name:'密价经营分析'}).waitFor();await page.getByText('证据不足',{exact:false}).first().waitFor();await page.getByText('未知，尚无逐单实际供应商结算成本',{exact:false}).waitFor();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:'../.cache/course-private-operations-analytics-mobile.png',fullPage:true});
   await page.goto(base+'/__private_operations');await page.getByRole('button',{name:'查看权益与进度'}).waitFor();delayRights=true;const delayedStarted=new Promise(resolve=>notifyDelayedRights=resolve);await page.getByRole('button',{name:'刷新权益'}).click();await delayedStarted;assert.equal(typeof releaseDelayedRights,'function');switchedAccount=true;await page.evaluate(()=>window.__switchPrivateAccount('00000000-0000-4000-8000-000000000099'));await page.getByText('暂无密价协议，可先查看公开套餐').waitFor();const delayedResponse=page.waitForResponse(response=>response.url().endsWith('/course-private-operations/rights?page=1&pageSize=100'));releaseDelayedRights();await delayedResponse;await page.waitForLoadState('networkidle');assert.equal(await page.getByRole('button',{name:'查看权益与进度'}).count(),0);assert.equal(await page.getByText(/专户余额 ¥/).count(),0);
-  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);console.log('课程密价运营浏览器通过：本人权益/原规则续期/转回与状态未知响应恢复/套餐草稿与成本发布/权益审核/财务双权限及批准未知响应恢复/只读权限/移动暗色/外部网络隔离');
+  // 弹窗视口几何回归：overlay 必须等于视口，弹窗不得被页面容器裁切。
+  // 每个视口分别验证套餐草稿弹窗（PLANNER 可管理）与成本核验弹窗（PUBLISHER 可核验）。
+  for(const viewport of OVERLAY_VIEWPORTS){
+    await page.setViewportSize({width:viewport.width,height:viewport.height});
+    await page.goto(base+'/__private_operations?admin=1&profile=PLANNER&view=/admin/course-private-operations/plans');
+    await page.getByRole('button',{name:'新建套餐'}).click();
+    await editor.waitFor();await settleDialog(page);
+    await assertViewportOverlay(editor,viewport);
+    await editor.getByRole('button',{name:'取消',exact:true}).click();
+    await editor.waitFor({state:'hidden'});
+    await page.goto(base+'/__private_operations?admin=1&profile=PUBLISHER&view=/admin/course-private-operations/plans');
+    await page.getByRole('button',{name:'核验真实成本'}).click();
+    await costDialog.waitFor();await settleDialog(page);
+    await assertViewportOverlay(costDialog,viewport);
+    await costDialog.getByRole('button',{name:'取消',exact:true}).click();
+    await costDialog.waitFor({state:'hidden'});
+  }
+  await page.setViewportSize({width:1280,height:960});
+  await page.goto(base+'/__private_operations');
+  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);console.log('课程密价运营浏览器通过：本人权益/原规则续期/转回与状态未知响应恢复/套餐草稿与成本发布/权益审核/财务双权限及批准未知响应恢复/只读权限/移动暗色/外部网络隔离/弹窗视口几何');
 }finally{await browser?.close();await server.close();}

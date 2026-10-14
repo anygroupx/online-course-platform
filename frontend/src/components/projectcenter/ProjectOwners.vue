@@ -9,7 +9,7 @@
         <dl><div><dt>可用项目账户 / 客户</dt><dd>{{ row.activeAccounts }} / {{ row.activeClients }}</dd></div><div><dt>项目账户已扣 / 已转回</dt><dd>¥{{ row.accountDebited }} / ¥{{ row.accountReturned }}</dd></div><div><dt>客户额度已扣 / 已转回</dt><dd>¥{{ row.clientDebited }} / ¥{{ row.clientReturned }}</dd></div></dl><p class="record-time">最近记录 {{ recordTime(row.lastActivity) }}</p><el-button @click="openOwner(row.id)">查看经营者明细</el-button></article></div>
       <el-pagination v-if="total > 20" v-model:current-page="page" :page-size="20" :total="total" :disabled="loading" layout="prev,pager,next" @current-change="read" />
     </template>
-    <el-drawer v-model="visible" title="经营者明细" size="min(1000px,100vw)" destroy-on-close @closed="clearDetail">
+    <el-drawer v-model="visible" title="经营者明细" size="min(1000px,100vw)" destroy-on-close @closed="clearDetail" append-to-body>
       <section class="record-report"><div class="record-actions"><span class="record-id">经营者 {{ selectedId }}</span><el-button :loading="detailLoading" @click="loadDetail">刷新明细</el-button></div>
         <el-alert v-if="detailError" :title="detailError" type="warning" :closable="false" show-icon />
         <el-skeleton v-if="detailLoading" :rows="6" class="record-skeleton" />

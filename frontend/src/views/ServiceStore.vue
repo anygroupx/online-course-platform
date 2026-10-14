@@ -99,6 +99,7 @@
       size="min(700px, 100vw)"
       :close-on-click-modal="false"
       :before-close="beforeClose"
+      append-to-body
     >
       <template v-if="selected">
         <div class="checkout-steps">

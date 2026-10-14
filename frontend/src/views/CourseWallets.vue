@@ -26,7 +26,7 @@
       </el-table>
       <el-pagination v-model:current-page="page" :page-size="20" :total="total" layout="prev, pager, next, total" @current-change="load" />
     </el-card>
-    <el-dialog v-model="transferVisible" title="普通余额转入课程专户" width="min(540px, 96vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
+    <el-dialog v-model="transferVisible" title="普通余额转入课程专户" width="min(540px, 96vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" append-to-body>
       <p>绑定课程：{{ selected?.platformName }}</p><p>普通余额 ¥{{ generalBalance ?? '读取中' }} · 专户余额 ¥{{ selected?.balance }}</p>
       <el-form label-position="top" @submit.prevent="submitTransfer"><el-form-item label="转入金额（元）"><el-input v-model="amount" aria-label="转入金额" placeholder="例如100.00，最多两位小数" :disabled="busy" /></el-form-item><el-form-item label="备注（可选）"><el-input v-model="reason" aria-label="转入备注" maxlength="255" :disabled="busy" /></el-form-item></el-form>
       <p v-if="estimate" role="status">划转后普通余额 ¥{{ estimate.generalAfter }}；本课程专户 ¥{{ estimate.walletAfter }}</p>

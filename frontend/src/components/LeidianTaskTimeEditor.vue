@@ -1,6 +1,6 @@
 <template>
   <el-dialog v-model="open" title="修改任务时间" class="leidian-task-editor" width="min(560px, 95vw)"
-    :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" destroy-on-close>
+    :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" destroy-on-close append-to-body>
     <el-alert type="info" :closable="false" title="只修改这一条任务的执行时间，不增加次数，也不额外扣款。" />
     <p class="task-original">原定时间：{{ task?.time }}（北京时间）</p>
     <el-form label-position="top" :disabled="busy">

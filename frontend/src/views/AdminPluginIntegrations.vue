@@ -65,7 +65,7 @@
     <footer class="integration-footer">接口验证不会自动上架商品。请核对计费和服务说明后再向用户开放。</footer>
 
     <el-drawer v-model="drawerVisible" :title="selectedPlugin ? `${selectedWorkflow.name} · 使用与配置` : '使用与配置'"
-      size="min(740px, 100vw)" class="plugin-integration-drawer" destroy-on-close>
+      size="min(740px, 100vw)" class="plugin-integration-drawer" destroy-on-close append-to-body>
       <template v-if="selectedPlugin">
         <div class="drawer-source"><span class="source-id">{{ selectedPlugin.id }}</span><span>{{ selectedWorkflow.summary }}</span></div>
         <el-tabs v-model="activeTab" class="integration-tabs">
