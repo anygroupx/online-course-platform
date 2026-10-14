@@ -49,6 +49,8 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class CourseOrderServiceImpl implements CourseOrderService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private CoursePrivateFulfillmentService fulfillment;
 
     private static final int MAX_COURSE_ID_LENGTH = 2048;
 
@@ -81,7 +83,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public Long createOrder(OrderCreateRequest request, Long userId) {
         if (request != null && request.getCourseId() != null
                 && request.getCourseId().length() > MAX_COURSE_ID_LENGTH) {
@@ -105,9 +107,9 @@ public class CourseOrderServiceImpl implements CourseOrderService {
             }
         }
         CoursePlatform platform = pricingService.requirePlatform(request.getPlatformId());
-        CoursePricingService.PriceDecision decision = pricingService.decide(user, platform, true);
+        CoursePricingService.PriceDecision decision = request.getCheckoutIntent()==null&&request.getExpectedPolicyTermId()==null&&request.getExpectedPolicyVersionId()==null&&request.getExpectedPolicyExpiresAt()==null?pricingService.decide(user, platform, true):pricingService.decide(user, platform, true, request);
         if (request.getExpectedAmount() != null && request.getExpectedAmount().compareTo(decision.finalPrice()) != 0
-                || request.getExpectedContractVersion() != null && !java.util.Objects.equals(request.getExpectedContractVersion(), decision.contractVersion())
+                || !"GENERAL_EXPLICIT".equals(request.getCheckoutIntent()) && !decision.acceptsContractVersion(request.getExpectedContractVersion()) && !decision.matchesPrivatePolicy(request)
                 || request.getExpectedPriceSource() != null && !request.getExpectedPriceSource().equals(decision.priceSource())
                 || request.getExpectedPaymentSource() != null && !request.getExpectedPaymentSource().equals(decision.paymentSource()))
             throw new BusinessException(ResultCode.CONFLICT, "课程价格或协议版本已变化，请重新确认");
@@ -146,6 +148,8 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         order.setPrivateContractId(decision.contractId());
         order.setContractVersion(decision.contractVersion());
         order.setWalletId(decision.walletId());
+        // 当前周期来自账户锁下的统一报价，客户端无权自行指定成交周期或规则版本。
+        if(decision.term()!=null){order.setPrivateTermId(decision.term().getId());order.setPrivateTermVersion(decision.term().getVersion());order.setPrivatePlanVersionId(decision.term().getVersionId());order.setPrivateOperationsMode(decision.term().getOperationsMode());}
         order.setClientRequestId(request.getClientRequestId());
         order.setRequestFingerprint(request.getClientRequestId() == null ? null : fingerprint);
         order.setIsFastMode(request.getIsFastMode() != null && request.getIsFastMode() ? 1 : 0);
@@ -381,7 +385,10 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         if (result.getExamStartTime() != null) order.setExamStartTime(result.getExamStartTime());
         if (result.getExamEndTime() != null) order.setExamEndTime(result.getExamEndTime());
 
-        courseOrderMapper.updateById(order);
+        // 原对象保留上次完成证据供提交后审计，不让HTTP期间的退款或归档被旧快照覆盖。
+        CourseOrder before=new CourseOrder();org.springframework.beans.BeanUtils.copyProperties(order,before);before.setOrderStatus(previousOrderStatus);before.setProgress(previousProgress);before.setRemarks(previousRemarks);
+        if(courseOrderMapper.updateUpstreamIfUnchanged(order,previousOrderStatus,order.getApiProviderId(),order.getThirdOrderId())!=1)throw new BusinessException(ResultCode.CONFLICT,"订单已变更、取消或退款，本次进度未覆盖");
+        if(order.getPrivateTermId()!=null){if(fulfillment==null)throw new BusinessException(ResultCode.CONFLICT,"可信履约服务不可用");fulfillment.recordUpstream(before,result);}
         progressLogService.recordIfChanged(order, previousProgress, previousOrderStatus, previousRemarks,
                 CourseOrderProgressLog.SOURCE_MANUAL_REFRESH);
         log.info("订单进度更新成功：orderId={}, progress={}", orderId, result.getProgress());

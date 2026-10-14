@@ -27,7 +27,8 @@ const pageData = (records) => ({ records, total: records.length, current: 1, siz
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r }); return { promise, resolve } }
 try {
   await server.listen(); const base = server.resolvedUrls.local[0].replace(/\/$/, '')
-  browser = await chromium.launch({ executablePath: existsSync('/snap/bin/chromium') ? '/snap/bin/chromium' : undefined, args: ['--no-sandbox', '--disable-dev-shm-usage'] })
+  // 优先使用明确指定的浏览器，未指定时保留原默认行为。
+  browser = await chromium.launch({ executablePath: process.env.BROWSER_PATH || (existsSync('/snap/bin/chromium') ? '/snap/bin/chromium' : undefined), args: ['--no-sandbox', '--disable-dev-shm-usage'] })
   const context = await browser.newContext({ viewport: { width: 1440, height: 1050 } })
   await context.route('**/*', async (route) => {
     const request = route.request(), url = new URL(request.url())

@@ -109,7 +109,8 @@ let base
 test.before(async () => {
   await server.listen()
   base = `http://127.0.0.1:${server.config.server.port}`
-  browser = await chromium.launch({ headless: true })
+  // 优先使用明确指定的浏览器，未指定时保留 Playwright 默认行为。
+  browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_PATH || undefined })
 })
 
 test.after(async () => {

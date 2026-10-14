@@ -64,6 +64,7 @@ class CourseOrderProgressTest {
         order.setProgress("25%");
         when(orders.selectById(42L)).thenReturn(order);
         when(orders.selectOne(any())).thenReturn(order);
+        when(orders.updateUpstreamIfUnchanged(any(),any(),any(),any())).thenReturn(1);
         platform = new CoursePlatform();
         platform.setId(17L);
         platform.setDockApiId(6L);
@@ -128,7 +129,7 @@ class CourseOrderProgressTest {
         assertEquals(1, order.getOrderStatus());
         assertEquals("进行中", order.getRemarks());
         assertEquals(end, order.getCourseEndTime());
-        verify(orders).updateById(order);
+        verify(orders).updateUpstreamIfUnchanged(order,null,6L,null);
         verify(progressLogs).recordIfChanged(order, "25%", null, null,
                 com.course.platform.domain.entity.CourseOrderProgressLog.SOURCE_MANUAL_REFRESH);
     }

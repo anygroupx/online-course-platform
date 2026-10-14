@@ -1,0 +1,32 @@
+package com.course.platform.service.impl;
+
+import com.course.platform.common.exception.BusinessException;
+import com.course.platform.domain.dto.*;
+import com.course.platform.infra.persistence.mapper.*;
+import org.junit.jupiter.api.*;
+import java.util.List;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+/** 本人申请、审核和周期开通共用真实Mapper事务，跨用户输入不得改变资金归属。 */
+class CoursePrivateApplicationTransactionTest {
+    CoursePrivateTermLifecycleTransactionTest f;
+    CoursePrivateApplicationService service;
+    @BeforeEach void setup() throws Exception {
+        f=new CoursePrivateTermLifecycleTransactionTest();f.setup();f.f.jdbc.update("DELETE FROM course_private_application");f.f.jdbc.update("UPDATE sys_user SET uid=CASE id WHEN 7 THEN '00000000-0000-4000-8000-000000000007' ELSE '00000000-0000-4000-8000-000000000008' END");
+        var authority=mock(UserAuthorityMapper.class);when(authority.findAuthoritiesByUserId(8L)).thenReturn(List.of("course-private-contract:review"));
+        var target=new CoursePrivateApplicationService(f.f.users,f.products,f.plans,f.versions,f.applications,f.f.contracts,f.terms,f.service,new CoursePricingService(f.f.users,f.products,mock(PlatformCategoryMapper.class),f.f.contracts,f.f.wallets,f.clock),new CoursePrivateOperationsAccess(f.f.users,authority),f.json,new CoursePrivateOperationsTime(f.clock));
+        org.springframework.test.util.ReflectionTestUtils.setField(target,"enabled",true);var proxy=new org.springframework.aop.framework.ProxyFactory(target);proxy.addAdvice(new org.springframework.transaction.interceptor.TransactionInterceptor(f.f.tx.getTransactionManager(),new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource()));service=(CoursePrivateApplicationService)proxy.getProxy();f.auth(7);
+    }
+    @AfterEach void clear(){f.clear();}
+    CoursePrivateApplicationRequest request(String key){var request=new CoursePrivateApplicationRequest();request.setPlanId(1L);request.setPlanVersionId(1L);request.setReason("申请三十天预存规则");request.setRequestKey(key);return request;}
+    @Test void selfRequestHasNoWalletMoneyUntilReviewed(){var app=service.submit(7L,request("one"));assertEquals("PENDING",app.get("status"));assertEquals("申请三十天预存规则",app.get("applicationReason"));assertNull(f.f.contracts.selectByBinding(7L,9L));assertNull(f.f.wallets.selectByBinding(7L,9L));f.f.money("500",f.f.balance("sys_user",7));assertFalse(app.containsKey("userId"));assertFalse(app.containsKey("operationFingerprint"));}
+    @Test void retryPreservesOneRequestAndChangedCommandConflicts(){var app=service.submit(7L,request("one"));assertEquals(app.get("id"),service.submit(7L,request("one")).get("id"));var altered=request("one");altered.setReason("另一个确认条件");assertThrows(BusinessException.class,()->service.submit(7L,altered));assertEquals(1,f.f.jdbc.queryForObject("SELECT COUNT(*) FROM course_private_application",Integer.class));}
+    @Test void approvalCreatesRealPendingCycleAndKeepsOriginalReason(){var app=service.submit(7L,request("one"));f.auth(8);var reviewed=service.review((Long)app.get("id"),0,8L,true,"审核固定预存条件");assertEquals("APPROVED",reviewed.get("status"));assertEquals("申请三十天预存规则",reviewed.get("applicationReason"));assertEquals("审核固定预存条件",reviewed.get("reviewReason"));assertEquals("PENDING_ACTIVATION",f.current().getStatus());f.f.money("0",f.wallet().getBalance());}
+    @Test void rejectionAndOwnerCancellationHaveNoFinancialEffects(){var first=service.submit(7L,request("one"));service.cancel(7L,(Long)first.get("id"));assertEquals("CANCELLED",f.applications.selectById((Long)first.get("id")).getStatus());var second=service.submit(7L,request("two"));f.auth(8);assertEquals("REJECTED",service.review((Long)second.get("id"),0,8L,false,"尚不符合条件").get("status"));assertNull(f.f.wallets.selectByBinding(7L,9L));f.f.money("500",f.f.balance("sys_user",7));}
+    @Test void foreignOwnerCannotCancelAndHiddenPlansCannotBeSelfAssigned(){var app=service.submit(7L,request("one"));f.auth(8);assertThrows(BusinessException.class,()->service.cancel(8L,(Long)app.get("id")));f.auth(7);f.f.jdbc.update("UPDATE course_private_plan SET visible_to_agents=FALSE WHERE id=1");assertThrows(BusinessException.class,()->service.submit(7L,request("hidden")));}
+    @Test void adminAssignmentUsesExactPublicUidForPrivatePlan(){f.f.jdbc.update("UPDATE course_private_plan SET visible_to_agents=FALSE WHERE id=1");var request=new AdminCoursePrivateApplicationRequest();org.springframework.beans.BeanUtils.copyProperties(request("assignment"),request);request.setUserUid("00000000-0000-4000-8000-000000000007");f.auth(8);var app=service.assign(request,8L);assertEquals("00000000-0000-4000-8000-000000000007",app.get("userUid"));assertEquals("PENDING",app.get("status"));assertNull(f.f.wallets.selectByBinding(7L,9L));}
+    @Test void submissionActorComesFromSessionForBothSelfAndAdministrativeAssignment(){var app=service.submit(7L,request("self_actor"));assertEquals(7L,f.applications.selectById((Long)app.get("id")).getSubmittedBy());var request=new AdminCoursePrivateApplicationRequest();org.springframework.beans.BeanUtils.copyProperties(request("admin_actor"),request);request.setUserUid("00000000-0000-4000-8000-000000000007");f.auth(8);var assigned=service.assign(request,8L);assertEquals(8L,f.applications.selectById((Long)assigned.get("id")).getSubmittedBy());}
+    @Test void adminCannotImpersonateOwnerRejoinConsent(){var app=service.submit(7L,request("open"));f.auth(8);service.review((Long)app.get("id"),0,8L,true,"审核");f.f.jdbc.update("UPDATE course_private_contract SET status='TERMINATED'");var request=new AdminCoursePrivateApplicationRequest();org.springframework.beans.BeanUtils.copyProperties(request("forged_rejoin"),request);request.setApplicationType("REJOIN");request.setAcknowledgeLegacyChange(true);request.setUserUid("00000000-0000-4000-8000-000000000007");assertThrows(BusinessException.class,()->service.assign(request,8L));assertEquals(1,f.f.jdbc.queryForObject("SELECT COUNT(*) FROM course_private_application",Integer.class));}
+    @Test void publicAutoPlanActuallyCreatesCycleWithoutCharging() throws Exception {f.config.setApplicationMode("AUTO");f.seed();f.f.jdbc.update("DELETE FROM course_private_application");var app=service.submit(7L,request("auto"));assertEquals("APPROVED",app.get("status"));assertEquals("PENDING_ACTIVATION",f.current().getStatus());f.f.money("500",f.f.balance("sys_user",7));f.f.money("0",f.wallet().getBalance());}
+}

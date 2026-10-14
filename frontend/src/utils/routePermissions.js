@@ -1,6 +1,12 @@
 import { hasAnyPermission, hasAllPermissions, hasRole } from './permissions.js';
 
 export const routePermissions = Object.freeze({
+  '/admin/course-private-operations/analytics':['course-private-analytics:read'],
+  '/admin/course-private-operations/plans':['course-private-plan:read','course-private-plan:manage','course-private-plan:publish','course-private-cost:verify','course-private-risk:approve'],
+  '/admin/course-private-operations/applications':['course-private-contract:review'],
+  '/admin/course-private-operations/releases':['course-wallet-release:review','course-wallet:audit'],
+  '/admin/course-private-operations/contracts':['course-private-term:read'],
+  '/admin/course-private-operations/terms':['course-private-term:read'],
   '/admin/course-private-contracts': ['course-private-price:read', 'course-private-price:manage'],
   '/admin/course-wallets': ['course-wallet:read:any', 'course-wallet:audit', 'course-wallet:release'],
   '/settings': ['system-config:read', 'system-config:update'],

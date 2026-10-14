@@ -23,6 +23,11 @@ public class OrderCreateRequest {
     private Integer expectedContractVersion;
     private String expectedPriceSource;
     private String expectedPaymentSource;
+    /** 普通价属于独立明确意图，冻结政策身份只用于校验，不成为普通订单的密价绑定。 */
+    private String checkoutIntent;
+    private Long expectedPolicyTermId;
+    private Long expectedPolicyVersionId;
+    private java.time.LocalDateTime expectedPolicyExpiresAt;
 
     /**
      * 课程平台ID

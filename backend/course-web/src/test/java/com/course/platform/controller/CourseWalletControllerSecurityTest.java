@@ -34,6 +34,12 @@ class CourseWalletControllerSecurityTest {
     static class Config {
         @Bean CoursePrivateContractService contracts() { return mock(CoursePrivateContractService.class); }
         @Bean CourseReservedWalletService funds() { return mock(CourseReservedWalletService.class); }
+        // 资金Bean现在具有周期依赖，夹具补齐依赖但保留原财务权限全部断言。
+        @Bean com.course.platform.service.impl.CoursePrivateLegacySyncService legacySync(){return mock(com.course.platform.service.impl.CoursePrivateLegacySyncService.class);}
+        @Bean com.course.platform.service.impl.CoursePrivateTermService privateTerms() { return mock(com.course.platform.service.impl.CoursePrivateTermService.class); }
+        @Bean com.course.platform.service.impl.CoursePrivateRenewalService renewal() { return mock(com.course.platform.service.impl.CoursePrivateRenewalService.class); }
+        @Bean com.course.platform.service.impl.CoursePrivateUpgradeService upgrade(){return mock(com.course.platform.service.impl.CoursePrivateUpgradeService.class);}
+        @Bean com.course.platform.service.impl.CoursePrivateSettlementService settlement(){return mock(com.course.platform.service.impl.CoursePrivateSettlementService.class);}
         @Bean CourseWalletController mine(CoursePrivateContractService contracts,CourseReservedWalletService funds) { return new CourseWalletController(contracts,funds); }
         @Bean AdminCourseWalletController admin(CoursePrivateContractService contracts,CourseReservedWalletService funds) { return new AdminCourseWalletController(contracts,funds); }
     }

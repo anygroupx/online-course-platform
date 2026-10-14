@@ -12,7 +12,7 @@ permissions:
 jobs:
   authorization:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,9 +42,15 @@ jobs:
       - name: Frontend unit tests and production build
         run: npm --prefix frontend test && npm --prefix frontend run build
       - name: UI workflow regressions
+        # 全量命令包含新增运营浏览器脚本，任一脚本失败都必须阻断门禁。
         run: npm --prefix frontend run test:browser
       - name: Isolated MySQL migration and FK regressions
-        run: docker pull mysql:8.0 && python3 database/tests/rbac_mysql.py
+        # 每个脚本自行创建隔离容器；038 资金回归与039运营升级均为实际门禁。
+        run: |
+          docker pull mysql:8.0
+          python3 database/tests/rbac_mysql.py
+          python3 database/tests/course_private_wallet_mysql.py
+          python3 database/tests/course_private_operations_mysql.py
       - name: Save test reports and RBAC screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -53,3 +59,5 @@ jobs:
           path: |
             backend/**/target/surefire-reports/
             .cache/rbac-verification/browser/
+            .cache/native-service-ui/
+            .cache/course-private-operations-*.png

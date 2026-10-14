@@ -117,6 +117,20 @@ logging:
     max-history: 30
 
 course:
+  # 灰度开关只控制新增运营行为，历史账本读取和退款仍按原来源处理。
+  private-operations:
+    general-checkout-enabled: ${COURSE_PRIVATE_GENERAL_CHECKOUT_ENABLED:false}
+    # 039迁移核对后先开启旧入口投影同步，再逐步开放新销售。
+    legacy-sync-enabled: ${COURSE_PRIVATE_OPERATIONS_LEGACY_SYNC_ENABLED:false}
+    notifications-enabled: ${COURSE_PRIVATE_OPERATIONS_NOTIFICATIONS_ENABLED:false}
+    # 自动续期必须同时满足独立灰度开关和原周期冻结的renewalAuto规则。
+    enabled: ${COURSE_PRIVATE_OPERATIONS_ENABLED:false}
+    auto-renewal-enabled: ${COURSE_PRIVATE_AUTO_RENEWAL_ENABLED:false}
+    auto-upgrade-enabled: ${COURSE_PRIVATE_AUTO_UPGRADE_ENABLED:false}
+    # 对账独立于新申请开关，关闭新增运营后仍可维护已经存在的周期和历史退款。
+    worker-enabled: ${COURSE_PRIVATE_OPERATIONS_WORKER_ENABLED:false}
+    worker-delay-ms: ${COURSE_PRIVATE_OPERATIONS_WORKER_DELAY_MS:5000}
+    time-zone: ${COURSE_PRIVATE_OPERATIONS_TIME_ZONE:Asia/Shanghai}
   private-wallet:
     # 必须先执行038迁移并核对权限，再允许创建协议和资金转入。
     enabled: ${COURSE_PRIVATE_WALLET_ENABLED:false}

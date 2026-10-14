@@ -168,7 +168,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
                     user == null ? ip : user, new RateLimitProperties.Rule(12, 60), "project-report"));
         }
         if (isWrite(method) && (path.startsWith("/course-wallets/") || path.startsWith("/admin/course-wallets/")
-                || path.startsWith("/admin/course-private-contracts"))) {
+                || path.startsWith("/admin/course-private-contracts") || path.startsWith("/course-private-operations/")
+                || path.startsWith("/admin/course-private-operations/"))) {
             values.add(new Limit("course-wallet:" + (user == null ? "ip" : "user"),
                     user == null ? ip : user, properties.getPaymentUser(), "course-wallet"));
         }

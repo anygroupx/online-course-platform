@@ -30,6 +30,25 @@ public class CourseOrder implements Serializable {
     private Long walletId;
     @TableField(updateStrategy = FieldStrategy.NEVER)
     private Integer contractVersion;
+    /** 成交周期快照不可随套餐修改，退款和消费结算必须追溯原周期。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private Long privateTermId;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private Integer privateTermVersion;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private Long privatePlanVersionId;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String privateOperationsMode;
+    /** 只由可信状态转换SQL写入，普通实体更新不能伪造完成事实。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private LocalDateTime fulfilledAt;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String fulfillmentSource;
+    /** 上游确认时刻只是完成的时间上界，实际完成时间未知时必须单独保存。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private LocalDateTime completionConfirmedAt;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String completionConfirmationSource;
     @TableField(updateStrategy = FieldStrategy.NEVER)
     private String clientRequestId;
     @TableField(updateStrategy = FieldStrategy.NEVER)
