@@ -41,10 +41,15 @@ export const useTagsViewStore = defineStore('tagsView', () => {
   }
 
   // 添加缓存视图
+  // keep-alive 的 include 按「组件自身的 name」匹配（Vue 在 <script setup> 下
+  // 取文件名推断的 __name），而路由的 name 是另一套命名。两者不一致时缓存永远
+  // 不生效，所以优先取路由声明的 keepAliveName。
+  const cacheNameOf = (view) => view.meta?.keepAliveName || view.name
   const addCachedView = (view) => {
-    if (cachedViews.value.includes(view.name)) return
+    const name = cacheNameOf(view)
+    if (!name || cachedViews.value.includes(name)) return
     if (view.meta?.keepAlive !== false) {
-      cachedViews.value.push(view.name)
+      cachedViews.value.push(name)
     }
   }
 
@@ -70,7 +75,7 @@ export const useTagsViewStore = defineStore('tagsView', () => {
 
   // 删除缓存视图
   const delCachedView = (view) => {
-    const index = cachedViews.value.indexOf(view.name)
+    const index = cachedViews.value.indexOf(cacheNameOf(view))
     if (index > -1) {
       cachedViews.value.splice(index, 1)
     }
@@ -97,7 +102,7 @@ export const useTagsViewStore = defineStore('tagsView', () => {
 
   // 删除其他缓存视图
   const delOthersCachedViews = (view) => {
-    const index = cachedViews.value.indexOf(view.name)
+    const index = cachedViews.value.indexOf(cacheNameOf(view))
     if (index > -1) {
       cachedViews.value = cachedViews.value.slice(index, index + 1)
     } else {
