@@ -45,3 +45,7 @@ Action全部固定官方实际提交SHA；OSV改扫描CycloneDX聚合Maven实际
 SafeHttpClient的单行Semgrep传输套接字命中已核对为OkHttp默认TLS包装前的未连接socket；保留禁止SOCKS/固定DNS及证书核验，仅对此行加中文证据说明，原TLS失败、代理和重定向测试通过。其余SAST问题通过实际修复消除，远端复扫结果待获取。
 
 部署五文件真实验证：原配置漏洞红例、4份修改后nginx-t＋HTTP/API/CSP/cache绿例；完整生产前端镜像构建、UID101、cap-drop ALL、原80端口、Turnstile公开参数、入口页禁缓存/静态一年缓存、可信Host且保留Origin、Docker HEALTHCHECK healthy均exit0。证据及可复跑脚本保存在`.cache/deployment-security/`；本地Semgrep安装网络失败，停止重复安装，等待远端复扫。
+
+## 远端干净构建补验
+
+提交dcc8973的远端Semgrep、Trivy、Gitleaks均实际通过；OSV对141包实际解析清单仅报前述两项Spring漏洞，保持失败阻断。安全专项和RBAC在干净编译中暴露OperationLogSearchServiceImpl旧RangeQuery API与8.18客户端不兼容。之前2554项属于增量测试，不可代替完整源码干净构建；已修正为日期范围变体，保持包含上下端点的原语义，已用`mvn -B -f backend/pom.xml -pl course-web -am clean verify -Drbac.browser=true`从空target完整重编译、测试并打包：23:15:40 BUILD SUCCESS、exit0，common7＋web2547＝2554，失败/错误/跳过均0。日志`.cache/course-operations-clean-verify.log`。远端同头复验仍待结果。
