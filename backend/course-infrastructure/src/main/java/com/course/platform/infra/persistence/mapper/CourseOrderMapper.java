@@ -1,6 +1,7 @@
 package com.course.platform.infra.persistence.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.course.platform.common.constant.Constants;
 import com.course.platform.domain.entity.CourseOrder;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -102,12 +103,17 @@ public interface CourseOrderMapper extends BaseMapper<CourseOrder> {
      * 使用完整匹配更新订单进度（参考 benztb.php 的5字段匹配）
      * 匹配字段：user + pass + kcname + third_order_id + apiProviderId
      * benztb.php 第56行的精确匹配逻辑
+     *
+     * <p>终态订单（已完成/已取消/失败/考试完成/等待退款）被排除：命中它们只会无条件刷新
+     * {@code update_time}，使已完成订单一直显示为正在同步。没有真实进度变化的重复同步
+     * 应当零行命中。</p>
      */
     @Update("UPDATE course_order SET order_status = #{orderStatus}, progress = #{progress}, " +
             "remarks = #{remarks}, course_start_time = #{courseStartTime}, course_end_time = #{courseEndTime}, " +
             "exam_start_time = #{examStartTime}, exam_end_time = #{examEndTime}, update_time = NOW() " +
             "WHERE student_account = #{studentAccount} AND student_password = #{studentPassword} " +
-            "AND course_name = #{courseName} AND third_order_id = #{thirdOrderId} AND api_provider_id = #{apiProviderId}")
+            "AND course_name = #{courseName} AND third_order_id = #{thirdOrderId} AND api_provider_id = #{apiProviderId} " +
+            "AND order_status NOT IN (" + Constants.TERMINAL_ORDER_STATUSES_CSV + ")")
     int updateOrderProgressByFullMatch(@Param("studentAccount") String studentAccount,
                                         @Param("studentPassword") String studentPassword,
                                         @Param("courseName") String courseName,

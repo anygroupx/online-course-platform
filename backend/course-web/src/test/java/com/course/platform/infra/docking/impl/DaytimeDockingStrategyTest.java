@@ -24,6 +24,7 @@ import org.apache.ibatis.builder.MapperBuilderAssistant;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -484,7 +485,7 @@ class DaytimeDockingStrategyTest {
     }
 
     @Test
-    @DisplayName("批量查单按 providerId 过滤本地订单，且不区分订单状态")
+    @DisplayName("批量查单按 providerId 过滤本地订单，并排除终态订单")
     @SuppressWarnings({"rawtypes", "unchecked"})
     void batchQuery_shouldFilterLocalOrdersByProviderOnly() {
         when(courseOrderMapper.selectList(any(LambdaQueryWrapper.class)))
@@ -500,8 +501,33 @@ class DaytimeDockingStrategyTest {
         assertTrue(sql.contains("api_provider_id"), () -> "unexpected sql: " + sql);
         assertTrue(sql.contains("student_account"), () -> "unexpected sql: " + sql);
         assertTrue(sql.contains("ORDER BY"), () -> "unexpected sql: " + sql);
-        // 终态订单不额外过滤：上游按账号聚合返回全部订单。
-        assertFalse(sql.contains("order_status"), () -> "unexpected sql: " + sql);
+        // 终态订单必须排除，否则已完成订单会被每轮定时任务反复重查重写。
+        assertTrue(sql.contains("order_status"), () -> "unexpected sql: " + sql);
+    }
+
+    @Test
+    @DisplayName("批量查单必须排除全部终态订单状态，否则已完成订单会一直显示在同步")
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void batchQuery_shouldExcludeEveryTerminalStatus() {
+        when(courseOrderMapper.selectList(any(LambdaQueryWrapper.class)))
+                .thenReturn(List.of(localOrder("remote-1", ACCOUNT_A, "pw-a", "课程甲")));
+        when(apiHttpClient.postForString(eq(provider), eq("https://daytime.example/api.php?act=chadan"), anyMap()))
+                .thenReturn("{\"code\":1,\"data\":[]}");
+
+        strategy.batchQueryOrderProgress(provider, 1000L, 0);
+
+        ArgumentCaptor<LambdaQueryWrapper<CourseOrder>> captor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(courseOrderMapper).selectList(captor.capture());
+        LambdaQueryWrapper<CourseOrder> wrapper = captor.getValue();
+        String sql = wrapper.getSqlSegment();
+        assertTrue(sql.contains("NOT IN"), () -> "终态订单未排除: " + sql);
+
+        // 五个终态都必须出现在 NOT IN 的绑定参数里（已完成/已取消/失败/考试完成/等待退款）。
+        Collection<Object> boundValues = wrapper.getParamNameValuePairs().values();
+        for (Integer terminal : Constants.TERMINAL_ORDER_STATUSES) {
+            assertTrue(boundValues.contains(terminal),
+                    () -> "终态状态 " + terminal + " 未出现在 NOT IN 绑定参数中: " + boundValues);
+        }
     }
 
     private CourseOrder localOrder(String thirdOrderId, String account, String password, String courseName) {

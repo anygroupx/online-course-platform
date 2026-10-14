@@ -24,6 +24,7 @@ import com.course.platform.application.service.platform.ApiProviderService;
 import com.course.platform.application.service.order.CourseOrderProgressLogService;
 import com.course.platform.application.service.platform.PlatformDockingService;
 import com.course.platform.application.service.platform.docking.PlatformDockingStrategy;
+import com.course.platform.common.constant.Constants;
 import com.course.platform.infra.docking.PlatformDockingStrategyFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -522,7 +523,9 @@ public class PlatformDockingServiceImpl implements PlatformDockingService {
                                         .eq(CourseOrder::getStudentPassword, result.getStudentPassword())
                                         .eq(CourseOrder::getCourseName, result.getCourseName())
                                         .eq(CourseOrder::getThirdOrderId, result.getThirdOrderId())
-                                        .eq(CourseOrder::getApiProviderId, apiProviderId));
+                                        .eq(CourseOrder::getApiProviderId, apiProviderId)
+                                        // 已终态的订单不再回写：命中它只会刷新 update_time，让已完成订单一直显示在同步。
+                                        .notIn(CourseOrder::getOrderStatus, Constants.TERMINAL_ORDER_STATUSES));
 
                         // Native orders have a bound remote order ID; do not guess missing IDs from a course name.
                         int updated = courseOrderMapper.updateOrderProgressByFullMatch(
