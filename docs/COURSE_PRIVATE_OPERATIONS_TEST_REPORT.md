@@ -33,3 +33,15 @@ Java 17＋正式Chromium执行 `mvn -f backend/pom.xml test -Drbac.browser=true`
 独立审查发现并修复RR旧快照分配重复版本及明确业务拒绝后的复核恢复锁死。后续补当前数据库权限撤销、原普通余额退款、开关关闭/恢复权益后的拒绝、旧请求指纹、批量物化金融意图与对账告警测试。
 
 远程GitHub必需RBAC、安全专项、Gitleaks、OSV、npm audit、Semgrep、Trivy尚未获得本次提交绿色结果。工作流已接入新测试并移除必需门禁的continue-on-error/失败吞并；只有实际远程成功才能标为通过。没有声明安全扫描、PR合并或生产部署完成。
+
+## 首轮远端与独立复审修复（23:02更新）
+
+草稿PR [#4](https://github.com/anygroupx/online-course-platform/pull/4) 基于完整钱包分支，首提交74afda9。远端Gitleaks、安全专项真实通过；RBAC仍待取得终态。首轮OSV/Trivy发现旧依赖漏洞，Semgrep报29项（Action可变引用、原部署配置、HTTP传输套接字）。没有把这些失败改写为通过。
+
+独立资金复审另实证迟到存量升级吞掉新期内50元转入：复现先失败，再按冻结start关闭水位后通过，修复提交769aaa6。定向升级/HTTP安全32项通过。完整Java17回归在Boot3.5.16及实际解析依赖补丁后，23:01:58 BUILD SUCCESS、exit0：common7＋web2547＝2554，失败/错误/跳过均0。日志`.cache/course-operations-backend-dependency-patched.log`。
+
+Action全部固定官方实际提交SHA；OSV改扫描CycloneDX聚合Maven实际解析清单（141包），避免私有reactor模块查公共仓库失败和漏掉传递依赖。替换原支付SDK的旧dom4j/bcprov，保留SDK接口并通过原支付回归。完整清单仅余GHSA-j9f9-w8pj-32f8与GHSA-pc63-qcmh-9cmg；当前没有XSLT视图或SSE片段使用，但依赖版本仍被公告列为受影响，未加入扫描例外、未声明0漏洞。策略已通过三术提交选择，工具300秒超时未获得回答；超时不构成批准。
+
+SafeHttpClient的单行Semgrep传输套接字命中已核对为OkHttp默认TLS包装前的未连接socket；保留禁止SOCKS/固定DNS及证书核验，仅对此行加中文证据说明，原TLS失败、代理和重定向测试通过。其余SAST问题通过实际修复消除，远端复扫结果待获取。
+
+部署五文件真实验证：原配置漏洞红例、4份修改后nginx-t＋HTTP/API/CSP/cache绿例；完整生产前端镜像构建、UID101、cap-drop ALL、原80端口、Turnstile公开参数、入口页禁缓存/静态一年缓存、可信Host且保留Origin、Docker HEALTHCHECK healthy均exit0。证据及可复跑脚本保存在`.cache/deployment-security/`；本地Semgrep安装网络失败，停止重复安装，等待远端复扫。
