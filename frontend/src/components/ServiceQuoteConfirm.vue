@@ -9,6 +9,7 @@
     :close-on-press-escape="!sending"
     :show-close="!sending"
     @close="close"
+    append-to-body
   >
     <template v-if="quote">
       <p class="quote-context">

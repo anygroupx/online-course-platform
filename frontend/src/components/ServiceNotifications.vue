@@ -8,6 +8,7 @@
     :close-on-press-escape="!busy"
     :before-close="beforeClose"
     destroy-on-close
+    append-to-body
   >
     <div v-loading="loading" class="notification-panel">
       <span class="eyebrow">NOTIFICATIONS / 本人通知接收</span>

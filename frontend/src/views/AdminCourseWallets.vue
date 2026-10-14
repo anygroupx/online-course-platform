@@ -26,7 +26,7 @@
         <el-table-column label="操作" width="260" fixed="right"><template #default="{row}"><el-button v-if="canManage" size="small" @click="openContract(row)">修改协议</el-button><el-button v-if="canContracts || canAudit" size="small" @click="showRecords(row.contractId || row.id,'history')">变更历史</el-button><el-button v-if="canWallet" size="small" @click="showRecords(row.walletId || row.id,'ledger')">资金流水</el-button><el-button v-if="canRelease" size="small" type="warning" @click="openRelease(row)">财务转回</el-button></template></el-table-column>
       </el-table><el-pagination v-model:current-page="page" :page-size="20" :total="total" layout="prev, pager, next, total" @current-change="load" />
     </el-card>
-    <el-dialog v-model="contractVisible" :title="editingId?'修改课程密价协议':'创建课程密价协议'" width="min(640px, 96vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
+    <el-dialog v-model="contractVisible" :title="editingId?'修改课程密价协议':'创建课程密价协议'" width="min(640px, 96vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" append-to-body>
       <el-form label-position="top">
         <el-form-item label="代理账号（精确绑定公开UUID）"><el-select v-if="canSearchUsers && !editingId" v-model="form.userUid" remote filterable :remote-method="searchUsers" :loading="searchLoading" placeholder="搜索代理账号或UUID" style="width:100%" aria-label="选择协议代理"><el-option v-for="user in userOptions" :key="user.uid" :value="user.uid" :label="`${user.username} · ${user.uid}`" /></el-select><el-input v-else v-model="form.userUid" aria-label="协议代理UUID" placeholder="代理公开UUID" :disabled="!!editingId || busy" /></el-form-item>
         <el-form-item label="绑定课程商品"><el-select v-model="form.platformId" aria-label="协议绑定课程" filterable :disabled="!!editingId || busy" style="width:100%"><el-option v-for="p in platforms" :key="p.id" :value="p.id" :label="p.displayName || p.name" /></el-select></el-form-item>
@@ -42,7 +42,7 @@
       <el-alert v-if="formError" :title="formError" type="error" :closable="false" />
       <template #footer><el-button :disabled="busy" @click="contractVisible=false">取消</el-button><el-button type="primary" :loading="busy || referenceLoading" :disabled="referenceLoading" @click="saveContract">保存协议</el-button></template>
     </el-dialog>
-    <el-dialog v-model="releaseVisible" title="财务批准专户转回" width="min(520px, 96vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
+    <el-dialog v-model="releaseVisible" title="财务批准专户转回" width="min(520px, 96vw)" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy" append-to-body>
       <p>目标代理：{{ selected?.username || selected?.userUid }}</p><p>绑定课程 {{ selected?.platformName }} · 专户余额 ¥{{ selected?.balance }}</p>
       <el-alert title="此操作代表财务审批；只能将该代理预存款退回同一代理的普通余额。请先核查资金流水和未结算事项。" type="warning" :closable="false" />
       <el-form label-position="top"><el-form-item label="批准转回金额（元）"><el-input v-model="releaseAmount" aria-label="批准转回金额" :disabled="busy" /></el-form-item><el-form-item label="审批原因（必填）"><el-input v-model="releaseReason" aria-label="审批原因" type="textarea" maxlength="255" :disabled="busy" /></el-form-item></el-form>

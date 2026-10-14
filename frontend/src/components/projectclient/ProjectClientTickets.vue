@@ -1,6 +1,6 @@
 <template>
   <el-drawer v-model="open" title="客户售后" size="min(880px,100vw)" class="client-tickets" destroy-on-close
-    :close-on-click-modal="false" :close-on-press-escape="!busy" :before-close="close">
+    :close-on-click-modal="false" :close-on-press-escape="!busy" :before-close="close" append-to-body>
     <header class="ticket-header">
       <span class="eyebrow">LOCAL AFTER-SALES / 客户售后</span>
       <h2>{{ context?.label || '我的客户工单' }}</h2>

@@ -18,6 +18,7 @@
       width="460px"
       :close-on-click-modal="false"
       @closed="clearAction"
+      append-to-body
     >
       <el-alert
         v-if="selectedAction === 'CANCEL_REFUND'"
@@ -59,6 +60,7 @@
       width="520px"
       :close-on-click-modal="false"
       @closed="clearVerification"
+      append-to-body
     >
       <el-form label-position="top" @submit.prevent="saveVerification">
         <template v-if="verificationAction === 'VERIFY'">
@@ -93,6 +95,7 @@
       :before-close="closeDrawer"
       destroy-on-close
       size="min(620px, 94vw)"
+      append-to-body
     >
       <p>资料仅用于处理此订单，请勿复制到处理备注或其他系统。</p>
       <p v-if="busy" role="status">正在读取资料…</p>

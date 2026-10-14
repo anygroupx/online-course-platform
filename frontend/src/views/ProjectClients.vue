@@ -169,6 +169,8 @@
       :close-on-press-escape="!busy"
       :before-close="beforeClose"
       destroy-on-close
+      class="client-action-dialog"
+      append-to-body
     >
       <el-alert
         v-if="dialogError"
@@ -309,10 +311,10 @@
         ></template
       >
     </el-dialog>
-    <el-dialog v-model="usageVisible" title="项目用量与统计" width="min(1000px,calc(100vw - 24px))" destroy-on-close>
+    <el-dialog v-model="usageVisible" title="项目用量与统计" width="min(1000px,calc(100vw - 24px))" destroy-on-close append-to-body>
       <ProjectUsage v-if="usageVisible" />
     </el-dialog>
-    <el-dialog v-model="ledgerVisible" title="我的资金流水" width="min(1000px,calc(100vw - 24px))" destroy-on-close>
+    <el-dialog v-model="ledgerVisible" title="我的资金流水" width="min(1000px,calc(100vw - 24px))" destroy-on-close append-to-body>
       <ProjectLedger v-if="ledgerVisible" />
     </el-dialog>
     <ProjectKeys v-model="keysVisible" :subject="keySubject" />
@@ -321,6 +323,7 @@
       v-model="callsVisible"
       title="项目 OpenAPI 调用记录"
       width="min(640px,calc(100vw - 24px))"
+      append-to-body
       ><p class="muted">
         只保存安全动作和结果，不记录密钥或请求正文；统计记录失败不会改变原资金操作结果。
       </p>
@@ -837,7 +840,8 @@ dd {
 :deep(.el-alert) {
   margin: 12px 0;
 }
-:deep(.el-dialog__footer) {
+/* 资金操作弹窗已 Teleport 到 body，页面前缀无法再命中，改为弹窗自身作用域。 */
+:global(.client-action-dialog .el-dialog__footer) {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;

@@ -8,6 +8,7 @@
     :before-close="close"
     destroy-on-close
     class="project-keys"
+    append-to-body
   >
     <span class="eyebrow">LOCAL OPENAPI / 独立访问密钥</span>
     <h2>

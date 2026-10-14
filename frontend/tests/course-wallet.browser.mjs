@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { createTestServer } from './fixtures/test-server.mjs';
+import { assertViewportOverlay, OVERLAY_VIEWPORTS, settleDialog } from './fixtures/viewport-overlay.mjs';
 
 // 所有API均拦截到隔离夹具；浏览器不得访问外部服务或真实资金账户。
 const html=`<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="app"></div><script type="module">
@@ -71,5 +72,18 @@ try {
   await page.goto(base+'/__course_wallet?view=/admin/course-wallets&role=OPERATOR');await page.getByText('当前账号无权读取此页面').waitFor();assert.equal(await page.getByRole('button',{name:'财务转回'}).count(),0);
   await page.setViewportSize({width:390,height:844});await page.goto(base+'/__course_wallet');await page.getByRole('button',{name:'转入预存'}).waitFor();const mobile=await page.locator('.wallet-mobile-card').innerText();assert.match(mobile,/专属密价.*7.20/);assert.match(mobile,/可用专户余额/);assert.match(mobile,/协议状态：已激活/);assert.match(mobile,/累计转入.*10000000000000.10/);await page.screenshot({path:'/tmp/course-wallet-mobile.png',fullPage:true});
   ordinaryAvailable=true;await page.goto(base+'/__course_wallet?view=/courses');await page.locator('.platform-select').first().click();await page.getByRole('option',{name:/课程X/}).click();await page.getByText(/明确使用普通余额按普通价/).click();assert.equal(await page.getByRole('radio',{name:/明确使用普通余额按普通价/}).isChecked(),true);await page.locator('textarea').first().fill('school ordinary_student password 普通价课程');const originalWallet=wallet,originalGeneral=general;await page.getByRole('button',{name:'提交',exact:true}).click();await purchase.getByText(/普通余额/).waitFor();await purchase.getByRole('button',{name:'确认下单'}).click();await page.getByText(/成功提交1\/1个订单/).waitFor();assert.equal(wallet,originalWallet);assert.equal(general,(Number(originalGeneral)-15).toFixed(2));assert.equal(writes.at(-1).data.checkoutIntent,'GENERAL_EXPLICIT');ordinaryAvailable=false;
-  assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);console.log('PASS 课程专户浏览器：金额精度、双确认、失败余额保全、弹窗重开与整页重载幂等、存储失败阻止发送、未知结果改金额拒绝、财务审批审计、财务独立权限、协议版本、服务端下单快照、运营拒绝、移动端');
+  // 弹窗视口几何回归：overlay 必须等于视口，弹窗不得被页面容器裁切。
+  for (const viewport of OVERLAY_VIEWPORTS) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto(base + '/__course_wallet');
+    await page.getByRole('button', { name: '转入预存' }).click();
+    await transfer.waitFor();
+    await settleDialog(page);
+    await assertViewportOverlay(transfer, viewport);
+    await transfer.getByRole('button', { name: '取消', exact: true }).click();
+    await transfer.waitFor({ state: 'hidden' });
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(base + '/__course_wallet');
+  assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);console.log('PASS 课程专户浏览器：金额精度、双确认、失败余额保全、弹窗重开与整页重载幂等、存储失败阻止发送、未知结果改金额拒绝、财务审批审计、财务独立权限、协议版本、服务端下单快照、运营拒绝、移动端、弹窗视口几何');
 } finally {await browser?.close();await server.close();}

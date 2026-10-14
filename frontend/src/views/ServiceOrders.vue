@@ -244,6 +244,7 @@
       :close-on-click-modal="false"
       :show-close="!supplementLoading"
       @closed="clearSupplement"
+      append-to-body
     >
       <el-alert
         v-if="supplementOrder?.verificationReason"
@@ -282,6 +283,7 @@
       v-model="eventsOpen"
       title="订单操作记录"
       size="min(520px, 100vw)"
+      append-to-body
       ><el-timeline
         ><el-timeline-item
           v-for="event in events"
@@ -301,6 +303,7 @@
       class="service-run-logs"
       title="执行记录"
       size="min(520px, 100vw)"
+      append-to-body
       ><p v-if="runLogsLoading" role="status">正在读取第 {{ runLogPage }} 页执行记录…</p>
       <el-alert v-if="runLogsError" type="warning" :closable="false" :title="runLogsError">
         <el-button @click="changeLogPage(0)">重试读取</el-button>
@@ -365,6 +368,7 @@
       width="min(760px,96vw)"
       :close-on-click-modal="false"
       :show-close="!internshipLoading"
+      append-to-body
       ><el-form label-position="top" :disabled="internshipLoading"
         ><InternshipPlanFields
           v-if="internshipOrder && internshipSchedule"
@@ -391,6 +395,7 @@
       title="补交本人已授权的记录"
       width="min(520px,94vw)"
       :close-on-click-modal="false"
+      append-to-body
       ><el-alert
         type="info"
         :closable="false"
@@ -433,6 +438,7 @@
       :close-on-click-modal="false"
       :close-on-press-escape="!planLoading"
       :show-close="!planLoading"
+      append-to-body
     >
       <el-form v-if="planOptions" label-position="top" :disabled="planLoading">
         <template v-if="planOrder?.providerType === 'appui'">
@@ -479,6 +485,7 @@
       v-model="auditOpen"
       title="核对资料与审计记录"
       size="min(560px, 100vw)"
+      append-to-body
     >
       <template v-if="audit"
         ><el-descriptions :column="1" border
@@ -532,6 +539,7 @@
       width="min(560px, 94vw)"
       :close-on-click-modal="false"
       :show-close="!settlementLoading"
+      append-to-body
     >
       <template v-if="settlementOrder"
         ><el-alert
@@ -594,6 +602,7 @@
       title="人工核对 · 会影响订单与余额"
       width="min(560px, 94vw)"
       :close-on-click-modal="false"
+      append-to-body
     >
       <el-alert
         type="warning"
