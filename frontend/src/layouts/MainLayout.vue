@@ -34,12 +34,15 @@
         </div>
       </div>
       <el-menu
+        ref="menuRef"
         :default-active="activeMenu"
         class="menu"
         :router="true"
         :collapse="isCollapse"
         background-color="transparent"
         @select="handleMenuSelect"
+        @open="scheduleActiveIndicator"
+        @close="scheduleActiveIndicator"
       >
         <el-menu-item index="/dashboard">
           <el-icon><HomeFilled /></el-icon>
@@ -469,8 +472,28 @@ const handleMenuSelect = (index) => {
 const activeMenu = computed(() => route.path);
 
 // 激活状态移动动画
+const menuRef = ref(null);
+let menuResizeObserver = null;
+let menuObservedEl = null;
+let menuRepositionFrame = 0;
+let menuSettleTimer = 0;
+
+// el-menu 是组件，模板 ref 拿到的是组件实例而非 DOM 节点，需要取 $el。
+const resolveMenuEl = () => {
+  const target = menuRef.value;
+  if (!target) return null;
+  const el = target.$el ?? target;
+  return el instanceof HTMLElement ? el : null;
+};
+
+// 指示器位置由 JS 写进 .menu 的行内 CSS 变量（--active-top/--active-height），
+// 一旦菜单重排就会失效，必须重算。触发源有四类：
+// 1) 折叠切换：Element Plus 会重建菜单 DOM，行内变量随之丢失；
+// 2) 子菜单展开/收起：菜单自身高度不变（内容溢出滚动），ResizeObserver 不会触发；
+// 3) 菜单自身尺寸变化（滚动条出现/消失、菜单项增减）；
+// 4) 窗口尺寸变化（响应式断点、字体回流）。
 const updateActiveIndicator = () => {
-  const menu = document.querySelector(".menu");
+  const menu = resolveMenuEl();
   if (!menu) return;
 
   const activeItem = menu.querySelector(".el-menu-item.is-active");
@@ -494,6 +517,17 @@ const updateActiveIndicator = () => {
   menu.style.setProperty("--active-opacity", "1");
 };
 
+// 立即定位一次，并在展开/折叠过渡结束后再校正一次。
+// 过渡途中的几何是中间态，只按当帧定位会把指示器停在半路。
+const scheduleActiveIndicator = () => {
+  cancelAnimationFrame(menuRepositionFrame);
+  clearTimeout(menuSettleTimer);
+  menuRepositionFrame = requestAnimationFrame(() => {
+    nextTick(updateActiveIndicator);
+  });
+  menuSettleTimer = setTimeout(updateActiveIndicator, 360);
+};
+
 // 不同账户使用独立页面实例，静态确认框也不能跨账户保留资金意图。
 watch(()=>userStore.userInfo?.uid||userStore.userInfo?.userId,()=>ElMessageBox.close(),{flush:'sync'});
 
@@ -506,6 +540,16 @@ watch(
     });
   },
   { immediate: true }
+);
+
+// 折叠/展开会改变菜单尺寸与 DOM 结构，需重新定位。
+// 只依赖 route.path 会导致折叠后指示器停在旧位置。
+watch(
+  () => isCollapse.value,
+  () => {
+    scheduleActiveIndicator();
+  },
+  { flush: "post" }
 );
 
 // 面包屑导航与页面路由元数据保持一致。
@@ -675,12 +719,34 @@ onMounted(() => {
   }
   window.addEventListener("must-change-password", handleMustChangePassword);
   window.addEventListener("keydown", handleWindowKeydown);
+  // 折叠会重建菜单 DOM 并丢失行内定位变量；ResizeObserver 同时兜住
+  // 滚动条出现/消失、菜单项增减等尺寸变化，避免指示器停在旧位置。
+  if (typeof ResizeObserver !== "undefined") {
+    const menuEl = resolveMenuEl();
+    if (menuEl) {
+      menuResizeObserver = new ResizeObserver(() => scheduleActiveIndicator());
+      menuResizeObserver.observe(menuEl);
+    }
+  }
+  // 尺寸观察不到 transform 位移：transform 不改变布局尺寸，ResizeObserver
+  // 因此不会在展开/折叠收尾的位移动画期间触发。缺了这一步，最后一次重算会
+  // 落在「布局已稳定、位移未完成」的时刻，之后没有触发源，指示器永久停在半路。
+  // 折叠会重建菜单 DOM，所以把监听挂在观察器盯着的那个元素上，卸载时按引用摘除。
+  menuObservedEl = resolveMenuEl();
+  menuObservedEl?.addEventListener("transitionend", scheduleActiveIndicator);
+  scheduleActiveIndicator();
 });
 
 // 组件卸载时清理事件监听
 onUnmounted(() => {
   window.removeEventListener("must-change-password", handleMustChangePassword);
   window.removeEventListener("keydown", handleWindowKeydown);
+  menuObservedEl?.removeEventListener("transitionend", scheduleActiveIndicator);
+  menuObservedEl = null;
+  menuResizeObserver?.disconnect();
+  menuResizeObserver = null;
+  cancelAnimationFrame(menuRepositionFrame);
+  clearTimeout(menuSettleTimer);
 });
 </script>
 
