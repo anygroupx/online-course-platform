@@ -16,6 +16,19 @@ import lombok.Data;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class OrderCreateRequest {
 
+    /** 请求身份及报价校验只用于冲突检测，最终金额仍由服务端决定。 */
+    @Size(max = 64, message = "请求标识最多64个字符")
+    private String clientRequestId;
+    private java.math.BigDecimal expectedAmount;
+    private Integer expectedContractVersion;
+    private String expectedPriceSource;
+    private String expectedPaymentSource;
+    /** 普通价属于独立明确意图，冻结政策身份只用于校验，不成为普通订单的密价绑定。 */
+    private String checkoutIntent;
+    private Long expectedPolicyTermId;
+    private Long expectedPolicyVersionId;
+    private java.time.LocalDateTime expectedPolicyExpiresAt;
+
     /**
      * 课程平台ID
      */

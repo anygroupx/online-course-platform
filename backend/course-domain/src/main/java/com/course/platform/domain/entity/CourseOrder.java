@@ -19,6 +19,44 @@ public class CourseOrder implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
+    /** 下单时确定的支付快照，退款不得按当前协议重新推导。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String priceSource;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String paymentSource;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private Long privateContractId;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private Long walletId;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private Integer contractVersion;
+    /** 成交周期快照不可随套餐修改，退款和消费结算必须追溯原周期。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private Long privateTermId;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private Integer privateTermVersion;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private Long privatePlanVersionId;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String privateOperationsMode;
+    /** 只由可信状态转换SQL写入，普通实体更新不能伪造完成事实。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private LocalDateTime fulfilledAt;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String fulfillmentSource;
+    /** 上游确认时刻只是完成的时间上界，实际完成时间未知时必须单独保存。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private LocalDateTime completionConfirmedAt;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String completionConfirmationSource;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String clientRequestId;
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String requestFingerprint;
+    /** 只有原支付来源退款事务成功后才记录；历史未知状态保持空。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private LocalDateTime refundedAt;
+
     /** 金融订单只允许逻辑归档，禁止物理删除审计证据。 */
     @TableLogic(value = "0", delval = "1")
     @TableField("is_deleted")
@@ -33,19 +71,19 @@ public class CourseOrder implements Serializable {
     /**
      * 订单编号
      */
-    @TableField("order_no")
+    @TableField(value = "order_no", updateStrategy = FieldStrategy.NEVER)
     private String orderNo;
 
     /**
      * 用户ID
      */
-    @TableField("user_id")
+    @TableField(value = "user_id", updateStrategy = FieldStrategy.NEVER)
     private Long userId;
 
     /**
      * 课程平台ID
      */
-    @TableField("platform_id")
+    @TableField(value = "platform_id", updateStrategy = FieldStrategy.NEVER)
     private Long platformId;
 
     /**
@@ -162,7 +200,7 @@ public class CourseOrder implements Serializable {
     /**
      * 订单金额
      */
-    @TableField("amount")
+    @TableField(value = "amount", updateStrategy = FieldStrategy.NEVER)
     private BigDecimal amount;
 
     /**

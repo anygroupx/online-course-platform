@@ -72,6 +72,8 @@
       :close-on-click-modal="false"
       :close-on-press-escape="!busy"
       :before-close="closeDraft"
+      class="project-support-drawer"
+      append-to-body
     >
       <el-alert
         title="先保存草稿并预览，再确认发送；无需在工单中提供密码、验证码或密钥。"
@@ -154,6 +156,8 @@
       :close-on-click-modal="false"
       :close-on-press-escape="!busy"
       :before-close="closeDetail"
+      class="project-support-drawer"
+      append-to-body
     >
       <template v-if="detail"
         ><div class="detail-topline">
@@ -293,6 +297,7 @@
       :close-on-click-modal="false"
       :close-on-press-escape="!busy"
       :show-close="!busy"
+      append-to-body
     >
       <template v-if="operation"
         ><el-tag
@@ -933,7 +938,8 @@ h3 {
   .ticket-footer {
     flex-wrap: wrap;
   }
-  .project-support :deep(.el-drawer__body) {
+  /* 抽屉已 Teleport 到 body，页面前缀无法再命中，改为抽屉自身作用域。 */
+  :global(.project-support-drawer .el-drawer__body) {
     padding: 16px;
   }
   .detail-topline {

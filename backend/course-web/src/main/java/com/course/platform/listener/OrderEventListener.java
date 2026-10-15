@@ -105,40 +105,20 @@ public class OrderEventListener {
                 return;
             }
 
-            // 调用对接服务
-            log.info("开始对接第三方订单：orderId={}, platform={}", orderId, platform.getName());
+            // 占用后才访问供应商；取消先成功时，CAS失败便停止履约。
+            if (courseOrderMapper.claimSubmission(orderId, getOrderStatus("pending"), getOrderStatus("processing"), getDockStatus("pending")) != 1) return;
             DockResult result = platformDockingService.dockOrder(order, platform, apiProvider);
-
-            // 更新订单状态
-            if (result.isSuccess()) {
-                order.setOrderStatus(getOrderStatus("processing"));
-                order.setDockStatus(getDockStatus("success"));
-                if (result.getThirdOrderId() != null) {
-                    order.setThirdOrderId(result.getThirdOrderId());
-                }
-                order.setRemarks("自动对接成功");
-                log.info("订单对接成功：orderId={}, thirdOrderId={}", orderId, result.getThirdOrderId());
-            } else {
-                order.setDockStatus(getDockStatus("failed"));
-                order.setRemarks("自动对接失败：" + result.getMessage());
-                log.error("订单对接失败：orderId={}, error={}", orderId, result.getMessage());
-            }
-
-            courseOrderMapper.updateById(order);
+            boolean success = result != null && result.isSuccess();
+            courseOrderMapper.finishSubmission(orderId, getOrderStatus("processing"), getDockStatus("pending"),
+                    success ? getDockStatus("success") : getDockStatus("failed"),
+                    success ? result.getThirdOrderId() : null,
+                    success ? "自动对接成功" : "自动对接结果需核查，不能自动退款");
 
         } catch (Exception e) {
             log.error("处理订单创建事件失败：orderId={}", orderId, e);
-            // 尝试更新订单状态为对接失败
-            try {
-                CourseOrder order = courseOrderMapper.selectById(orderId);
-                if (order != null) {
-                    order.setDockStatus(getDockStatus("failed"));
-                    order.setRemarks("自动对接异常：" + e.getMessage());
-                    courseOrderMapper.updateById(order);
-                }
-            } catch (Exception ex) {
-                log.error("更新订单对接状态失败：orderId={}", orderId, ex);
-            }
+            // 供应商可能已受理，网络异常保留进行中，不能恢复可取消状态。
+            courseOrderMapper.finishSubmission(orderId, getOrderStatus("processing"), getDockStatus("pending"),
+                    getDockStatus("failed"), null, "自动对接结果不确定，请核查供应商订单后处理");
         }
     }
 
@@ -156,6 +136,7 @@ public class OrderEventListener {
                 return;
             }
 
+            // 自动学习已由现有安全基线永久禁用，不能预先切换状态卡住人工处理和取消。
             // 调用AQKS刷课服务启动自动刷课
             // AqksStudyService内部会自动验证账号、检查任务状态
             boolean success = aqksStudyService.startAutoStudy(orderId);

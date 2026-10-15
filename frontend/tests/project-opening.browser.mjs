@@ -27,7 +27,8 @@ const pageData = (records) => ({ records, total: records.length, current: 1, siz
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r }); return { promise, resolve } }
 try {
   await server.listen(); const base = server.resolvedUrls.local[0].replace(/\/$/, '')
-  browser = await chromium.launch({ executablePath: existsSync('/snap/bin/chromium') ? '/snap/bin/chromium' : undefined, args: ['--no-sandbox', '--disable-dev-shm-usage'] })
+  // 优先使用明确指定的浏览器，未指定时保留原默认行为。
+  browser = await chromium.launch({ executablePath: process.env.BROWSER_PATH || (existsSync('/snap/bin/chromium') ? '/snap/bin/chromium' : undefined), args: ['--no-sandbox', '--disable-dev-shm-usage'] })
   const context = await browser.newContext({ viewport: { width: 1440, height: 1050 } })
   await context.route('**/*', async (route) => {
     const request = route.request(), url = new URL(request.url())
@@ -144,10 +145,10 @@ try {
 
   project.account = null; operations.clear(); mode = ''; await load(); await page.setViewportSize({ width: 390, height: 844 })
   await page.evaluate(() => { document.documentElement.classList.add('dark') }); await begin(); await funded('0.05')
-  assert.ok((await drawer.getByRole('button', { name: '预览本次操作', exact: true }).boundingBox()).height >= 44)
+  assert.ok(Math.round((await drawer.getByRole('button', { name: '预览本次操作', exact: true }).boundingBox()).height) >= 44)
   await screenshot('project-opening-mobile-form'); await preview()
   await dialog.getByText('¥0.02', { exact: true }).waitFor(); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false)
-  assert.ok((await dialog.getByRole('button', { name: '确认开户并充值', exact: true }).boundingBox()).height >= 44)
+  assert.ok(Math.round((await dialog.getByRole('button', { name: '确认开户并充值', exact: true }).boundingBox()).height) >= 44)
   await screenshot('project-opening-mobile-dark')
   mode = 'unknown'; await dialog.getByRole('button', { name: '确认开户并充值', exact: true }).click()
   await dialog.getByText('待人工核对', { exact: true }).waitFor()

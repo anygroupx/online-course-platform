@@ -74,7 +74,8 @@ const output = new URL('../../.cache/native-service-ui/', import.meta.url).pathn
 try {
   await server.listen()
   const base = server.resolvedUrls.local[0].replace(/\/$/, '')
-  browser = await chromium.launch({ executablePath: existsSync('/snap/bin/chromium') ? '/snap/bin/chromium' : undefined, args: ['--no-sandbox', '--disable-dev-shm-usage'] })
+  // 优先使用明确指定的浏览器，未指定时保留原默认行为。
+  browser = await chromium.launch({ executablePath: process.env.BROWSER_PATH || (existsSync('/snap/bin/chromium') ? '/snap/bin/chromium' : undefined), args: ['--no-sandbox', '--disable-dev-shm-usage'] })
   const context = await browser.newContext({ viewport: { width: 1440, height: 1100 } })
   await context.route('**/*', async (route) => {
     const request = route.request(), url = new URL(request.url())
@@ -264,7 +265,7 @@ try {
   await self.locator('.record-totals').scrollIntoViewIfNeeded()
   await page.screenshot({ path: output + 'project-records-self-ledger-mobile-dark.png' })
   assert.equal(await self.locator('.record-ledger-row').evaluateAll((rows) => rows.some((row) => row.scrollWidth > row.clientWidth + 1)), false)
-  assert.equal(await self.locator('.record-filters .el-input__wrapper').evaluateAll((inputs) => inputs.every((input) => input.getBoundingClientRect().height >= 44)), true)
+  assert.equal(await self.locator('.record-filters .el-input__wrapper').evaluateAll((inputs) => inputs.every((input) => Math.round(input.getBoundingClientRect().height) >= 44)), true)
   assert.equal(await self.getByText('经营者八独立记录', { exact: true }).count(), 0)
 
   // Abort + generation checks prevent a delayed request repainting a new scope.

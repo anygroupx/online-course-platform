@@ -1,41 +1,29 @@
 #!/usr/bin/env bash
-# 本地可跑的安全扫描入口（不依赖 CI secrets）
+# 本地安全门禁入口：缺少工具、扫描异常或发现漏洞都必须返回失败。
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
-echo "==> [1/5] Gitleaks (if installed)"
-if command -v gitleaks >/dev/null 2>&1; then
-  gitleaks detect --source . --config .gitleaks.toml --no-git -v || true
-else
-  echo "skip: gitleaks not installed (https://github.com/gitleaks/gitleaks)"
-fi
+for scanner in gitleaks mvn npm trivy semgrep; do
+  if ! command -v "$scanner" >/dev/null 2>&1; then
+    echo "安全扫描未执行：缺少必要工具 $scanner" >&2
+    exit 2
+  fi
+done
 
-echo "==> [2/5] Maven compile"
-if [ -d backend ]; then
-  export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}"
-  (cd backend && mvn -pl course-web -am -DskipTests compile)
-fi
+echo "==> [1/5] 扫描密钥"
+gitleaks detect --source . --config .gitleaks.toml --no-git -v
 
-echo "==> [3/5] npm audit"
-if [ -f frontend/package-lock.json ]; then
-  (cd frontend && npm audit --omit=dev || true)
-else
-  echo "skip: no package-lock.json"
-fi
+echo "==> [2/5] 编译后端"
+(cd backend && mvn -pl course-web -am -DskipTests compile)
 
-echo "==> [4/5] Trivy fs (if installed)"
-if command -v trivy >/dev/null 2>&1; then
-  trivy fs --severity HIGH,CRITICAL "$ROOT" || true
-else
-  echo "skip: trivy not installed"
-fi
+echo "==> [3/5] 扫描前端生产依赖"
+(cd frontend && npm audit --omit=dev)
 
-echo "==> [5/5] Semgrep (if installed)"
-if command -v semgrep >/dev/null 2>&1; then
-  semgrep --config p/owasp-top-ten --config p/java --error=false "$ROOT/backend" || true
-else
-  echo "skip: semgrep not installed"
-fi
+echo "==> [4/5] 扫描文件系统漏洞"
+trivy fs --exit-code 1 --severity HIGH,CRITICAL "$ROOT"
 
-echo "Local security scans finished."
+echo "==> [5/5] 扫描代码安全问题"
+semgrep scan --config p/owasp-top-ten --config p/java --config p/security-audit --error --strict "$ROOT"
+
+echo "本地安全扫描全部通过。"

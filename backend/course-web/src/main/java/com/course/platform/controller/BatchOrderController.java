@@ -26,6 +26,13 @@ public class BatchOrderController {
 
     private final BatchOrderService batchOrderService;
 
+    /** 新调用方可逐项获取真实失败原因，不改变旧响应列表语义。 */
+    @PostMapping("/detailed")
+    public Result<com.course.platform.domain.vo.BatchCourseOrderResult> detailed(@Valid @RequestBody BatchOrderRequest request,
+                                                                               Authentication authentication) {
+        return Result.success(batchOrderService.batchCreateDetailed(request,(Long)authentication.getPrincipal()));
+    }
+
     /**
      * 批量创建订单
      */

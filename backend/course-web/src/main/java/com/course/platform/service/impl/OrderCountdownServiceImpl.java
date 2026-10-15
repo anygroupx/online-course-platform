@@ -40,6 +40,10 @@ public class OrderCountdownServiceImpl implements OrderCountdownService {
     private final OperationLogService operationLogService;
     private final CountdownConfigService countdownConfigService;
     private final CountdownHistoryService countdownHistoryService;
+    @org.springframework.beans.factory.annotation.Autowired
+    private CoursePrivateFulfillmentService fulfillment;
+    @org.springframework.beans.factory.annotation.Autowired
+    private CoursePrivateOperationsTime operationsTime=new CoursePrivateOperationsTime(java.time.Clock.system(java.time.ZoneId.of("Asia/Shanghai")));
 
     /**
      * 获取订单状态值
@@ -523,11 +527,12 @@ public class OrderCountdownServiceImpl implements OrderCountdownService {
         // 若并发流程（刷课任务、管理员操作）已改变状态，这里放弃，
         // 避免把已完成订单重复"完成"或覆盖并发结果。
         int expectedStatus = getOrderStatus("processing");
+        LocalDateTime actualCompletion=operationsTime.now();
         int affected = courseOrderMapper.completeIfStatus(
                 order.getId(),
                 targetStatus,
                 getDockStatus("success"),
-                LocalDateTime.now(), // 标记倒计时结束时间
+                actualCompletion, // 实际完成操作时刻，不能回填课程排期或任务原定结束时间
                 "100%",
                 order.getTotalChapters(),
                 expectedStatus);
@@ -535,11 +540,12 @@ public class OrderCountdownServiceImpl implements OrderCountdownService {
             log.info("订单状态已被并发变更，跳过完成写入：orderId={}, orderNo={}", order.getId(), order.getOrderNo());
             return;
         }
+        if(order.getPrivateTermId()!=null){if(fulfillment==null)throw new BusinessException("可信履约服务不可用");fulfillment.recordNativeCompletion(order,operatorId,reason);}
 
         // 同步内存对象，保持调用方后续读取一致
         order.setOrderStatus(targetStatus);
         order.setDockStatus(getDockStatus("success"));
-        order.setCountdownEndTime(LocalDateTime.now());
+        order.setCountdownEndTime(actualCompletion);
         order.setProgress("100%");
         order.setFinishedChapters(order.getTotalChapters());
 

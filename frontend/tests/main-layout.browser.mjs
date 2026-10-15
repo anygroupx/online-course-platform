@@ -4,6 +4,7 @@ import test from 'node:test'
 import { existsSync, mkdirSync } from 'node:fs'
 import { chromium } from 'playwright'
 import { createTestServer } from './fixtures/test-server.mjs'
+import { assertViewportOverlay, settleDialog } from './fixtures/viewport-overlay.mjs'
 
 // Use the real router, cached layout and production styles. All network traffic
 // is intercepted; even product saves below only change this fixture's memory.
@@ -278,12 +279,9 @@ await test('main layout route and dialog regressions', async (t) => {
         await page.getByRole('button', { name: '上架服务商品', exact: true }).click()
         const dialog = page.getByRole('dialog', { name: '上架服务商品', exact: true })
         await dialog.waitFor()
-        await page.waitForFunction(() => !document.querySelector('.dialog-fade-enter-active, .dialog-fade-leave-active'))
-        assert.equal(await dialog.evaluate((el) => !!el.closest('.main-content')), false, 'dialog must escape the transformed page container')
-        const bounds = await dialog.locator('.service-product-dialog').boundingBox()
-        assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= viewport.height + 1, `${name}: dialog fits viewport ${JSON.stringify(bounds)}`)
-        const overlay = await dialog.boundingBox()
-        assert.ok(overlay.height >= viewport.height - 1, `${name}: overlay covers viewport`)
+        await settleDialog(page)
+        // 复用共享断言：弹窗脱离 .main-content、overlay 等于视口、弹窗落在视口内。
+        await assertViewportOverlay(dialog, { name, ...viewport })
         await dialog.getByRole('combobox', { name: '服务类型', exact: true }).locator('xpath=ancestor::div[contains(@class,"el-select__wrapper")][1]').click()
         await page.getByRole('option', { name: '极光', exact: true }).click()
         await dialog.getByRole('combobox', { name: '已保存的服务接口', exact: true }).click()

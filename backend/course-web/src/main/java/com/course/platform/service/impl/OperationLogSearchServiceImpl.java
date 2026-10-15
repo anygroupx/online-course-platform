@@ -77,16 +77,17 @@ public class OperationLogSearchServiceImpl implements OperationLogSearchService 
 
         // 时间范围过滤
         if (startTime != null || endTime != null) {
-            mustQueries.add(Query.of(q -> q.range(r -> {
-                var rangeQuery = r.field("createTime");
+            // 新客户端区分日期与数值范围，仍保留原日期字符串及包含端点的过滤语义。
+            mustQueries.add(Query.of(q -> q.range(r -> r.date(d -> {
+                var rangeQuery = d.field("createTime");
                 if (startTime != null) {
-                    rangeQuery.gte(co.elastic.clients.json.JsonData.of(startTime.toString()));
+                    rangeQuery.gte(startTime.toString());
                 }
                 if (endTime != null) {
-                    rangeQuery.lte(co.elastic.clients.json.JsonData.of(endTime.toString()));
+                    rangeQuery.lte(endTime.toString());
                 }
                 return rangeQuery;
-            })));
+            }))));
         }
 
         // 关键词搜索（在多个字段中搜索）

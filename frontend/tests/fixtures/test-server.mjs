@@ -4,8 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-// Vite 5 treats port:0 as an unset port and falls back to 5173. Reserve a real
-// loopback port and isolate optimized dependencies when two test runs overlap.
+// 使用独立回环端口与依赖优化缓存，避免不同测试并行时抢占端口或污染模块。
 async function unusedLoopbackPort() {
   const probe = createNetServer()
   await new Promise((resolve, reject) => {

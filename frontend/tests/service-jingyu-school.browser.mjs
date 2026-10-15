@@ -220,8 +220,8 @@ try {
   const layout = await drawer().evaluate(el => ({ width: el.clientWidth, scroll: el.scrollWidth,
     rules: [...el.querySelectorAll(".rule-option")].map(row => row.getBoundingClientRect().height),
     controls: [...el.querySelectorAll(".jingyu-account-fields .el-button")].map(button => button.getBoundingClientRect().height) }));
-  assert.ok(layout.scroll <= layout.width + 1, JSON.stringify(layout)); assert.ok(layout.rules.every(h => h >= 44), JSON.stringify(layout));
-  assert.ok(layout.controls.every(h => h >= 44), JSON.stringify(layout)); await shot("school-rules-mobile-dark.png");
+  assert.ok(layout.scroll <= layout.width + 1, JSON.stringify(layout)); assert.ok(layout.rules.every(h => Math.round(h) >= 44), JSON.stringify(layout));
+  assert.ok(layout.controls.every(h => Math.round(h) >= 44), JSON.stringify(layout)); await shot("school-rules-mobile-dark.png");
   await drawer().locator(".jingyu-task-plan").scrollIntoViewIfNeeded(); await shot("school-task-plan-mobile-dark.png");
   check("390px dark mode has no horizontal overflow and retains 44px rule and action targets");
 

@@ -8,6 +8,7 @@
     :before-close="beforeClose"
     destroy-on-close
     class="existing-price-refresh"
+    append-to-body
   >
     <span class="eyebrow">EXISTING ONLY / 不新增课程</span>
     <h2>保留你的课程编排，只更新价格与说明。</h2>

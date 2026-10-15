@@ -212,6 +212,7 @@
       :title="projectActions[action]"
       :close-on-click-modal="false"
       :before-close="closeForm"
+      append-to-body
     >
       <template v-if="selected"
         ><div class="operation-project">
@@ -278,6 +279,7 @@
       :close-on-click-modal="false"
       :show-close="!busy"
       :close-on-press-escape="!busy"
+      append-to-body
     >
       <template v-if="quote"
         ><p class="operation-name">
@@ -744,7 +746,8 @@ h2 {
 .el-pagination {
   margin-top: 18px;
 }
-.project-center :deep(.el-dialog__footer .el-button) {
+/* 弹窗已 Teleport 到 body，页面前缀无法再命中，改为弹窗自身 class 限定。 */
+:global(.project-action-dialog .el-dialog__footer .el-button) {
   min-height: 44px;
 }
 .history-mobile {

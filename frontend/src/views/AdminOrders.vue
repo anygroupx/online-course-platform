@@ -401,6 +401,7 @@
             <span style="font-weight: 500">{{ scope.row.studentAccount }}</span>
           </template>
           <template #default="scope" v-else-if="column.prop === 'amount'">
+            <small style="display:block">{{ orderFundingLabels(scope.row).price }} · {{ orderFundingLabels(scope.row).payment }}</small>
             <span style="color: var(--color-danger)"
               >¥{{ scope.row.amount }}</span
             >
@@ -1101,6 +1102,10 @@
       append-to-body
     >
       <el-descriptions :column="2" border v-if="currentOrder">
+        <el-descriptions-item label="价格来源">{{ orderFundingLabels(currentOrder).price }}</el-descriptions-item>
+        <el-descriptions-item label="支付来源">{{ orderFundingLabels(currentOrder).payment }}</el-descriptions-item>
+        <el-descriptions-item label="退款目标">{{ orderFundingLabels(currentOrder).refund }}</el-descriptions-item>
+        <el-descriptions-item label="退款记录">{{ currentOrder.refundStatus==='REFUNDED'?'已退回原账户':'未记录退款' }}</el-descriptions-item>
         <el-descriptions-item label="订单编号">{{
           currentOrder.orderNo
         }}</el-descriptions-item>
@@ -1238,6 +1243,7 @@
             <el-option label="格式2：账号+密码+课程名字" :value="2" />
             <el-option label="格式3：学校+账号+密码" :value="3" />
             <el-option label="格式4：账号+密码" :value="4" />
+            <el-option label="财务支付与退款信息（不含学生密码）" :value="5" />
           </el-select>
         </el-form-item>
         <el-form-item label="文件格式">
@@ -1304,6 +1310,7 @@
 </template>
 
 <script setup>
+import { orderFundingLabels } from '@/utils/courseWallet';
 import { sessionUserInfo } from "@/utils/authSession";
 import { hasPermission, hasAllPermissions } from "@/utils/permissions";
 const canUpdateOrders = computed(() => hasPermission(sessionUserInfo.value, "order:update"));
@@ -1918,6 +1925,9 @@ const loadOrders = async () => {
         studentAccount: item?.studentAccount || "",
         courseName: item?.courseName || "",
         amount: item?.amount || 0,
+        priceSource: item?.priceSource || 'RATE',
+        paymentSource: item?.paymentSource || 'GENERAL',
+        refundStatus: item?.refundStatus || 'NOT_RECORDED',
         progress: item?.progress || "0%",
         orderStatus: item?.orderStatus ?? 0,
         dockStatus: item?.dockStatus ?? 0,
@@ -2938,6 +2948,7 @@ const downloadAsFile = () => {
 // 获取格式文本
 const getFormatText = (format) => {
   const formatMap = {
+    5: "财务支付与退款信息",
     1: "格式1：学校+账号+密码+课程名字",
     2: "格式2：账号+密码+课程名字",
     3: "格式3：学校+账号+密码",

@@ -56,6 +56,25 @@ const indicatorDelta = (page) => page.evaluate(() => {
   }
 })
 
+// 指示器在重排结束后才收敛，且收敛耗时随负载浮动（菜单项越多、
+// 展开过渡越长，重排触发越密集）。固定等待在负载下会读到中间态，
+// 因此这里等待「已收敛」这一不变量，而不是猜一个时间点。
+const waitForIndicatorSettled = (page, options = {}) => page.waitForFunction(
+  ({ minDelta }) => {
+    const menu = document.querySelector('.menu')
+    const item = menu?.querySelector('.el-menu-item.is-active')
+    if (!menu || !item) return false
+    const menuRect = menu.getBoundingClientRect()
+    const itemRect = item.getBoundingClientRect()
+    const expected = itemRect.top - menuRect.top + menu.scrollTop
+    if (minDelta != null && Math.abs(expected - minDelta) < 50) return false
+    const applied = parseFloat(getComputedStyle(menu).getPropertyValue('--active-top'))
+    return Math.abs(applied - expected) < 1.5
+  },
+  { minDelta: options.minDelta ?? null },
+  { timeout: options.timeout ?? 15000 }
+)
+
 await test('menu active indicator follows layout changes', async (t) => {
   try {
     await server.listen()
@@ -91,6 +110,7 @@ await test('menu active indicator follows layout changes', async (t) => {
       await page.goto(`${base}/__indicator?entry=${encodeURIComponent('/logs')}`)
       await page.locator('.main-container').waitFor()
       await page.locator('.menu .el-menu-item.is-active').waitFor()
+      await waitForIndicatorSettled(page)
 
       const before = await indicatorDelta(page)
       assert.ok(before, '应能找到激活菜单项')
@@ -100,7 +120,8 @@ await test('menu active indicator follows layout changes', async (t) => {
       )
 
       await page.locator('.el-sub-menu__title', { hasText: '服务中心' }).first().evaluate((el) => el.click())
-      await page.waitForTimeout(800)
+      // 等展开把激活项下推到位，再等指示器收敛。
+      await waitForIndicatorSettled(page, { minDelta: before.expected })
 
       const expanded = await indicatorDelta(page)
       assert.ok(
@@ -116,7 +137,7 @@ await test('menu active indicator follows layout changes', async (t) => {
       // 折叠侧栏会重建菜单 DOM，行内定位变量随之丢失，必须重新写入。
       await page.locator('.collapse-btn').evaluate((el) => el.click())
       await page.waitForFunction(() => document.querySelector('.sidebar').getBoundingClientRect().width < 100)
-      await page.waitForTimeout(800)
+      await waitForIndicatorSettled(page)
 
       const collapsed = await indicatorDelta(page)
       assert.ok(collapsed.sidebarWidth < 100, `侧栏应已折叠（宽度=${collapsed.sidebarWidth}）`)
@@ -148,7 +169,7 @@ await test('menu active indicator follows layout changes', async (t) => {
       await page.locator('.menu .el-menu-item.is-active').waitFor()
 
       await page.locator('.menu').evaluate((el) => { el.scrollTop = 60 })
-      await page.waitForTimeout(600)
+      await waitForIndicatorSettled(page)
 
       const scrolled = await indicatorDelta(page)
       assert.ok(scrolled.scrollTop > 0, '菜单应已滚动')

@@ -51,7 +51,7 @@
 
         <el-menu-item index="/orders">
           <el-icon><Document /></el-icon>
-          <template #title>订单管理</template>
+          <template #title>我的订单</template>
         </el-menu-item>
 
         <el-sub-menu index="service-center">
@@ -85,6 +85,21 @@
           <template #title>账户充值</template>
         </el-menu-item>
 
+        <el-sub-menu index="my-private">
+          <template #title>
+            <el-icon><Wallet /></el-icon>
+            <span>我的密价</span>
+          </template>
+          <el-menu-item index="/course-wallets">
+            <el-icon><Money /></el-icon>
+            <template #title>我的课程专户</template>
+          </el-menu-item>
+          <el-menu-item index="/course-private-operations">
+            <el-icon><Tickets /></el-icon>
+            <template #title>我的密价权益</template>
+          </el-menu-item>
+        </el-sub-menu>
+        <el-sub-menu v-if="['/admin/course-private-operations/plans','/admin/course-private-operations/applications','/admin/course-private-operations/releases','/admin/course-private-operations/contracts','/admin/course-private-operations/terms','/admin/course-private-operations/analytics','/admin/course-private-contracts','/admin/course-wallets'].some(canVisit)" index="private-operations"><template #title><el-icon><Tickets /></el-icon><span>密价运营中心</span></template><el-menu-item v-if="canVisit('/admin/course-private-operations/plans')" index="/admin/course-private-operations/plans">套餐与规则</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/applications')" index="/admin/course-private-operations/applications">权益申请审核</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/releases')" index="/admin/course-private-operations/releases">资金转回审核</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/contracts')" index="/admin/course-private-operations/contracts">代理协议</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/terms')" index="/admin/course-private-operations/terms">权益周期</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/analytics')" index="/admin/course-private-operations/analytics">经营分析</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-contracts')" index="/admin/course-private-contracts">课程密价协议</el-menu-item><el-menu-item v-if="canVisit('/admin/course-wallets')" index="/admin/course-wallets">课程专户资金</el-menu-item></el-sub-menu>
         <el-menu-item index="/api-guide">
           <el-icon><Money /></el-icon>
           <template #title>API 文档</template>
@@ -226,7 +241,7 @@
               <component
                 :is="Component"
                 v-if="!mustChangePassword"
-                :key="route.path"
+                :key="`${userStore.userInfo?.uid||userStore.userInfo?.userId||'anonymous'}:${route.path}`"
               />
             </keep-alive>
           </transition>
@@ -345,7 +360,7 @@ import { useAppConfigStore } from "@/stores/appConfig";
 import { useThemeStore } from "@/stores/theme";
 import { useResponsive } from "@/composables/useResponsive";
 import { buildBreadcrumbs } from "@/utils/breadcrumbs.js";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { changePassword } from "@/api/user";
 import { getSystemAnnouncement } from "@/api/announcement";
 import TagsView from "@/components/TagsView.vue";
@@ -461,6 +476,7 @@ const activeMenu = computed(() => route.path);
 // 激活状态移动动画
 const menuRef = ref(null);
 let menuResizeObserver = null;
+let menuObservedEl = null;
 let menuRepositionFrame = 0;
 let menuSettleTimer = 0;
 
@@ -513,6 +529,9 @@ const scheduleActiveIndicator = () => {
   });
   menuSettleTimer = setTimeout(updateActiveIndicator, 360);
 };
+
+// 不同账户使用独立页面实例，静态确认框也不能跨账户保留资金意图。
+watch(()=>userStore.userInfo?.uid||userStore.userInfo?.userId,()=>ElMessageBox.close(),{flush:'sync'});
 
 // 监听路由变化
 watch(
@@ -711,6 +730,12 @@ onMounted(() => {
       menuResizeObserver.observe(menuEl);
     }
   }
+  // 尺寸观察不到 transform 位移：transform 不改变布局尺寸，ResizeObserver
+  // 因此不会在展开/折叠收尾的位移动画期间触发。缺了这一步，最后一次重算会
+  // 落在「布局已稳定、位移未完成」的时刻，之后没有触发源，指示器永久停在半路。
+  // 折叠会重建菜单 DOM，所以把监听挂在观察器盯着的那个元素上，卸载时按引用摘除。
+  menuObservedEl = resolveMenuEl();
+  menuObservedEl?.addEventListener("transitionend", scheduleActiveIndicator);
   scheduleActiveIndicator();
 });
 
@@ -718,6 +743,8 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener("must-change-password", handleMustChangePassword);
   window.removeEventListener("keydown", handleWindowKeydown);
+  menuObservedEl?.removeEventListener("transitionend", scheduleActiveIndicator);
+  menuObservedEl = null;
   menuResizeObserver?.disconnect();
   menuResizeObserver = null;
   cancelAnimationFrame(menuRepositionFrame);
