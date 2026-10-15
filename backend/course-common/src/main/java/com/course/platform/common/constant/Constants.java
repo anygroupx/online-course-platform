@@ -104,6 +104,25 @@ public class Constants {
     public static final int ORDER_STATUS_REFUND_PENDING = 8;
 
     /**
+     * 终态订单状态：订单到达这些状态后不会再回到进行中，上游也不会再产生进度变化。
+     *
+     * <p>批量进度同步必须排除它们，否则每轮定时任务都会重新拉取并重写已完成订单
+     * （{@code update_time} 被无条件刷新），表现为「订单已 100% 完成却一直在同步」。
+     * 以 int 字面量内联，便于直接拼接进 SQL 的 IN 条件。</p>
+     */
+    public static final String TERMINAL_ORDER_STATUSES_CSV =
+            ORDER_STATUS_COMPLETED + "," + ORDER_STATUS_CANCELLED + "," + ORDER_STATUS_FAILED
+                    + "," + ORDER_STATUS_EXAM_COMPLETED + "," + ORDER_STATUS_REFUND_PENDING;
+
+    /** 与 {@link #TERMINAL_ORDER_STATUSES_CSV} 等价的集合形式，供 MyBatis-Plus 的 notIn 使用。 */
+    public static final java.util.List<Integer> TERMINAL_ORDER_STATUSES = java.util.List.of(
+            ORDER_STATUS_COMPLETED,
+            ORDER_STATUS_CANCELLED,
+            ORDER_STATUS_FAILED,
+            ORDER_STATUS_EXAM_COMPLETED,
+            ORDER_STATUS_REFUND_PENDING);
+
+    /**
      * 对接状态 - 待对接
      */
     public static final int DOCK_STATUS_PENDING = 0;
