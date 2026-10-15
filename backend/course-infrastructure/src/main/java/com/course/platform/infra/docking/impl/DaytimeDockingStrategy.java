@@ -6,6 +6,7 @@ import cn.hutool.json.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.course.platform.application.service.platform.docking.PlatformDockingStrategy;
+import com.course.platform.common.constant.Constants;
 import com.course.platform.common.exception.BusinessException;
 import com.course.platform.domain.dto.DockResult;
 import com.course.platform.domain.dto.OrderProgressResult;
@@ -53,6 +54,16 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
      * 上游按 username 聚合返回全部订单，异常膨胀的响应体不得被当作有效进度写入。
      */
     private static final int MAX_ITEMS_PER_ACCOUNT = 500;
+
+    /**
+     * 不再需要同步的终态订单状态。
+     *
+     * <p>已完成 / 已取消 / 失败 / 考试完成 / 等待退款 —— 这些状态不会再回到进行中，
+     * 上游也不会再产生进度变化。必须排除在待同步集合之外，否则每一轮定时任务都会
+     * 重新拉取并重写它们（{@code update_time} 被无条件刷新），订单早已 100% 完成
+     * 却仍显示「不停同步」。</p>
+     */
+    private static final List<Integer> TERMINAL_ORDER_STATUSES = Constants.TERMINAL_ORDER_STATUSES;
 
     protected final ApiHttpClient apiHttpClient;
     private final ProviderUrlNormalizer urlNormalizer = new ProviderUrlNormalizer();
@@ -351,6 +362,8 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
                                 CourseOrder::getOrderStatus)
                         .eq(CourseOrder::getApiProviderId, apiProviderId)
                         .isNotNull(CourseOrder::getStudentAccount)
+                        // 终态订单不再同步：否则每轮定时任务都会重新拉取并重写已完成订单。
+                        .notIn(CourseOrder::getOrderStatus, TERMINAL_ORDER_STATUSES)
                         .orderByAsc(CourseOrder::getStudentAccount)
                         .orderByAsc(CourseOrder::getId));
     }
