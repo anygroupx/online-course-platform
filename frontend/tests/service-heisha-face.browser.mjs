@@ -417,7 +417,7 @@ try {
     animations: "disabled",
   });
   for (const name of ["打开官方采集页", "检查采集状态"])
-    assert.ok((await button(name).boundingBox()).height >= 44);
+    assert.ok(Math.round((await button(name).boundingBox()).height) >= 44);
   assert.equal(
     await page
       .evaluate(

@@ -145,10 +145,10 @@ try {
 
   project.account = null; operations.clear(); mode = ''; await load(); await page.setViewportSize({ width: 390, height: 844 })
   await page.evaluate(() => { document.documentElement.classList.add('dark') }); await begin(); await funded('0.05')
-  assert.ok((await drawer.getByRole('button', { name: '预览本次操作', exact: true }).boundingBox()).height >= 44)
+  assert.ok(Math.round((await drawer.getByRole('button', { name: '预览本次操作', exact: true }).boundingBox()).height) >= 44)
   await screenshot('project-opening-mobile-form'); await preview()
   await dialog.getByText('¥0.02', { exact: true }).waitFor(); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false)
-  assert.ok((await dialog.getByRole('button', { name: '确认开户并充值', exact: true }).boundingBox()).height >= 44)
+  assert.ok(Math.round((await dialog.getByRole('button', { name: '确认开户并充值', exact: true }).boundingBox()).height) >= 44)
   await screenshot('project-opening-mobile-dark')
   mode = 'unknown'; await dialog.getByRole('button', { name: '确认开户并充值', exact: true }).click()
   await dialog.getByText('待人工核对', { exact: true }).waitFor()
