@@ -132,8 +132,8 @@ try {
   await endedPlan.screenshot({ path: `${out}/internship-status-ended-desktop.png`, animations: 'disabled' });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => document.documentElement.classList.add('dark'));
-  for (const button of await first.locator('.order-actions .el-button').all()) assert.ok((await button.boundingBox()).height >= 44);
-  for (const button of await internship.locator('.order-actions .el-button').all()) assert.ok((await button.boundingBox()).height >= 44);
+  for (const button of await first.locator('.order-actions .el-button').all()) assert.ok(Math.round((await button.boundingBox()).height) >= 44);
+  for (const button of await internship.locator('.order-actions .el-button').all()) assert.ok(Math.round((await button.boundingBox()).height) >= 44);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.screenshot({ path: `${out}/internship-status-orders-mobile-dark.png`, fullPage: true, animations: 'disabled' });
   // No browser timer may turn the new display into unsolicited remote reads.

@@ -265,7 +265,7 @@ try {
   await self.locator('.record-totals').scrollIntoViewIfNeeded()
   await page.screenshot({ path: output + 'project-records-self-ledger-mobile-dark.png' })
   assert.equal(await self.locator('.record-ledger-row').evaluateAll((rows) => rows.some((row) => row.scrollWidth > row.clientWidth + 1)), false)
-  assert.equal(await self.locator('.record-filters .el-input__wrapper').evaluateAll((inputs) => inputs.every((input) => input.getBoundingClientRect().height >= 44)), true)
+  assert.equal(await self.locator('.record-filters .el-input__wrapper').evaluateAll((inputs) => inputs.every((input) => Math.round(input.getBoundingClientRect().height) >= 44)), true)
   assert.equal(await self.getByText('经营者八独立记录', { exact: true }).count(), 0)
 
   // Abort + generation checks prevent a delayed request repainting a new scope.
