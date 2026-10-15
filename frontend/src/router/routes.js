@@ -50,11 +50,11 @@ const routes = [
       },
       {
         path: "admin/course-private-contracts", name: "CoursePrivateContracts", component: () => import("@/views/AdminCourseWallets.vue"),
-        meta: { keepAliveName: "AdminCourseWallets", title: "课程密价协议", requiresAuth: true, breadcrumbGroup: "课程资金管理" },
+        meta: { keepAliveName: "AdminCourseWallets", title: "课程密价协议", requiresAuth: true, breadcrumbGroup: "密价运营中心" },
       },
       {
         path: "admin/course-wallets", name: "AdminCourseWallets", component: () => import("@/views/AdminCourseWallets.vue"),
-        meta: { title: "课程专户资金", requiresAuth: true, breadcrumbGroup: "课程资金管理" },
+        meta: { title: "课程专户资金", requiresAuth: true, breadcrumbGroup: "密价运营中心" },
       },
       {
         path: "dashboard",
@@ -66,7 +66,7 @@ const routes = [
         path: "orders",
         name: "Orders",
         component: () => import("@/views/Orders.vue"),
-        meta: { title: "订单管理", requiresAuth: true },
+        meta: { title: "我的订单", requiresAuth: true },
       },
       {
         path: "courses",
@@ -158,7 +158,7 @@ const routes = [
         path: "admin/orders",
         name: "AdminOrders",
         component: () => import("@/views/AdminOrders.vue"),
-        meta: { title: "管理员订单管理", requiresAuth: true, breadcrumbTitle: "订单管理", breadcrumbGroup: "系统管理" },
+        meta: { title: "管理员订单管理", requiresAuth: true, breadcrumbTitle: "管理员订单", breadcrumbGroup: "系统管理" },
       },
       {
         path: "recharge",

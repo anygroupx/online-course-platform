@@ -51,7 +51,7 @@
 
         <el-menu-item index="/orders">
           <el-icon><Document /></el-icon>
-          <template #title>订单管理</template>
+          <template #title>我的订单</template>
         </el-menu-item>
 
         <el-sub-menu index="service-center">
@@ -90,14 +90,7 @@
           <template #title>我的课程专户</template>
         </el-menu-item>
         <el-menu-item index="/course-private-operations"><el-icon><Tickets /></el-icon><template #title>我的密价权益</template></el-menu-item>
-        <el-sub-menu v-if="['/admin/course-private-operations/plans','/admin/course-private-operations/applications','/admin/course-private-operations/releases','/admin/course-private-operations/contracts','/admin/course-private-operations/terms','/admin/course-private-operations/analytics'].some(canVisit)" index="private-operations"><template #title><el-icon><Tickets /></el-icon><span>密价运营中心</span></template><el-menu-item v-if="canVisit('/admin/course-private-operations/plans')" index="/admin/course-private-operations/plans">套餐与规则</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/applications')" index="/admin/course-private-operations/applications">权益申请审核</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/releases')" index="/admin/course-private-operations/releases">资金转回审核</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/contracts')" index="/admin/course-private-operations/contracts">代理协议</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/terms')" index="/admin/course-private-operations/terms">权益周期</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/analytics')" index="/admin/course-private-operations/analytics">经营分析</el-menu-item></el-sub-menu>
-        <el-menu-item v-if="canVisit('/admin/course-private-contracts')" index="/admin/course-private-contracts">
-          <el-icon><Tickets /></el-icon><template #title>课程密价协议</template>
-        </el-menu-item>
-        <el-menu-item v-if="canVisit('/admin/course-wallets')" index="/admin/course-wallets">
-          <el-icon><Wallet /></el-icon><template #title>课程专户资金</template>
-        </el-menu-item>
-
+        <el-sub-menu v-if="['/admin/course-private-operations/plans','/admin/course-private-operations/applications','/admin/course-private-operations/releases','/admin/course-private-operations/contracts','/admin/course-private-operations/terms','/admin/course-private-operations/analytics','/admin/course-private-contracts','/admin/course-wallets'].some(canVisit)" index="private-operations"><template #title><el-icon><Tickets /></el-icon><span>密价运营中心</span></template><el-menu-item v-if="canVisit('/admin/course-private-operations/plans')" index="/admin/course-private-operations/plans">套餐与规则</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/applications')" index="/admin/course-private-operations/applications">权益申请审核</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/releases')" index="/admin/course-private-operations/releases">资金转回审核</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/contracts')" index="/admin/course-private-operations/contracts">代理协议</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/terms')" index="/admin/course-private-operations/terms">权益周期</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-operations/analytics')" index="/admin/course-private-operations/analytics">经营分析</el-menu-item><el-menu-item v-if="canVisit('/admin/course-private-contracts')" index="/admin/course-private-contracts">课程密价协议</el-menu-item><el-menu-item v-if="canVisit('/admin/course-wallets')" index="/admin/course-wallets">课程专户资金</el-menu-item></el-sub-menu>
         <el-menu-item index="/api-guide">
           <el-icon><Money /></el-icon>
           <template #title>API 文档</template>
