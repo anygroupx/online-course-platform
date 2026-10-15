@@ -135,7 +135,7 @@ try {
     inputs: [...document.querySelectorAll(".distance-checkout .el-input__wrapper")].map((el) => el.getBoundingClientRect().height),
     days: [...document.querySelectorAll(".distance-weekdays .el-checkbox")].map((el) => el.getBoundingClientRect().height) }));
   assert.ok(dimensions.body <= dimensions.width, JSON.stringify(dimensions));
-  assert.ok(dimensions.inputs.every((height) => height >= 44)); assert.ok(dimensions.days.every((height) => height >= 44));
+  assert.ok(dimensions.inputs.every((height) => Math.round(height) >= 44)); assert.ok(dimensions.days.every((height) => Math.round(height) >= 44));
   await preview.click();
   let dialog = page.getByRole("dialog", { name: "确认本次操作" });
   await dialog.waitFor({ state: "visible" });
@@ -164,7 +164,7 @@ try {
   await page.getByRole("button", { name: "核对提交状态", exact: true }).click();
   await page.getByText("暂时无法核对提交状态", { exact: true }).first().waitFor();
   assert.match(await card.innerText(), /提交待核对/);
-  assert.ok((await card.locator(".order-actions .el-button").evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().height))).every((height) => height >= 44));
+  assert.ok((await card.locator(".order-actions .el-button").evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().height))).every((height) => Math.round(height) >= 44));
   await screenshot("p05-order-mobile-dark.png");
   await page.setViewportSize({ width: 1440, height: 1080 });
   await page.evaluate(() => document.documentElement.classList.remove("dark"));

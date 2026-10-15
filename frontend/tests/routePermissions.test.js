@@ -5,6 +5,7 @@ import { canAccessPath, canAccessMeta } from '../src/utils/routePermissions.js';
 import { mockAuthority } from './fixtures/rbac-policy.mjs';
 
 const operatorPaths = ['/admin/service-products', '/admin/service-orders', '/admin/service-projects', '/admin/api-providers'];
+test('039实际角色分支授予周期读取，未把调整或资金审核授予运营',()=>{const operator=mockAuthority('OPERATOR'),auditor=mockAuthority('AUDITOR'),finance=mockAuthority('FINANCE');for(const profile of [operator,auditor])assert.ok(canAccessPath(profile,'/admin/course-private-operations/terms'));assert.equal(canAccessPath(finance,'/admin/course-private-operations/terms'),false);assert.equal(operator.permissions.includes('course-private-term:adjust'),false);assert.equal(operator.permissions.includes('course-wallet-release:review'),false);assert.ok(finance.permissions.includes('course-wallet-release:review'));assert.equal(finance.permissions.includes('course-private-plan:manage'),false);});
 test('the shipped role matrix drives administrative routes, independently of primary role/isAdmin', () => {
   for (const role of ['OPERATOR', 'AUDITOR']) {
     const profile = mockAuthority(role);

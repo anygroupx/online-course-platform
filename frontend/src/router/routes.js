@@ -37,6 +37,25 @@ const routes = [
     component: () => import("@/layouts/MainLayout.vue"),
     redirect: "/dashboard",
     children: [
+      {path:'admin/course-private-operations/analytics',name:'AdminPrivateAnalytics',component:()=>import('@/views/AdminCoursePrivateAnalytics.vue'),meta:{ keepAliveName: "AdminCoursePrivateAnalytics",title:'经营分析',requiresAuth:true,breadcrumbGroup:'密价运营中心'}},
+      {path:'admin/course-private-operations/plans',name:'AdminPrivatePlans',component:()=>import('@/views/AdminCoursePrivatePlans.vue'),meta:{ keepAliveName: "AdminCoursePrivatePlans",title:'套餐与规则',requiresAuth:true,breadcrumbGroup:'密价运营中心'}},
+      {path:'admin/course-private-operations/applications',name:'AdminPrivateApplications',component:()=>import('@/views/AdminCoursePrivateReviews.vue'),meta:{ keepAliveName: "AdminCoursePrivateReviews",title:'权益申请审核',requiresAuth:true,breadcrumbGroup:'密价运营中心'}},
+      {path:'admin/course-private-operations/releases',name:'AdminPrivateReleases',component:()=>import('@/views/AdminCoursePrivateReviews.vue'),meta:{ keepAliveName: "AdminCoursePrivateReviews",title:'资金转回审核',requiresAuth:true,breadcrumbGroup:'密价运营中心'}},
+      { path:'course-private-operations',name:'CoursePrivateRights',component:()=>import('@/views/CoursePrivateRights.vue'),meta:{title:'我的密价权益',requiresAuth:true,breadcrumbGroup:'我的密价'} },
+      { path:'admin/course-private-operations/contracts',name:'AdminPrivateContracts',component:()=>import('@/views/AdminCoursePrivateTerms.vue'),meta:{ keepAliveName: "AdminCoursePrivateTerms",title:'代理协议',requiresAuth:true,breadcrumbGroup:'密价运营中心'} },
+      { path:'admin/course-private-operations/terms',name:'AdminPrivateTerms',component:()=>import('@/views/AdminCoursePrivateTerms.vue'),meta:{ keepAliveName: "AdminCoursePrivateTerms",title:'权益周期',requiresAuth:true,breadcrumbGroup:'密价运营中心'} },
+      {
+        path: "course-wallets", name: "CourseWallets", component: () => import("@/views/CourseWallets.vue"),
+        meta: { title: "我的课程专户", requiresAuth: true, breadcrumbGroup: "我的密价" },
+      },
+      {
+        path: "admin/course-private-contracts", name: "CoursePrivateContracts", component: () => import("@/views/AdminCourseWallets.vue"),
+        meta: { keepAliveName: "AdminCourseWallets", title: "课程密价协议", requiresAuth: true, breadcrumbGroup: "密价运营中心" },
+      },
+      {
+        path: "admin/course-wallets", name: "AdminCourseWallets", component: () => import("@/views/AdminCourseWallets.vue"),
+        meta: { title: "课程专户资金", requiresAuth: true, breadcrumbGroup: "密价运营中心" },
+      },
       {
         path: "dashboard",
         name: "Dashboard",
@@ -47,7 +66,7 @@ const routes = [
         path: "orders",
         name: "Orders",
         component: () => import("@/views/Orders.vue"),
-        meta: { title: "订单管理", requiresAuth: true },
+        meta: { title: "我的订单", requiresAuth: true },
       },
       {
         path: "courses",
@@ -93,7 +112,7 @@ const routes = [
         path: "admin/categories",
         name: "AdminCategories",
         component: () => import("@/views/AdminPlatformCategories.vue"),
-        meta: { title: "分类管理", requiresAuth: true, breadcrumbGroup: "系统管理" },
+        meta: { keepAliveName: "AdminPlatformCategories", title: "分类管理", requiresAuth: true, breadcrumbGroup: "系统管理" },
       },
       {
         path: "admin/api-providers",
@@ -127,7 +146,7 @@ const routes = [
       },
       {
         path: "admin/service-orders", name: "AdminServiceOrders", component: () => import("@/views/ServiceOrders.vue"),
-        meta: { title: "服务订单与对账", requiresAuth: true, serviceAdmin: true, breadcrumbGroup: "服务管理" },
+        meta: { keepAliveName: "ServiceOrders", title: "服务订单与对账", requiresAuth: true, serviceAdmin: true, breadcrumbGroup: "服务管理" },
       },
       {
         path: "admin/plugin-integrations",
@@ -139,7 +158,7 @@ const routes = [
         path: "admin/orders",
         name: "AdminOrders",
         component: () => import("@/views/AdminOrders.vue"),
-        meta: { title: "管理员订单管理", requiresAuth: true, breadcrumbTitle: "订单管理", breadcrumbGroup: "系统管理" },
+        meta: { title: "管理员订单管理", requiresAuth: true, breadcrumbTitle: "管理员订单", breadcrumbGroup: "系统管理" },
       },
       {
         path: "recharge",
@@ -181,7 +200,7 @@ const routes = [
         path: "api-guide",
         name: "ApiGuide",
         component: () => import("@/views/ApiDocs.vue"),
-        meta: { title: "API文档", requiresAuth: true, breadcrumbTitle: "API 文档" },
+        meta: { keepAliveName: "ApiDocs", title: "API文档", requiresAuth: true, breadcrumbTitle: "API 文档" },
       },
       {
         path: "profile",
@@ -199,7 +218,7 @@ const routes = [
         path: "examples",
         name: "Examples",
         component: () => import("@/examples/EnterpriseOrdersExample.vue"),
-        meta: { title: "示例页面", requiresAuth: true },
+        meta: { keepAliveName: "EnterpriseOrdersExample", title: "示例页面", requiresAuth: true },
       },
       {
         path: "theme-config",

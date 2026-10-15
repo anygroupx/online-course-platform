@@ -150,6 +150,9 @@ public class SafeHttpClient {
 
     /** Disable JVM SOCKS selection too; Proxy.NO_PROXY on OkHttp alone is insufficient. */
     private static final class DirectSocketFactory extends SocketFactory {
+        // 此处仅创建禁止 SOCKS 的未连接传输套接字；HTTPS 由 OkHttp 默认 TLS 层加密并校验证书。
+        // SafeHttpTlsTest 验证证书失败拒绝，SafeHttpClientTest 验证代理及重定向禁止；不能换成绕过固定 DNS 的连接。
+        // nosemgrep: java.lang.security.audit.crypto.unencrypted-socket.unencrypted-socket
         @Override public Socket createSocket() { return new Socket(Proxy.NO_PROXY); }
         // OkHttp must connect the unconnected socket to its validated, pinned InetSocketAddress.
         @Override public Socket createSocket(String host, int port) throws IOException { throw unsupported(); }

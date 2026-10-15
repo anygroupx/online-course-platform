@@ -1,5 +1,5 @@
 <template>
-  <el-drawer v-model="open" title="成绩查询信息" size="min(640px, 100vw)" class="service-score-info" destroy-on-close>
+  <el-drawer v-model="open" title="成绩查询信息" size="min(640px, 100vw)" class="service-score-info" destroy-on-close append-to-body>
     <p class="score-order">{{ order?.title }} · {{ order?.accountLabel }}</p>
     <el-alert type="info" :closable="false" title="这里展示查询返回的文字，不代表成绩已确认，也不会改变订单或余额。" />
     <div role="status" aria-live="polite" class="score-state">

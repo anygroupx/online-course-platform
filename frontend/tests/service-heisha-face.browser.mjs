@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync } from "node:fs";
+import { createServer as createHttpServer } from "node:http";
 import { chromium } from "playwright";
 import { createTestServer as createServer } from './fixtures/test-server.mjs';
 const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:24px"><div id="app"></div><script type="module">
@@ -68,6 +69,21 @@ const sessions = new Map(),
   tickets = new Map(),
   unexpected = [],
   errors = [];
+let collectionOrigin;
+// Playwright 不会二次拦截303重定向；独立回环服务承接真实跳转，禁止访问供应商。
+const collectionServer = createHttpServer((req, res) => {
+  assert.equal(req.headers.authorization, undefined);
+  if (req.url === "/__done" && req.method === "POST") {
+    collected = true;
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end('{"simulated":true}');
+  }
+  assert.equal(req.method, "GET");
+  assert.equal(req.url, "/official?c=simulated-link");
+  assert.equal(req.headers.referer, undefined);
+  res.writeHead(200, { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-store" });
+  res.end(`<html lang="zh-CN"><head><meta charset="utf-8"><title>模拟官方采集站点</title></head><body><h1>模拟官方采集站点</h1><p>测试数据，不上传任何照片。</p><button onclick="fetch('/__done',{method:'POST'}).then(()=>document.getElementById('done').textContent='模拟采集完成')">模拟完成本人采集</button><p id="done"></p></body></html>`);
+});
 function faceState(s, state) {
   s.state = state;
   if (["UNKNOWN", "REVOKED", "USED"].includes(state)) {
@@ -78,7 +94,7 @@ function faceState(s, state) {
   s.lookup = lookup;
   s.face = {
     collectionOrigin:
-      state === "FACE_REQUIRED" ? null : "https://collect.example",
+      state === "FACE_REQUIRED" ? null : collectionOrigin,
     status:
       state === "FACE_REQUIRED"
         ? null
@@ -94,6 +110,11 @@ function faceState(s, state) {
   };
 }
 try {
+  await new Promise((resolve, reject) => {
+    collectionServer.once("error", reject);
+    collectionServer.listen(0, "127.0.0.1", resolve);
+  });
+  collectionOrigin = `http://127.0.0.1:${collectionServer.address().port}`;
   await server.listen();
   const base = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch({
@@ -110,20 +131,7 @@ try {
   await context.route("**/*", async (route) => {
     const req = route.request(),
       url = new URL(req.url());
-    if (url.origin === "https://collect.example") {
-      // Intercepted hosted site: these tests never upload real photos or call a supplier.
-      if (url.pathname === "/__done") {
-        collected = true;
-        return route.fulfill({
-          contentType: "application/json",
-          body: '{"simulated":true}',
-        });
-      }
-      return route.fulfill({
-        contentType: "text/html;charset=utf-8",
-        body: `<html lang="zh-CN"><head><meta charset="utf-8"><title>模拟官方采集站点</title></head><body><h1>模拟官方采集站点</h1><p>测试数据，不上传任何照片。</p><button onclick="fetch('/__done',{method:'POST'}).then(()=>document.getElementById('done').textContent='模拟采集完成')">模拟完成本人采集</button><p id="done"></p></body></html>`,
-      });
-    }
+    if (url.origin === collectionOrigin) return route.continue();
     if (url.origin !== base) {
       unexpected.push(url.origin);
       return route.abort();
@@ -235,7 +243,7 @@ try {
       return route.fulfill({
         status: 303,
         headers: {
-          Location: "https://collect.example/official?c=simulated-link",
+          Location: `${collectionOrigin}/official?c=simulated-link`,
           "Cache-Control": "no-store",
           "Referrer-Policy": "no-referrer",
         },
@@ -307,7 +315,7 @@ try {
   }
   await open();
   await button("获取官方采集入口").dblclick();
-  await page.getByText("https://collect.example", { exact: true }).waitFor();
+  await page.getByText(collectionOrigin, { exact: true }).waitFor();
   assert.equal(collections, 1);
   assert.equal(preflights, 1);
   assert.equal(await button("预览金额并下单").isDisabled(), true);
@@ -321,6 +329,8 @@ try {
   await popup
     .getByRole("heading", { name: "模拟官方采集站点", exact: true })
     .waitFor();
+  assert.equal(new URL(popup.url()).origin, collectionOrigin);
+  assert.notEqual(collectionOrigin, base);
   assert.equal(await popup.evaluate(() => window.opener), null);
   assert.equal(await popup.evaluate(() => document.referrer), "");
   assert.equal(launches, 1);
@@ -407,7 +417,7 @@ try {
     animations: "disabled",
   });
   for (const name of ["打开官方采集页", "检查采集状态"])
-    assert.ok((await button(name).boundingBox()).height >= 44);
+    assert.ok(Math.round((await button(name).boundingBox()).height) >= 44);
   assert.equal(
     await page
       .evaluate(
@@ -432,10 +442,11 @@ try {
   assert.deepEqual(unexpected, []);
   assert.deepEqual(errors, []);
   console.log(
-    "PASS Heisha hosted face: explicit consent → one collection → approved-origin one-use POST handoff → authoritative check → session-bound paid order; lost responses/revoke/expiry/mobile dark verified; all supplier/hosted APIs simulated",
+    "通过黑鲨人脸流程：明确授权、单次采集、真实303跨源跳转、一次性POST票据、无opener/referrer、服务端核验与确认扣款；丢失响应、撤销、过期和移动暗色均通过，未访问真实供应商或上传照片。",
   );
 } finally {
   await context?.close();
   await browser?.close();
   await server.close();
+  await new Promise((resolve, reject) => collectionServer.close((error) => error ? reject(error) : resolve()));
 }

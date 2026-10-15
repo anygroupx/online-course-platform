@@ -48,4 +48,24 @@ public final class SecurityAuthorities {
     public static final String SERVICE_ORDER_REFUND = "service-order:refund";
     public static final String SERVICE_PROJECT_READ = "service-project:read";
     public static final String SERVICE_PROJECT_UPDATE = "service-project:update";
+
+    // 课程密价与专户使用独立权限，禁止沿用平台修改或用户修改权限调整资金。
+    public static final String COURSE_PRIVATE_PRICE_READ = "course-private-price:read";
+    public static final String COURSE_PRIVATE_PRICE_MANAGE = "course-private-price:manage";
+    public static final String COURSE_WALLET_READ_ANY = "course-wallet:read:any";
+    public static final String COURSE_WALLET_AUDIT = "course-wallet:audit";
+    public static final String COURSE_WALLET_RELEASE = "course-wallet:release";
+    // 运营配置、权益审核、结算和资金审批彼此独立，普通运营不能处置代理资金。
+    public static final String COURSE_PRIVATE_PLAN_READ = "course-private-plan:read";
+    public static final String COURSE_PRIVATE_PLAN_MANAGE = "course-private-plan:manage";
+    public static final String COURSE_PRIVATE_PLAN_PUBLISH = "course-private-plan:publish";
+    public static final String COURSE_PRIVATE_CONTRACT_REVIEW = "course-private-contract:review";
+    public static final String COURSE_PRIVATE_TERM_READ = "course-private-term:read";
+    public static final String COURSE_PRIVATE_TERM_ADJUST = "course-private-term:adjust";
+    public static final String COURSE_PRIVATE_SETTLEMENT_READ = "course-private-settlement:read";
+    public static final String COURSE_PRIVATE_SETTLEMENT_EXECUTE = "course-private-settlement:execute";
+    public static final String COURSE_WALLET_RELEASE_REVIEW = "course-wallet-release:review";
+    public static final String COURSE_PRIVATE_ANALYTICS_READ = "course-private-analytics:read";
+    public static final String COURSE_PRIVATE_COST_VERIFY = "course-private-cost:verify";
+    public static final String COURSE_PRIVATE_RISK_APPROVE = "course-private-risk:approve";
 }

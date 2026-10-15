@@ -114,6 +114,8 @@
       size="min(560px,100vw)"
       :close-on-click-modal="false"
       :before-close="closeEdit"
+      class="project-edit-drawer"
+      append-to-body
       ><el-form label-position="top" :disabled="saving">
         <el-form-item label="已验证的 syyv5 配置"
           ><el-select
@@ -221,6 +223,7 @@
       :close-on-click-modal="false"
       :show-close="!saving"
       :close-on-press-escape="!saving"
+      append-to-body
       ><template v-if="operation"
         ><p>
           {{ operation.projectTitle }} · {{ projectActions[operation.action] }}
@@ -602,10 +605,11 @@ h1 {
 .el-pagination {
   margin-top: 20px;
 }
-.admin-projects :deep(.el-dialog__footer .el-button) {
+/* 弹窗与抽屉已 Teleport 到 body，页面前缀无法再命中，改为自身 class 限定。 */
+:global(.project-review-dialog .el-dialog__footer .el-button) {
   min-height: 44px;
 }
-.admin-projects :deep(.el-drawer__footer .el-button) {
+:global(.project-edit-drawer .el-drawer__footer .el-button) {
   min-height: 44px;
 }
 @media (max-width: 600px) {

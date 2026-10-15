@@ -1,0 +1,30 @@
+package com.course.platform.service.impl;
+
+import com.course.platform.common.exception.BusinessException;
+import com.course.platform.infra.persistence.mapper.UserAuthorityMapper;
+import org.junit.jupiter.api.*;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
+import org.springframework.transaction.interceptor.TransactionInterceptor;
+import java.time.Duration;
+import java.util.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+/** 本人及管理员读取同一真实周期，消费进度由原事实核验，外部响应不带内部拥有者及规则原始JSON。 */
+class CoursePrivateRightsReadTransactionTest {
+    CoursePrivateRenewalTransactionTest f;
+    CoursePrivateRightsReadService service;
+    @BeforeEach void setup() throws Exception {f=new CoursePrivateRenewalTransactionTest();f.setup();var authorities=mock(UserAuthorityMapper.class);when(authorities.findAuthoritiesByUserId(8L)).thenReturn(List.of("course-private-term:read"));var target=new CoursePrivateRightsReadService(f.f.f.f.users,f.f.f.f.contracts,f.f.f.f.wallets,f.f.f.terms,f.f.f.events,f.f.f.settlements,f.f.f.products,f.f.f.allocations,f.f.f.pricingContext.getBean(CoursePricingService.class),f.f.service,f.service,new CoursePrivateOperationsAccess(f.f.f.f.users,authorities),f.f.f.json,new CoursePrivateOperationsTime(f.f.f.clock));org.springframework.test.util.ReflectionTestUtils.setField(target,"enabled",true);var proxy=new ProxyFactory(target);proxy.addAdvice(new TransactionInterceptor(f.f.f.f.tx.getTransactionManager(),new AnnotationTransactionAttributeSource()));service=(CoursePrivateRightsReadService)proxy.getProxy();}
+    @AfterEach void clear(){f.clear();}
+    void auth(long id){org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(id,null,id==8?List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("course-private-term:read")):List.of()));}
+    @Test void selfPageIncludesOwnBalanceAndFrozenRulesWithoutInternalUserId(){auth(7);var page=service.contracts(7L,1,20,9L,null,null);assertEquals(1L,page.get("total"));var row=(Map<?,?>)((List<?>)page.get("records")).get(0);assertEquals("100.00",row.get("walletBalance"));assertEquals("7.20",row.get("fixedPrice"));assertFalse(row.containsKey("userId"));assertFalse(row.containsKey("userUid"));assertFalse(row.containsKey("configSnapshot"));}
+    @Test void foreignReaderCannotInspectTermOrSpoofSession(){auth(8);assertThrows(BusinessException.class,()->service.detail(8L,f.sourceId));assertThrows(BusinessException.class,()->service.contracts(7L,1,20,null,null,null));}
+    @Test void liveDetailRecomputesFactsEvenIfAfterCommitDeliveryWasMissed(){f.qualify();auth(7);var response=service.detail(7L,f.sourceId);var term=(Map<?,?>)response.get("term");assertEquals("14.40",term.get("settledConsumptionAmount"));assertEquals("0.00",term.get("remainingConsumption"));assertEquals("QUALIFIED",term.get("qualificationStatus"));assertEquals(true,term.get("canPurchase"));assertEquals("ACTIVE",term.get("status"));assertNull(term.get("finalizedAt"));}
+    @Test void graceDeadlineIsSeparateAndNeverMakesExpiredPurchaseValid(){f.f.expire();auth(7);var response=service.detail(7L,f.sourceId);var term=(Map<?,?>)response.get("term");assertEquals(f.source().getEndAt().plusDays(7),term.get("effectiveSettlementDeadlineAt"));assertEquals(false,term.get("canPurchase"));assertEquals("EXPIRED",term.get("status"));}
+    @Test void unknownLegacyFactsRemainUnknownAndDatesAreCopiedRatherThanInvented(){f.f.f.f.jdbc.update("UPDATE course_private_contract_term SET operations_mode='LEGACY_PERMANENT',qualification_kind='LEGACY_UNKNOWN',start_at=NULL,end_at=NULL,settlement_deadline_at=NULL,config_snapshot='{}' WHERE id=?",f.sourceId);f.f.f.f.jdbc.update("UPDATE course_private_contract SET operations_mode='LEGACY_PERMANENT',valid_from=NULL,valid_until=NULL");auth(7);var term=(Map<?,?>)service.detail(7L,f.sourceId).get("term");assertNull(term.get("qualificationBasisAmount"));assertNull(term.get("settledConsumptionAmount"));assertNull(term.get("endAt"));assertEquals("旧版兼容协议",term.get("planName"));assertEquals(true,term.get("canPurchase"));}
+    @Test void invalidPagingAndAdminIdentityFiltersFailBeforeBroadQueries(){auth(8);assertThrows(BusinessException.class,()->service.contracts(null,0,20,null,null,null));assertThrows(BusinessException.class,()->service.contracts(null,1,500,null,null,null));assertThrows(BusinessException.class,()->service.contracts(null,1,20,null,null,"7"));}
+    @Test void sameReadAndHistoricalSnapshotDoNotCreateNewPeriodsOrChangeMoney(){f.qualify();f.f.expire();f.renew();auth(7);var historical=(Map<?,?>)service.detail(7L,f.sourceId).get("term");assertEquals(false,historical.get("canPurchase"));assertEquals("RENEWED",historical.get("status"));service.detail(7L,f.sourceId);assertEquals(2,f.f.f.f.jdbc.queryForObject("SELECT COUNT(*) FROM course_private_contract_term",Integer.class));f.f.f.f.money("85.60",f.f.f.wallet().getBalance());}
+    @Test void renewalWindowAndStoppedSaleOfferRemainAuthoritative(){auth(7);var early=(Map<?,?>)service.detail(7L,f.sourceId).get("term");assertEquals(false,early.get("canRequestRenewal"));f.f.f.clock.advance(Duration.ofDays(24));f.f.f.f.jdbc.update("UPDATE course_private_plan SET status='DISABLED',visible_to_agents=FALSE WHERE id=1");var term=(Map<?,?>)service.detail(7L,f.sourceId).get("term");assertEquals(true,term.get("canRequestRenewal"));var offer=(Map<?,?>)term.get("renewalOffer");assertEquals(1L,offer.get("planVersionId"));assertEquals("三十天预存",offer.get("planName"));}
+    @Test void periodPaginationIncludesHistorySeparatelyFromCurrentContract(){f.qualify();f.f.expire();f.renew();auth(8);var page=service.periods(1,20,9L,null,null);assertEquals(2L,page.get("total"));var records=(List<?>)page.get("records");assertEquals(2,records.size());assertNotEquals(((Map<?,?>)records.get(0)).get("termId"),((Map<?,?>)records.get(1)).get("termId"));assertEquals(1L,service.periods(1,20,9L,"RENEWED",null).get("total"));}
+}

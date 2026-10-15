@@ -49,6 +49,8 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class CourseOrderServiceImpl implements CourseOrderService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private CoursePrivateFulfillmentService fulfillment;
 
     private static final int MAX_COURSE_ID_LENGTH = 2048;
 
@@ -62,6 +64,9 @@ public class CourseOrderServiceImpl implements CourseOrderService {
     private final AccountLedgerServiceImpl accountLedgerService;
     private final ResourceAuthorizationService authorizationService;
     private final CourseOrderProgressLogService progressLogService;
+    private final CoursePricingService pricingService;
+    private final CourseReservedWalletService reservedWalletService;
+    private final CourseOrderPaymentService paymentService;
 
     /**
      * 获取订单状态值
@@ -78,39 +83,46 @@ public class CourseOrderServiceImpl implements CourseOrderService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(rollbackFor = Exception.class, isolation=org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public Long createOrder(OrderCreateRequest request, Long userId) {
         if (request != null && request.getCourseId() != null
                 && request.getCourseId().length() > MAX_COURSE_ID_LENGTH) {
             throw new BusinessException(ResultCode.PARAM_ERROR, "课程ID长度不能超过2048个字符");
         }
 
-        // 1. 查询用户信息
-        User user = userMapper.selectById(userId);
-        if (user == null) {
-            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        if (request == null || request.getPlatformId() == null || StrUtil.isBlank(request.getStudentAccount())
+                || StrUtil.isBlank(request.getStudentPassword()) || StrUtil.isBlank(request.getCourseName()))
+            throw new BusinessException(ResultCode.PARAM_ERROR, "订单商品、学生账号、密码和课程不能为空");
+        // 账户锁串行化同一用户的重复检查与扣款，所有入口共用本事务。
+        User user = pricingService.requireUser(userMapper.selectByIdForUpdate(userId));
+        String fingerprint = CourseOrderRequestIdentity.fingerprint(request);
+        if (request.getClientRequestId() != null) {
+            if (!request.getClientRequestId().matches("[A-Za-z0-9_-]{1,64}"))
+                throw new BusinessException(ResultCode.PARAM_ERROR, "订单请求标识无效");
+            CourseOrder retry = courseOrderMapper.selectByRequestKey(userId, request.getClientRequestId());
+            if (retry != null) {
+                if (!fingerprint.equals(retry.getRequestFingerprint()) || Integer.valueOf(1).equals(retry.getIsDeleted()))
+                    throw new BusinessException(ResultCode.CONFLICT, "订单请求键已使用或请求内容已变化");
+                return retry.getId();
+            }
         }
-
-        // 2. 查询课程平台信息
-        CoursePlatform platform = coursePlatformMapper.selectById(request.getPlatformId());
-        if (platform == null) {
-            throw new BusinessException(ResultCode.COURSE_NOT_FOUND);
-        }
-
-        // 3. 计算订单金额
-        BigDecimal amount = calculateOrderAmount(platform, user);
-
-        // 4. 检查余额
-        if (user.getBalance().compareTo(amount) < 0) {
-            throw new BusinessException(ResultCode.BALANCE_INSUFFICIENT);
-        }
+        CoursePlatform platform = pricingService.requirePlatform(request.getPlatformId());
+        CoursePricingService.PriceDecision decision = request.getCheckoutIntent()==null&&request.getExpectedPolicyTermId()==null&&request.getExpectedPolicyVersionId()==null&&request.getExpectedPolicyExpiresAt()==null?pricingService.decide(user, platform, true):pricingService.decide(user, platform, true, request);
+        if (request.getExpectedAmount() != null && request.getExpectedAmount().compareTo(decision.finalPrice()) != 0
+                || !"GENERAL_EXPLICIT".equals(request.getCheckoutIntent()) && !decision.acceptsContractVersion(request.getExpectedContractVersion()) && !decision.matchesPrivatePolicy(request)
+                || request.getExpectedPriceSource() != null && !request.getExpectedPriceSource().equals(decision.priceSource())
+                || request.getExpectedPaymentSource() != null && !request.getExpectedPaymentSource().equals(decision.paymentSource()))
+            throw new BusinessException(ResultCode.CONFLICT, "课程价格或协议版本已变化，请重新确认");
+        decision.requirePurchasable();
+        BigDecimal amount = decision.finalPrice();
 
         // 5. 检查是否重复下单
         CourseOrder existingOrder = courseOrderMapper.selectOne(new LambdaQueryWrapper<CourseOrder>()
                 .eq(CourseOrder::getUserId, userId)
                 .eq(CourseOrder::getPlatformId, request.getPlatformId())
                 .eq(CourseOrder::getStudentAccount, request.getStudentAccount())
-                .eq(CourseOrder::getCourseName, request.getCourseName())
+                .eq(StrUtil.isNotBlank(request.getCourseId()), CourseOrder::getCourseId, request.getCourseId())
+                .eq(StrUtil.isBlank(request.getCourseId()), CourseOrder::getCourseName, request.getCourseName())
                 .in(CourseOrder::getOrderStatus, getOrderStatus("pending"), getOrderStatus("processing"))
         );
 
@@ -131,6 +143,15 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         order.setCourseId(request.getCourseId());
         order.setCourseName(request.getCourseName());
         order.setAmount(amount);
+        order.setPriceSource(decision.priceSource());
+        order.setPaymentSource(decision.paymentSource());
+        order.setPrivateContractId(decision.contractId());
+        order.setContractVersion(decision.contractVersion());
+        order.setWalletId(decision.walletId());
+        // 当前周期来自账户锁下的统一报价，客户端无权自行指定成交周期或规则版本。
+        if(decision.term()!=null){order.setPrivateTermId(decision.term().getId());order.setPrivateTermVersion(decision.term().getVersion());order.setPrivatePlanVersionId(decision.term().getVersionId());order.setPrivateOperationsMode(decision.term().getOperationsMode());}
+        order.setClientRequestId(request.getClientRequestId());
+        order.setRequestFingerprint(request.getClientRequestId() == null ? null : fingerprint);
         order.setIsFastMode(request.getIsFastMode() != null && request.getIsFastMode() ? 1 : 0);
         order.setRetryCount(0);
         order.setOrderStatus(getOrderStatus("pending"));
@@ -145,6 +166,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         }
 
         int insertResult = courseOrderMapper.insert(order);
+        if (insertResult != 1) throw new BusinessException(ResultCode.ERROR, "订单写入失败");
         log.info("订单插入结果: {}, 插入后订单ID: {}", insertResult, order.getId());
 
         // 如果ID为空，重新查询获取
@@ -160,14 +182,15 @@ public class CourseOrderServiceImpl implements CourseOrderService {
             }
         }
 
-        // 7. 扣除余额（原子账本）
-        accountLedgerService.debit(
-                userId,
-                amount,
-                AccountLedgerServiceImpl.BIZ_ORDER,
-                order.getOrderNo(),
-                String.format("创建订单：%s - %s", platform.getName(), request.getCourseName())
-        );
+        if (order.getId() == null) throw new BusinessException(ResultCode.ERROR,"订单ID未生成");
+
+        // 成交快照决定资金来源，专户不足不会普通余额补差。
+        if ("COURSE_WALLET".equals(decision.paymentSource())) {
+            reservedWalletService.charge(order);
+        } else {
+            accountLedgerService.debit(userId, amount, AccountLedgerServiceImpl.BIZ_ORDER,
+                    order.getOrderNo(), "创建课程订单");
+        }
         user = userMapper.selectById(userId);
 
         // 8. 记录日志
@@ -258,86 +281,59 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         CourseOrder order = getOrderById(orderId, userId);
         authorizationService.requireCanUpdateOrder(order);
 
-        // 只能取消待处理的订单 - 修改使用==而不是equals
-        if (order.getOrderStatus() != getOrderStatus("pending") && order.getOrderStatus() != getOrderStatus("failed")) {
+        // 退款先锁原账户，再读取订单最新状态；管理员操作不能向自身入账。
+        userMapper.selectByIdForUpdate(order.getUserId());
+        order = courseOrderMapper.selectByIdForUpdate(orderId);
+        if (order == null) throw new BusinessException(ResultCode.ORDER_NOT_FOUND);
+        authorizationService.requireCanUpdateOrder(order);
+        if (order.getOrderStatus() != getOrderStatus("pending") && order.getOrderStatus() != getOrderStatus("failed"))
             throw new BusinessException("只能取消待处理或失败的订单");
-        }
-
-        // 更新订单状态
         order.setOrderStatus(getOrderStatus("cancelled"));
         order.setDockStatus(getDockStatus("cancelled"));
-        courseOrderMapper.updateById(order);
-
-        // 退回余额（原子账本）
-        accountLedgerService.credit(
-                userId,
-                order.getAmount(),
-                AccountLedgerServiceImpl.BIZ_REFUND,
-                order.getOrderNo(),
-                String.format("取消订单退款：%s", order.getOrderNo()),
-                false
-        );
-        User user = userMapper.selectById(userId);
+        if (courseOrderMapper.updateById(order) != 1) throw new BusinessException("订单取消失败");
+        paymentService.refund(order, userId);
+        User user = userMapper.selectById(order.getUserId());
 
         // 记录日志
         operationLogService.log(userId, "取消订单",
                 String.format("取消订单：%s，退回：%s元", order.getOrderNo(), order.getAmount()),
-                order.getAmount(), user.getBalance());
+                order.getAmount(), user == null ? null : user.getBalance());
 
         log.info("订单取消成功：orderId={}, userId={}", orderId, userId);
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public void retryOrder(Long orderId, Long userId) {
         CourseOrder order = getOrderById(orderId, userId);
         authorizationService.requireCanUpdateOrder(order);
-
-        // 检查补单次数
-        if (order.getRetryCount() >= 5) {
-            throw new BusinessException("补单次数已达上限");
-        }
-
-        // 查询平台和API配置
+        if (order.getRefundedAt() != null || java.util.Objects.equals(order.getOrderStatus(),getOrderStatus("cancelled")))
+            throw new BusinessException(ResultCode.CONFLICT,"已取消或退款的订单不能补单");
+        if (java.util.Objects.equals(order.getOrderStatus(),getOrderStatus("processing")) && java.util.Objects.equals(order.getDockStatus(),getDockStatus("pending")))
+            throw new BusinessException(ResultCode.CONFLICT,"订单正在提交，请等待结果或核查履约状态");
+        int retry = order.getRetryCount() == null ? 0 : order.getRetryCount();
+        if (retry >= 5) throw new BusinessException("补单次数已达上限");
         CoursePlatform platform = coursePlatformMapper.selectById(order.getPlatformId());
-        if (platform.getDockApiId() == null) {
-            throw new BusinessException("未配置对接接口");
-        }
-
-        ApiProvider apiProvider = apiProviderMapper.selectById(platform.getDockApiId());
-        if (apiProvider == null || apiProvider.getStatus() != 1) {
-            throw new BusinessException("API配置不存在或已禁用");
-        }
-
+        if (platform == null || platform.getDockApiId() == null) throw new BusinessException("未配置对接接口");
+        ApiProvider provider = apiProviderMapper.selectById(platform.getDockApiId());
+        if (provider == null || !Integer.valueOf(1).equals(provider.getStatus())) throw new BusinessException("API配置不存在或已禁用");
+        // 原子占用独立提交，HTTP期间不持数据库锁；取消先提交时CAS必失败。
+        if (order.getOrderStatus() == null || courseOrderMapper.claimRetry(orderId,order.getOrderStatus(),retry,getOrderStatus("processing"),getOrderStatus("cancelled"),getDockStatus("pending")) != 1)
+            throw new BusinessException(ResultCode.CONFLICT,"订单状态已变化或补单正在处理");
         try {
-            // 调用第三方补单接口
-            DockResult dockResult = platformDockingService.retryOrder(order, platform, apiProvider);
-
-            // 更新订单状态和补单次数
-            order.setRetryCount(order.getRetryCount() + 1);
-
-            if (dockResult.isSuccess()) {
-                order.setOrderStatus(getOrderStatus("processing"));
-                order.setDockStatus(getDockStatus("success"));
-                if (dockResult.getThirdOrderId() != null) {
-                    order.setThirdOrderId(dockResult.getThirdOrderId());
-                }
-                order.setRemarks("补单成功");
-            } else {
-                order.setDockStatus(getDockStatus("failed"));
-                order.setRemarks("补单失败：" + dockResult.getMessage());
-            }
-
-            courseOrderMapper.updateById(order);
-
-            // 记录日志
-            operationLogService.log(userId, "补单",
-                    String.format("补单：%s，第%d次", order.getOrderNo(), order.getRetryCount()),
-                    BigDecimal.ZERO, null);
-
-        } catch (Exception e) {
-            log.error("补单失败：orderId={}, error={}", orderId, e.getMessage(), e);
-            throw new BusinessException("补单失败：" + e.getMessage());
+            DockResult result = platformDockingService.retryOrder(order,platform,provider);
+            boolean success = result != null && result.isSuccess();
+            int dock = success ? getDockStatus("success") : getDockStatus("failed");
+            String remote = success ? result.getThirdOrderId() : null;
+            String remark = success ? "补单成功" : "补单结果需核查，不能自动退款";
+            if (courseOrderMapper.finishRetry(orderId,getOrderStatus("processing"),retry+1,dock,remote,remark) != 1)
+                throw new BusinessException(ResultCode.CONFLICT,"补单后订单状态已变化，请核查履约结果");
+            order.setRetryCount(retry+1);order.setOrderStatus(getOrderStatus("processing"));order.setDockStatus(dock);
+            if (remote != null) order.setThirdOrderId(remote);order.setRemarks(remark);
+            operationLogService.log(userId,"补单","补单："+order.getOrderNo()+"，第"+(retry+1)+"次",BigDecimal.ZERO,null);
+        } catch (Exception error) {
+            courseOrderMapper.finishRetry(orderId,getOrderStatus("processing"),retry+1,getDockStatus("failed"),null,"补单结果不确定，请核查供应商订单");
+            throw new BusinessException(ResultCode.CONFLICT,"补单结果需核查，请检查订单执行记录");
         }
     }
 
@@ -389,30 +385,13 @@ public class CourseOrderServiceImpl implements CourseOrderService {
         if (result.getExamStartTime() != null) order.setExamStartTime(result.getExamStartTime());
         if (result.getExamEndTime() != null) order.setExamEndTime(result.getExamEndTime());
 
-        courseOrderMapper.updateById(order);
+        // 原对象保留上次完成证据供提交后审计，不让HTTP期间的退款或归档被旧快照覆盖。
+        CourseOrder before=new CourseOrder();org.springframework.beans.BeanUtils.copyProperties(order,before);before.setOrderStatus(previousOrderStatus);before.setProgress(previousProgress);before.setRemarks(previousRemarks);
+        if(courseOrderMapper.updateUpstreamIfUnchanged(order,previousOrderStatus,order.getApiProviderId(),order.getThirdOrderId())!=1)throw new BusinessException(ResultCode.CONFLICT,"订单已变更、取消或退款，本次进度未覆盖");
+        if(order.getPrivateTermId()!=null){if(fulfillment==null)throw new BusinessException(ResultCode.CONFLICT,"可信履约服务不可用");fulfillment.recordUpstream(before,result);}
         progressLogService.recordIfChanged(order, previousProgress, previousOrderStatus, previousRemarks,
                 CourseOrderProgressLog.SOURCE_MANUAL_REFRESH);
         log.info("订单进度更新成功：orderId={}, progress={}", orderId, result.getProgress());
-    }
-
-    /**
-     * 计算订单金额
-     */
-    private BigDecimal calculateOrderAmount(CoursePlatform platform, User user) {
-        BigDecimal basePrice = platform.getBasePrice();
-        BigDecimal userRate = user.getRate();
-
-        BigDecimal amount;
-        // 使用equals方法比较字符串
-        if (Constants.RATE_TYPE_MULTIPLY.equals(platform.getRateType())) {
-            // 乘法计算
-            amount = basePrice.multiply(userRate);
-        } else {
-            // 加法计算
-            amount = basePrice.add(userRate);
-        }
-
-        return amount.setScale(2, BigDecimal.ROUND_HALF_UP);
     }
 
     /**
@@ -489,7 +468,7 @@ public class CourseOrderServiceImpl implements CourseOrderService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public void retryOrderByOrderNo(String orderNo, Long userId) {
         CourseOrder order = getOrderByOrderNo(orderNo, userId);
         retryOrder(order.getId(), userId);

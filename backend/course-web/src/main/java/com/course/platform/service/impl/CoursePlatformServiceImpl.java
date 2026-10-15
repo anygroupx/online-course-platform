@@ -31,6 +31,8 @@ public class CoursePlatformServiceImpl implements CoursePlatformService {
     private final CoursePlatformMapper coursePlatformMapper;
     private final ApiProviderMapper apiProviderMapper;
     private final PlatformDockingStrategyFactory courseStrategies;
+    private final com.course.platform.infra.persistence.mapper.CoursePrivateContractMapper privateContracts;
+    private final com.course.platform.infra.persistence.mapper.CoursePrivatePlanMapper privatePlans;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -70,11 +72,12 @@ public class CoursePlatformServiceImpl implements CoursePlatformService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deletePlatform(Long id) {
-        CoursePlatform platform = coursePlatformMapper.selectById(id);
+        CoursePlatform platform = coursePlatformMapper.selectByIdForUpdate(id);
         if (platform == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "课程平台不存在");
         }
 
+        requireNoPrivateBinding(id);
         coursePlatformMapper.deleteById(id);
 
         log.info("课程平台删除成功：id={}", id);
@@ -114,11 +117,20 @@ public class CoursePlatformServiceImpl implements CoursePlatformService {
         LambdaQueryWrapper<CoursePlatform> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(CoursePlatform::getCategoryId, categoryId);
         
+        // 分类批量删除也使用同一保护，不允许通过另一个管理入口绕过。
+        for (CoursePlatform platform : coursePlatformMapper.selectByCategoryForUpdate(categoryId)) requireNoPrivateBinding(platform.getId());
         int count = coursePlatformMapper.delete(queryWrapper);
         
         log.info("批量删除课程平台成功：categoryId={}, 删除数量={}", categoryId, count);
         
         return count;
+    }
+    private void requireNoPrivateBinding(Long platformId) {
+        if (privateContracts.countByPlatform(platformId) > 0)
+            throw new BusinessException(ResultCode.CONFLICT,"课程商品已有密价专户绑定，只能下架，不能删除");
+        // 尚未有人开通的套餐也已产生规则历史，必须与套餐创建的商品行锁互斥。
+        if (privatePlans.countByPlatform(platformId) > 0)
+            throw new BusinessException(ResultCode.CONFLICT,"课程商品已有运营套餐，只能下架，不能删除");
     }
     /** A catalog-only provider must never enter a paid course workflow, even via direct admin API. */
     private void requireCourseProvider(Long id) {

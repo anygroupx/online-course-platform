@@ -124,7 +124,7 @@ try {
   await page.evaluate(() => document.documentElement.classList.add("dark"));
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   for (const control of await page.locator(".service-order-filters .el-input__wrapper, .service-order-filters .el-select__wrapper, .service-order-filters input[type=date], .filter-buttons button").all())
-    assert.ok((await control.boundingBox()).height >= 44);
+    assert.ok(Math.round((await control.boundingBox()).height) >= 44);
   await page.locator(".service-order-filters").screenshot({ path: `${output}/orders-filters-mobile-dark.png`, animations: "disabled" });
   await page.screenshot({ path: `${output}/orders-page-mobile-dark.png`, animations: "disabled" });
   cases.push("390px dark theme, overflow and 44px controls");

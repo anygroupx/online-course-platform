@@ -30,7 +30,7 @@
             >
               <div class="platform-option-content">
                 <span class="platform-name">{{ platform.displayName ?? platform.name }}</span>
-                <span class="platform-price">{{ (platform.basePrice * personalPriceMultiplier).toFixed(2) }}元</span>
+                <span class="platform-price">{{ priceLabel(platform) }}</span>
               </div>
             </el-option>
           </el-select>
@@ -38,8 +38,12 @@
           <!-- 当前选中平台的价格提示 -->
           <div v-if="currentPlatform" class="platform-price-hint">
             <el-icon><PriceTag /></el-icon>
-            <span>{{ (currentPlatform.basePrice * personalPriceMultiplier).toFixed(2) }}元/门</span>
+            <span>{{ priceLabel(currentPlatform) }}/门 · {{ pricingMap[currentPlatform.id] ? (pricingMap[currentPlatform.id].paymentSource === "COURSE_WALLET" ? "课程专户支付" : "普通余额支付") : "支付方式待加载" }}</span>
+            <el-button v-if="pricingMap[currentPlatform.id]?.paymentSource === 'COURSE_WALLET'" size="small" link type="primary" @click="router.push('/course-wallets')">转入课程专户</el-button>
           </div>
+
+          <!-- 只有服务端明确允许时才呈现普通价选择，默认保持原专户路径。 -->
+          <el-radio-group v-if="currentPlatform&&pricingMap[currentPlatform.id]?.ordinaryOffer" v-model="checkoutIntent" :disabled="submitLoading" aria-label="课程支付选择"><el-radio value="PRIVATE_DEFAULT">重新开通密价或转入预存</el-radio><el-radio value="GENERAL_EXPLICIT">明确使用普通余额按普通价 ¥{{ courseMoney(pricingMap[currentPlatform.id].ordinaryOffer.finalPrice) }}/单购买</el-radio></el-radio-group>
 
           <!-- 平台描述（支持折叠/展开） -->
           <div
@@ -334,11 +338,19 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { useResponsive } from "@/composables/useResponsive";
 import { getCoursePlatforms } from "@/api/course";
 import { queryCourses } from "@/api/course";
-import { createOrder } from "@/api/order";
+import { createOrder as sendCourseOrder } from "@/api/order";
+import { getMyCoursePrice, getMyCoursePrices } from "@/api/course";
+import { courseMoney, purchaseSummary, createOrderRequestKeys } from "@/utils/courseWallet";
+import { sessionUserInfo } from "@/utils/authSession";
+import { useRouter } from "vue-router";
 import { getUserInfo } from "@/api/user";
 
 // 个人定价系数（费率）
-const personalPriceMultiplier = ref(1.0);
+const pricingMap = ref({});
+const confirmedPricing = ref(null);
+const checkoutIntent=ref("PRIVATE_DEFAULT");
+const requestKeys = createOrderRequestKeys();
+const router = useRouter();
 
 // 使用响应式 composable
 const { isMobile } = useResponsive();
@@ -377,18 +389,36 @@ const setTableRef = (el, index) => {
   }
 };
 
-// 加载用户费率
-const loadUserRate = async () => {
-  try {
-    const res = await getUserInfo();
-    if (res.code === 1 && res.data.rate) {
-      personalPriceMultiplier.value = res.data.rate;
-    }
-  } catch (error) {
-    console.error("加载用户费率失败：", error);
-  }
+// 只展示当前账户的服务端报价，缺失时保持不可用而不推算普通费率。
+const loadPrices = async () => {
+  try { pricingMap.value = (await getMyCoursePrices()).data || {}; }
+  catch { pricingMap.value = {}; ElMessage.error("服务端报价加载失败，请刷新后重试"); }
 };
-
+const priceLabel = platform => {
+  const price = pricingMap.value[platform.id];
+  if (!price) return "报价不可用";
+  return `${price.priceSource === "PRIVATE" ? "专属密价 " : ""}¥${courseMoney(price.finalPrice)}`;
+};
+const confirmCoursePurchase = async (count, description) => {
+  if (submitLoading.value) throw "cancel";
+  submitLoading.value = true;
+  try {
+    let preview = (await getMyCoursePrice(queryForm.value.platformId)).data;
+    if(checkoutIntent.value==='GENERAL_EXPLICIT'){if(!preview.ordinaryOffer)throw new Error('普通价购买政策或权益状态已变化，请重新选择');preview={...preview.ordinaryOffer,checkoutIntent:'GENERAL_EXPLICIT',unavailableReason:'普通余额不足'};}
+    const summary = purchaseSummary(preview, count);
+    await ElMessageBox.confirm(`${description}。课程商品：${currentPlatform.value?.displayName || currentPlatform.value?.name || "选定课程"}。${summary.priceLabel} ¥${summary.unit}/单，共 ${count} 单；${summary.paymentLabel}当前余额 ¥${summary.before}，预计扣款 ¥${summary.total}，下单后预计余额 ¥${summary.after}。${preview.paymentSource === "COURSE_WALLET" ? "专款专用，退款回原专户，不使用普通余额补差。" : "退款回普通余额。"}`, "确认课程费用", { confirmButtonText: "确认下单", cancelButtonText: "取消", type: "warning" });
+    confirmedPricing.value = preview;
+  } catch (error) { submitLoading.value = false; if (error !== "cancel" && error !== "close") ElMessage.error(error.message || "无法获取成交报价"); throw error; }
+};
+// 每组订单复用已确认的不可变报价；请求内容摘要在组件存续期内保持重试身份。
+const createOrder = async data => {
+  const preview = confirmedPricing.value;
+  if (!preview || String(preview.platformId) !== String(data.platformId)) throw new Error("请重新确认课程成交报价");
+  const clientRequestId = await requestKeys.forOrder(data);
+  const result = await sendCourseOrder({ ...data, clientRequestId, expectedAmount: preview.finalPrice, expectedContractVersion: preview.contractVersion, expectedPriceSource: preview.priceSource, expectedPaymentSource: preview.paymentSource, ...(preview.checkoutIntent==='GENERAL_EXPLICIT'?{checkoutIntent:'GENERAL_EXPLICIT',expectedPolicyTermId:preview.policyTermId,expectedPolicyVersionId:preview.policyVersionId}:preview.privateTermId?{expectedPolicyTermId:preview.privateTermId,expectedPolicyVersionId:preview.privatePlanVersionId,expectedPolicyExpiresAt:preview.expiresAt??null}:{}) });
+  await requestKeys.confirmed(data, clientRequestId);
+  return result;
+};
 const loadPlatforms = async () => {
   try {
     const res = await getCoursePlatforms();
@@ -402,7 +432,7 @@ const loadPlatforms = async () => {
 
 // 格式化平台标签（根据屏幕尺寸）
 const formatPlatformLabel = (platform) => {
-  const price = (platform.basePrice * personalPriceMultiplier.value).toFixed(2);
+  const price = priceLabel(platform);
   if (isMobile.value) {
     // 移动端：简化显示
     return `${platform.displayName ?? platform.name}（${price}元）`;
@@ -412,6 +442,7 @@ const formatPlatformLabel = (platform) => {
 };
 
 const handlePlatformChange = (platformId) => {
+  checkoutIntent.value="PRIVATE_DEFAULT";confirmedPricing.value=null;
   currentPlatform.value = platformList.value.find((p) => p.id === platformId);
   descCollapsed.value = true; // 重置折叠状态
 };
@@ -591,15 +622,7 @@ const handleDirectSubmit = async () => {
   }
 
   try {
-    await ElMessageBox.confirm(
-      `将提交${accounts.length}个订单，是否继续？`,
-      "确认提交",
-      {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "warning",
-      }
-    );
+    await confirmCoursePurchase(accounts.length, "提交选定课程订单");
 
     submitLoading.value = true;
     let successCount = 0;
@@ -615,18 +638,20 @@ const handleDirectSubmit = async () => {
         });
         successCount++;
       } catch (error) {
-        console.error("提交订单失败：", error);
+        console.error("提交订单失败：", error.message);
       }
     }
 
-    ElMessage.success(`成功提交${successCount}/${accounts.length}个订单`);
-    handleReset();
+    (successCount === accounts.length ? ElMessage.success : ElMessage.warning)(`成功提交${successCount}/${accounts.length}个订单${successCount < accounts.length ? "；未完成项请查询订单后用原请求重试" : ""}`);
+    if (successCount === accounts.length) handleReset();
   } catch (error) {
     if (error !== "cancel") {
       console.error("提交失败：", error);
     }
   } finally {
     submitLoading.value = false;
+    loadPrices();
+    getUserInfo().then(res => { sessionUserInfo.value = { ...sessionUserInfo.value, ...res.data }; }).catch(() => {});
   }
 };
 
@@ -684,15 +709,7 @@ const handleBatchSubmit = async () => {
   );
 
   try {
-    await ElMessageBox.confirm(
-      `将为 ${accountsWithSelection.length} 个账号提交 ${totalSelected} 门课程，是否继续？`,
-      "批量提交确认",
-      {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "warning",
-      }
-    );
+    await confirmCoursePurchase(totalSelected, "提交选定课程订单");
 
     submitLoading.value = true;
     let successCount = 0;
@@ -703,6 +720,7 @@ const handleBatchSubmit = async () => {
       const accountData = accountsWithSelection[i];
       const accountIndex = accountCourseList.value.indexOf(accountData);
 
+      const failedCourses = [];
       for (const course of accountData.selectedCourses) {
         try {
           await createOrder({
@@ -715,17 +733,18 @@ const handleBatchSubmit = async () => {
           });
           successCount++;
         } catch (error) {
-          console.error("提交订单失败：", error);
+          console.error("提交订单失败：", error.message);
           failCount++;
+          failedCourses.push(course);
         }
       }
 
-      // 提交后清空该账号的选中状态
-      accountData.selectedCourses = [];
+      // 保留失败或未知结果的选择，用同一语义请求身份重试。
+      accountData.selectedCourses = failedCourses;
 
       // 同时清空表格的选中状态
       const tableRef = tableRefs.value[accountIndex];
-      if (tableRef) {
+      if (tableRef && failedCourses.length === 0) {
         tableRef.clearSelection();
       }
     }
@@ -743,6 +762,8 @@ const handleBatchSubmit = async () => {
     }
   } finally {
     submitLoading.value = false;
+    loadPrices();
+    getUserInfo().then(res => { sessionUserInfo.value = { ...sessionUserInfo.value, ...res.data }; }).catch(() => {});
   }
 };
 
@@ -754,18 +775,12 @@ const handleSubmitAccountSelected = async (accountData) => {
   }
 
   try {
-    await ElMessageBox.confirm(
-      `将为账号 ${accountData.account.studentAccount} 提交 ${accountData.selectedCourses.length} 门课程，是否继续？`,
-      "确认提交",
-      {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "warning",
-      }
-    );
+    await confirmCoursePurchase(accountData.selectedCourses.length, "提交选定课程订单");
 
     submitLoading.value = true;
     let successCount = 0;
+    const failedCourses = [];
+    const requestedCount = accountData.selectedCourses.length;
 
     for (const course of accountData.selectedCourses) {
       try {
@@ -779,21 +794,22 @@ const handleSubmitAccountSelected = async (accountData) => {
         });
         successCount++;
       } catch (error) {
-        console.error("提交订单失败：", error);
+        console.error("提交订单失败：", error.message);
+        failedCourses.push(course);
       }
     }
 
-    ElMessage.success(
+    (successCount === requestedCount ? ElMessage.success : ElMessage.warning)(
       `成功提交 ${successCount}/${accountData.selectedCourses.length} 个订单`
     );
 
-    // 清空该账号的选中状态
-    accountData.selectedCourses = [];
+    // 未完成项保留，避免未知结果后误用新请求身份。
+    accountData.selectedCourses = failedCourses;
 
     // 同时清空表格的选中状态
     const accountIndex = accountCourseList.value.indexOf(accountData);
     const tableRef = tableRefs.value[accountIndex];
-    if (tableRef) {
+    if (tableRef && failedCourses.length === 0) {
       tableRef.clearSelection();
     }
   } catch (error) {
@@ -802,21 +818,15 @@ const handleSubmitAccountSelected = async (accountData) => {
     }
   } finally {
     submitLoading.value = false;
+    loadPrices();
+    getUserInfo().then(res => { sessionUserInfo.value = { ...sessionUserInfo.value, ...res.data }; }).catch(() => {});
   }
 };
 
 // 提交单个账号的单门课程
 const handleSubmitSingleCourse = async (account, course) => {
   try {
-    await ElMessageBox.confirm(
-      `将为账号 ${account.studentAccount} 提交课程 "${course.name}"，是否继续？`,
-      "确认提交",
-      {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "info",
-      }
-    );
+    await confirmCoursePurchase(1, "提交选定课程订单");
 
     submitLoading.value = true;
     try {
@@ -830,7 +840,7 @@ const handleSubmitSingleCourse = async (account, course) => {
       });
       ElMessage.success("订单提交成功");
     } catch (error) {
-      console.error("提交订单失败：", error);
+      console.error("提交订单失败：", error.message);
       ElMessage.error("订单提交失败");
     }
   } catch (error) {
@@ -839,6 +849,8 @@ const handleSubmitSingleCourse = async (account, course) => {
     }
   } finally {
     submitLoading.value = false;
+    loadPrices();
+    getUserInfo().then(res => { sessionUserInfo.value = { ...sessionUserInfo.value, ...res.data }; }).catch(() => {});
   }
 };
 
@@ -865,19 +877,7 @@ const handleSubmitSelected = async () => {
       return;
     }
 
-    await ElMessageBox.confirm(
-      `将为${accounts.length}个账号提交${
-        selectedCourses.value.length
-      }门课程，总计${
-        accounts.length * selectedCourses.value.length
-      }个订单，是否继续？`,
-      "确认提交",
-      {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "warning",
-      }
-    );
+    await confirmCoursePurchase(accounts.length * selectedCourses.value.length, "提交选定课程订单");
 
     submitLoading.value = true;
     let successCount = 0;
@@ -896,23 +896,25 @@ const handleSubmitSelected = async () => {
           });
           successCount++;
         } catch (error) {
-          console.error("提交订单失败：", error);
+          console.error("提交订单失败：", error.message);
         }
       }
     }
 
-    ElMessage.success(
+    (successCount === accounts.length * selectedCourses.value.length ? ElMessage.success : ElMessage.warning)(
       `成功提交${successCount}/${
         accounts.length * selectedCourses.value.length
       }个订单`
     );
-    handleReset();
+    if (successCount === accounts.length * selectedCourses.value.length) handleReset();
   } catch (error) {
     if (error !== "cancel") {
       console.error("提交失败：", error);
     }
   } finally {
     submitLoading.value = false;
+    loadPrices();
+    getUserInfo().then(res => { sessionUserInfo.value = { ...sessionUserInfo.value, ...res.data }; }).catch(() => {});
   }
 };
 
@@ -929,15 +931,7 @@ const handleSubmitSingle = async (course) => {
       return;
     }
 
-    await ElMessageBox.confirm(
-      `将为${accounts.length}个账号提交课程"${course.name}"，是否继续？`,
-      "确认提交",
-      {
-        confirmButtonText: "确定",
-        cancelButtonText: "取消",
-        type: "info",
-      }
-    );
+    await confirmCoursePurchase(accounts.length, "提交选定课程订单");
 
     let successCount = 0;
     for (const account of accounts) {
@@ -952,20 +946,23 @@ const handleSubmitSingle = async (course) => {
         });
         successCount++;
       } catch (error) {
-        console.error("提交订单失败：", error);
+        console.error("提交订单失败：", error.message);
       }
     }
 
-    ElMessage.success(`成功提交${successCount}/${accounts.length}个订单`);
+    (successCount === accounts.length ? ElMessage.success : ElMessage.warning)(`成功提交${successCount}/${accounts.length}个订单${successCount < accounts.length ? "；未完成项请查询订单后用原请求重试" : ""}`);
   } catch (error) {
     if (error !== "cancel") {
-      console.error("提交失败：", error);
+      console.error("提交失败：", error.message);
     }
+  } finally {
+    submitLoading.value = false;
+    loadPrices();
   }
 };
 
 onMounted(() => {
-  loadUserRate(); // 加载用户费率
+  loadPrices(); // 加载本人服务端成交报价
   loadPlatforms();
 });
 </script>

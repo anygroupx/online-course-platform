@@ -112,6 +112,8 @@ public class OrderExportServiceImpl implements OrderExportService {
                 return new String[]{"学校名称", "学生账号"};
             case 4:
                 return new String[]{"学生账号"};
+            case 5:
+                return new String[]{"订单号","学校名称","学生账号","课程名称","成交金额","价格类型","支付来源","退款目标","退款状态"};
             default:
                 return new String[]{"学校名称", "学生账号", "课程名称", "订单号"};
         }
@@ -137,6 +139,9 @@ public class OrderExportServiceImpl implements OrderExportService {
             case 4:
                 values = new String[]{account};
                 break;
+            case 5:
+                values = financialValues(order);
+                break;
             default:
                 values = new String[]{school, account, courseName, orderNo};
                 break;
@@ -146,6 +151,15 @@ public class OrderExportServiceImpl implements OrderExportService {
             cell.setCellValue(values[i]);
             cell.setCellStyle(style);
         }
+    }
+
+    /** 财务白名单不含学生口令、钱包ID、请求指纹等无关敏感数据。 */
+    private String[] financialValues(CourseOrder order) {
+        String source = "COURSE_WALLET".equals(order.getPaymentSource()) ? "课程专户" : "普通余额";
+        return new String[]{order.getOrderNo()==null?"":order.getOrderNo(),order.getSchoolName()==null?"":order.getSchoolName(),
+                order.getStudentAccount()==null?"":order.getStudentAccount(),order.getCourseName()==null?"":order.getCourseName(),
+                order.getAmount()==null?"":order.getAmount().toPlainString(),"PRIVATE".equals(order.getPriceSource())?"专属密价":"普通费率价",
+                source,source,order.getRefundedAt()==null?"未记录退款":"已退款"};
     }
 
     private String formatOrderForExport(CourseOrder order, Integer format) {
@@ -163,6 +177,8 @@ public class OrderExportServiceImpl implements OrderExportService {
                 return String.format("%s %s", school, account);
             case 4:
                 return account;
+            case 5:
+                return String.join("\t",financialValues(order));
             default:
                 return String.format("%s %s %s %s", school, account, courseName, orderNo);
         }

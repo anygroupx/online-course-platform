@@ -45,6 +45,8 @@ public class OrderProgressResult {
      * 考试结束时间
      */
     private LocalDateTime examEndTime;
+    /** 仅适配器确认是真实订单履约时间时赋值，课程或考试排期不能赋给该字段。 */
+    private LocalDateTime actualFulfilledAt;
 
     // ==================== 批量更新时的订单标识字段 ====================
     /**

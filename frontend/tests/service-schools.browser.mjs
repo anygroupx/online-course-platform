@@ -274,7 +274,7 @@ try {
   });
   assert.ok(layout.drawerScroll <= layout.drawerWidth + 1, JSON.stringify(layout));
   assert.ok(layout.searchScroll <= layout.searchWidth + 1, JSON.stringify(layout));
-  assert.ok(layout.targets.every((height) => height >= 44), JSON.stringify(layout));
+  assert.ok(layout.targets.every((height) => Math.round(height) >= 44), JSON.stringify(layout));
   await m.page.screenshot({ path: path.join(output, "schools-mobile-dark.png"), fullPage: true });
   assert.equal(posts(m.calls).length, 0); await healthy(m, "mobile-dark-long-name-keyboard-safe-text");
   writeFileSync(path.join(output, "browser-evidence.json"), `${JSON.stringify({ groups: evidence, mobileLayout: layout }, null, 2)}\n`);

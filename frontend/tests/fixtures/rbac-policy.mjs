@@ -9,18 +9,22 @@ const permissions = new Set();
 const codes = sql => [...sql.matchAll(/'([a-z][a-z-]*:[a-z:-]+)'/g)].map(match => match[1]);
 const schema = readFileSync(new URL('../../../database/schema.sql', import.meta.url), 'utf8');
 for (const statement of schema.replace(/^--.*$/gm, '').split(';')) {
-  if (/INSERT(?: IGNORE)? INTO `?sys_permission`?\s/i.test(statement)) {
+  if (/INSERT(?: IGNORE)? INTO `?sys_permission`?(?=\s|\()/i.test(statement)) {
     for (const code of codes(statement)) permissions.add(code);
   } else if (/DELETE FROM sys_role_permission\s/i.test(statement)) {
     // Fresh-schema policy has no unsafe grants in the NOT IN preflight subset.
     if (/role_id NOT IN/i.test(statement)) continue;
     for (const code of codes(statement)) for (const set of grants.values()) set.delete(code);
-  } else if (/INSERT(?: IGNORE)? INTO `?sys_role_permission`?\s/i.test(statement)) {
+  } else if (/INSERT(?: IGNORE)? INTO `?sys_role_permission`?(?=\s|\()/i.test(statement)) {
     const match = statement.match(/r\.role_code\s*(?:=\s*'([A-Z_]+)'|IN\s*\(([^)]+)\))/);
     if (!match) throw new Error(`Unsupported RBAC fixture policy: ${statement}`);
     const targets = match[1] ? [match[1]] : [...match[2].matchAll(/'([A-Z_]+)'/g)].map(m => m[1]);
     const selected = codes(statement);
-    for (const role of targets) for (const code of selected.length ? selected : permissions) grants.get(role).add(code);
+    // 039使用同一INSERT中的角色分支，逐分支解析，不能把超级管理员权限分给其他角色。
+    const branches=[...statement.matchAll(/r\.role_code\s*=\s*'([A-Z_]+)'\s+AND\s+p\.permission_code\s+IN\s*\(([^)]+)\)/g)];
+    const specific=new Set(branches.map(branch=>branch[1]));
+    for(const branch of branches)for(const code of codes(branch[2]))grants.get(branch[1]).add(code);
+    for (const role of targets) if(!specific.has(role)) for (const code of selected.length ? selected : permissions) grants.get(role).add(code);
   }
 }
 

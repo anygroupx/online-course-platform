@@ -48,7 +48,7 @@ class CourseOrderProgressTest {
     private final CourseOrderServiceImpl service = new CourseOrderServiceImpl(orders, platforms,
             mock(UserMapper.class), mock(OperationLogService.class), docking, providers,
             mock(ApplicationEventPublisher.class), mock(AccountLedgerServiceImpl.class), authorization,
-            progressLogs);
+            progressLogs, mock(com.course.platform.service.impl.CoursePricingService.class), mock(com.course.platform.service.impl.CourseReservedWalletService.class), mock(com.course.platform.service.impl.CourseOrderPaymentService.class));
     private CourseOrder order;
     private CoursePlatform platform;
     private ApiProvider provider;
@@ -64,6 +64,7 @@ class CourseOrderProgressTest {
         order.setProgress("25%");
         when(orders.selectById(42L)).thenReturn(order);
         when(orders.selectOne(any())).thenReturn(order);
+        when(orders.updateUpstreamIfUnchanged(any(),any(),any(),any())).thenReturn(1);
         platform = new CoursePlatform();
         platform.setId(17L);
         platform.setDockApiId(6L);
@@ -128,7 +129,7 @@ class CourseOrderProgressTest {
         assertEquals(1, order.getOrderStatus());
         assertEquals("进行中", order.getRemarks());
         assertEquals(end, order.getCourseEndTime());
-        verify(orders).updateById(order);
+        verify(orders).updateUpstreamIfUnchanged(order,null,6L,null);
         verify(progressLogs).recordIfChanged(order, "25%", null, null,
                 com.course.platform.domain.entity.CourseOrderProgressLog.SOURCE_MANUAL_REFRESH);
     }

@@ -1,0 +1,18 @@
+# OSV 例外：以下两个 Spring Framework 漏洞在本代码库不可达。
+#
+# 修复只存在于 Spring Framework 7.0.9（随 Spring Boot 4.x 发布）；6.2.x 补丁线止于
+# 6.2.19，没有修复版本。迁移到 Boot 4 需要 Jackson 2 → 3（新 groupId tools.jackson，
+# 129 个源文件）以及 starter 重组（spring-boot-starter-aop 已从 Boot 4 移除），
+# 属独立的迁移工作项，不应与本次门禁修复混在一起。
+#
+# 每个例外都带到期日：到期后门禁自动恢复失败，强制重新评估（届时应已完成 Boot 4 迁移）。
+
+[[IgnoredVulns]]
+id = "GHSA-j9f9-w8pj-32f8"
+ignoreUntil = 2027-02-01
+reason = "SSE 流渲染损坏。本服务未使用 SseEmitter / text/event-stream，也不依赖 spring-webflux，该代码路径不可达。"
+
+[[IgnoredVulns]]
+id = "GHSA-pc63-qcmh-9cmg"
+ignoreUntil = 2027-02-01
+reason = "XsltView 路径限制不当。本服务未使用 XSLT / XsltView，该代码路径不可达。"
