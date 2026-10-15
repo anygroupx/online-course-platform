@@ -34,6 +34,10 @@ def verify(root, sql):
     def constraints(db):
         return sql("SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema='" + db + "' AND table_name IN ('sys_user_role','sys_role_permission')")
     assert constraints('rbac_check') == '4'
+    # 038/039 也写入静态角色授权，基线链必须包含它们，下面的矩阵对比才有意义。
+    for migration in ('038_course_private_pricing_wallet.sql',
+                      '039_course_private_operations.sql'):
+        sql((root / 'database/migrations' / migration).read_text(), 'rbac_check')
     sql('CREATE DATABASE fresh_check;')
     sql((root / 'database/schema.sql').read_text(), 'fresh_check')
     assert constraints('fresh_check') == '4'
