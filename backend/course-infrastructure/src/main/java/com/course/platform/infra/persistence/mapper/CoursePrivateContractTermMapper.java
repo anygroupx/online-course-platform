@@ -39,7 +39,15 @@ public interface CoursePrivateContractTermMapper extends BaseMapper<CoursePrivat
     /** 调用者已锁协议；NULL边界表示无限界，不能凭此方法代替锁。 */
     @Select("SELECT COUNT(*) FROM course_private_contract_term t JOIN course_private_contract c ON c.id=t.contract_id AND c.relation_generation=t.relation_generation WHERE t.contract_id=#{contractId} AND (#{excludeId} IS NULL OR t.id<>#{excludeId}) AND t.status IN ('SCHEDULED','ACTIVE') AND (#{endAt} IS NULL OR t.start_at IS NULL OR t.start_at<#{endAt}) AND (t.end_at IS NULL OR #{startAt} IS NULL OR t.end_at>#{startAt})")
     int countOverlapping(@Param("contractId") Long contractId, @Param("excludeId") Long excludeId, @Param("startAt") LocalDateTime startAt, @Param("endAt") LocalDateTime endAt);
-    @Select("SELECT * FROM course_private_contract_term WHERE (status='ACTIVE' AND end_at<=#{now}) OR (status='PENDING_SETTLEMENT' AND settlement_deadline_at<=#{now}) ORDER BY id LIMIT #{limit}")
+    /** 快档：已到开始时刻仍待激活的排程周期。谓词自清除，激活后不再命中，无需游标。 */
+    @Select("SELECT * FROM course_private_contract_term WHERE status='SCHEDULED' AND operations_mode<>'LEGACY_PERMANENT' AND start_at IS NOT NULL AND start_at<=#{now} ORDER BY id LIMIT #{limit}")
+    List<CoursePrivateContractTerm> selectScheduledDue(@Param("now") LocalDateTime now, @Param("limit") int limit);
+
+    /** 快档：已生效但从未结算过的周期，保留现有「首次 PREVIEW」行为。谓词自清除。 */
+    @Select("SELECT t.* FROM course_private_contract_term t WHERE t.status='ACTIVE' AND t.operations_mode<>'LEGACY_PERMANENT' AND t.activated_at IS NOT NULL AND t.start_at IS NOT NULL AND t.start_at<=#{now} AND NOT EXISTS (SELECT 1 FROM course_private_term_settlement s WHERE s.term_id=t.id) ORDER BY t.id LIMIT #{limit}")
+    List<CoursePrivateContractTerm> selectUnevaluatedActive(@Param("now") LocalDateTime now, @Param("limit") int limit);
+
+    @Select("SELECT * FROM course_private_contract_term WHERE ((status='ACTIVE' AND end_at<=#{now}) OR (status='PENDING_SETTLEMENT' AND settlement_deadline_at<=#{now})) AND operations_mode<>'LEGACY_PERMANENT' ORDER BY id LIMIT #{limit}")
     List<CoursePrivateContractTerm> selectDue(@Param("now") LocalDateTime now, @Param("limit") int limit);
     /** 有界轮转扫描兜底事实事件，不能依赖上游更新时间冒充业务时间或漏掉历史退款。 */
     @Select("SELECT * FROM course_private_contract_term WHERE id>#{afterId} AND operations_mode<>'LEGACY_PERMANENT' AND status<>'CANCELLED' ORDER BY id LIMIT #{limit}")

@@ -130,6 +130,7 @@ course:
     # 对账独立于新申请开关，关闭新增运营后仍可维护已经存在的周期和历史退款。
     worker-enabled: ${COURSE_PRIVATE_OPERATIONS_WORKER_ENABLED:false}
     worker-delay-ms: ${COURSE_PRIVATE_OPERATIONS_WORKER_DELAY_MS:5000}
+    worker-sweep-delay-ms: ${COURSE_PRIVATE_OPERATIONS_SWEEP_DELAY_MS:300000}
     time-zone: ${COURSE_PRIVATE_OPERATIONS_TIME_ZONE:Asia/Shanghai}
   private-wallet:
     # 必须先执行038迁移并核对权限，再允许创建协议和资金转入。
