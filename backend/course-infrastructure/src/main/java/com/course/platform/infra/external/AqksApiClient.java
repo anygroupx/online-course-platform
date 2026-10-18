@@ -40,6 +40,7 @@ public class AqksApiClient {
      * API端点
      */
     private static final String API_LOGIN = "/api/MyUserInfo";
+    private static final String API_STUDY_TIME_SET = "/api/LoginTimesSet";
     private static final String API_STUDY_TIME_GET = "/api/LoginTimesGet";
     private static final String API_MY_SCORES = "/api/MyScores";
     
@@ -95,20 +96,38 @@ public class AqksApiClient {
                     .build();
         }
     }
-    
+
     /**
      * 累加学习时长
-     * 
+     *
      * @param userId AQKS用户ID
      * @param deltaSeconds 要累加的时长（秒），默认10秒
      * @param cookie 登录Cookie（serverCookie）
      * @return 是否成功
      */
     public boolean addStudyTime(String userId, int deltaSeconds, String cookie) {
-        // P0 safety cut-over: this historical automation endpoint mutates third-party study time.
-        // It is intentionally disabled rather than migrated to the new transport.
-        log.warn("[AQKS] 已阻止自动增加学习时长请求");
-        return false;
+        if (StrUtil.isBlank(userId) || deltaSeconds <= 0 || StrUtil.isBlank(cookie)) {
+            log.warn("[AQKS刷时长] 请求参数非法: userIdPresent={}, delta={}秒, cookiePresent={}",
+                    StrUtil.isNotBlank(userId), deltaSeconds, StrUtil.isNotBlank(cookie));
+            return false;
+        }
+
+        URI url = aqksUri(API_STUDY_TIME_SET, Map.of("UserID", userId, "StudyTimes", deltaSeconds));
+
+        log.info("[AQKS刷时长] userId={}, delta={}秒", userId, deltaSeconds);
+
+        try {
+            HttpHeaders headers = buildCookieHeaders(cookie);
+            SafeHttpResponse response = safeHttpClient.postJson(url, singleHeaders(headers), String.valueOf(deltaSeconds), policies.aqks());
+            String body = requireSuccess(response);
+            boolean success = isStudyTimeUpdateSuccessful(body);
+            log.info("[AQKS刷时长] 响应状态: {}, success={}", response.statusCode(), success);
+            return success;
+
+        } catch (Exception e) {
+            log.error("[AQKS刷时长] 失败: {}", e.getClass().getSimpleName());
+            return false;
+        }
     }
     
     /**
@@ -466,7 +485,7 @@ public class AqksApiClient {
                     .errorMessage("登录返回空响应")
                     .build();
         }
-        
+
         try {
             JSONObject json = JSONUtil.parseObj(responseBody);
             
@@ -516,6 +535,23 @@ public class AqksApiClient {
                     .errorMessage("解析登录响应失败")
                     .build();
         }
+    }
+
+    private boolean isStudyTimeUpdateSuccessful(String body) {
+        if (StrUtil.isBlank(body) || "true".equalsIgnoreCase(body.trim())) {
+            return true;
+        }
+        if (!body.trim().startsWith("{")) {
+            return false;
+        }
+        JSONObject json = JSONUtil.parseObj(body);
+        if (json.containsKey("success")) {
+            return Boolean.TRUE.equals(json.getBool("success"));
+        }
+        if (json.containsKey("Success")) {
+            return Boolean.TRUE.equals(json.getBool("Success"));
+        }
+        return false;
     }
     
     /**
