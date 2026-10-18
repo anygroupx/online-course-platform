@@ -182,4 +182,29 @@ class ProviderOutboundPolicyFactoryTest {
             }
         }
     }
+
+    @Test
+    void aqksAllowlistAcceptsConfiguredWebVpnProxyHost() {
+        var properties = new OutboundSecurityProperties();
+        properties.setAqksAllowedHosts(java.util.List.of(
+                "https-aqks-csuft-edu-cn-443.webvpn.csuft.edu.cn"));
+
+        var policies = new OutboundPolicyRegistry(properties);
+
+        // The origin host stays allowlisted so an in-campus deployment is unaffected, and the
+        // configured proxy host is added alongside it.
+        assertEquals(Set.of("aqks.csuft.edu.cn", "https-aqks-csuft-edu-cn-443.webvpn.csuft.edu.cn"),
+                policies.aqks().allowedHosts());
+    }
+
+    @Test
+    void aqksAllowlistStaysClosedWithoutConfiguration() {
+        var properties = new OutboundSecurityProperties();
+        properties.setAqksAllowedHosts(java.util.List.of("  ", ""));
+
+        // Blank entries must not leak into the allowlist, and an unconfigured deployment must
+        // never widen beyond the origin host.
+        assertEquals(Set.of("aqks.csuft.edu.cn"),
+                new OutboundPolicyRegistry(properties).aqks().allowedHosts());
+    }
 }
