@@ -37,11 +37,6 @@ import java.util.Map;
 public class AqksApiClient {
     
     /**
-     * AQKS平台基础URL
-     */
-    private static final String BASE_URL = "https://aqks.example.edu.cn";
-    
-    /**
      * API端点
      */
     private static final String API_LOGIN = "/api/MyUserInfo";
@@ -50,10 +45,13 @@ public class AqksApiClient {
     
     private final SafeHttpClient safeHttpClient;
     private final OutboundPolicyRegistry policies;
+    private final AqksTransportProperties transport;
 
-    public AqksApiClient(SafeHttpClient safeHttpClient, OutboundPolicyRegistry policies) {
+    public AqksApiClient(SafeHttpClient safeHttpClient, OutboundPolicyRegistry policies,
+                         AqksTransportProperties transport) {
         this.safeHttpClient = safeHttpClient;
         this.policies = policies;
+        this.transport = transport;
     }
     
     /**
@@ -77,8 +75,9 @@ public class AqksApiClient {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
             headers.setAccept(Collections.singletonList(MediaType.ALL));
-            headers.set("Host", "aqks.example.edu.cn");
             headers.set("Connection", "keep-alive");
+            // Transport credential for the campus WebVPN proxy; blank on a direct deployment.
+            headers.set("Cookie", buildCookieValue(null));
             
             // Body为双层Base64编码的密码（JSON字符串格式，带引号）
             SafeHttpResponse response = safeHttpClient.postJson(url, singleHeaders(headers),
@@ -552,7 +551,8 @@ public class AqksApiClient {
      * 构建带Cookie的请求头
      */
     private URI aqksUri(String path, Map<String, ?> query) {
-        HttpUrl.Builder builder = java.util.Objects.requireNonNull(HttpUrl.parse(BASE_URL + path)).newBuilder();
+        HttpUrl.Builder builder = java.util.Objects.requireNonNull(
+                HttpUrl.parse(transport.getBaseUrl() + path)).newBuilder();
         query.forEach((key, value) -> {
             if (key != null && value != null) builder.addQueryParameter(key, String.valueOf(value));
         });
@@ -579,13 +579,37 @@ public class AqksApiClient {
         headers.set("Accept", "application/json, text/javascript, */*; q=0.01");
         headers.set("Accept-Language", "zh-CN,zh;q=0.8,zh-TW;q=0.7");
         headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0");
-        headers.set("Referer", BASE_URL + "/client_pc/exone.html");
+        headers.set("Referer", transport.getBaseUrl() + transport.getRefererPath());
         headers.set("X-Requested-With", "XMLHttpRequest");
         
-        if (StrUtil.isNotBlank(serverCookie)) {
-            headers.set("Cookie", "LoginUserInfo_SYSAQ_Server=" + serverCookie);
-        }
+        headers.set("Cookie", buildCookieValue(serverCookie));
         
         return headers;
+    }
+
+    /**
+     * Builds the Cookie header for a request to the AQKS origin.
+     *
+     * <p>Two credentials travel together and must not be confused:</p>
+     * <ul>
+     *   <li>{@code webvpn-token} — a transport credential for the campus WebVPN reverse
+     *       proxy. It is service-wide (identical for every student) and only present when
+     *       the deployment tunnels through WebVPN.</li>
+     *   <li>{@code LoginUserInfo_SYSAQ_Server} — the per-student AQKS application session
+     *       obtained from {@link #login(String, String)}.</li>
+     * </ul>
+     *
+     * @param serverCookie per-student AQKS session cookie; may be blank for the login call
+     */
+    private String buildCookieValue(String serverCookie) {
+        StringBuilder cookie = new StringBuilder();
+        if (transport.usesWebVpn()) {
+            cookie.append("webvpn-token=").append(transport.getWebVpnToken());
+        }
+        if (StrUtil.isNotBlank(serverCookie)) {
+            if (cookie.length() > 0) cookie.append("; ");
+            cookie.append("LoginUserInfo_SYSAQ_Server=").append(serverCookie);
+        }
+        return cookie.toString();
     }
 }

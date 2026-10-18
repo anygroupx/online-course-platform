@@ -24,6 +24,7 @@ public class OutboundSecurityProperties {
     private int providerMaxResponseBytes = 8_388_608;
     private List<String> providerHttpAllowedHosts = new ArrayList<>();
     private List<Integer> providerAllowedPorts = new ArrayList<>();
+    private List<String> aqksAllowedHosts = new ArrayList<>();
     private List<String> alertWebhookAllowedHosts = new ArrayList<>();
     private List<String> alertWebhookHttpAllowedHosts = new ArrayList<>();
 
