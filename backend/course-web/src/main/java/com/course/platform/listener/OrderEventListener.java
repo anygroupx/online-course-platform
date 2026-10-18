@@ -136,7 +136,6 @@ public class OrderEventListener {
                 return;
             }
 
-            // 自动学习已由现有安全基线永久禁用，不能预先切换状态卡住人工处理和取消。
             // 调用AQKS刷课服务启动自动刷课
             // AqksStudyService内部会自动验证账号、检查任务状态
             boolean success = aqksStudyService.startAutoStudy(orderId);

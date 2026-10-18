@@ -120,6 +120,40 @@ class AqksApiClientTest {
                 "the login request must carry the WebVPN transport credential");
     }
 
+    @Test
+    void addStudyTimeAcceptsAnEmptySuccessfulResponse() {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenReturn(new SafeHttpResponse(200, "", Map.of()));
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+
+        assertTrue(client.addStudyTime("777", 10, "session-value"));
+    }
+
+    @Test
+    void addStudyTimeRejectsAnUnrecognizedSuccessfulResponse() {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenReturn(new SafeHttpResponse(200, "accepted", Map.of()));
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+
+        assertFalse(client.addStudyTime("777", 10, "session-value"));
+    }
+
+    @Test
+    void addStudyTimeRejectsInvalidArgumentsBeforeSendingRequest() {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+
+        assertFalse(client.addStudyTime(" ", 10, "session-value"));
+        assertFalse(client.addStudyTime("777", 0, "session-value"));
+        assertFalse(client.addStudyTime("777", 10, " "));
+
+        org.mockito.Mockito.verifyNoInteractions(http);
+    }
+
     private String extractCookieToken(String cookieHeader) {
         assertNotNull(cookieHeader, "the login request must send a Cookie header");
         for (String part : cookieHeader.split(";")) {
