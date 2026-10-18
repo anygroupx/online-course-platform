@@ -162,6 +162,12 @@ course:
 
 # 敏感字段本地加密与安全任务配置
 app:
+  aqks:
+    # Origin is only resolvable from inside the campus network. Outside it, point this at the
+    # campus WebVPN proxy host and supply the transport token below.
+    base-url: ${AQKS_BASE_URL:https://aqks.csuft.edu.cn}
+    webvpn-token: ${AQKS_WEBVPN_TOKEN:}
+    referer-path: ${AQKS_REFERER_PATH:/client_pc/exone.html}
   native-services:
     fulfillment-assets:
       retention-hours: ${NATIVE_SERVICE_FULFILLMENT_ASSET_RETENTION_HOURS:24}
@@ -177,6 +183,9 @@ app:
       dns-mode: ${OUTBOUND_DNS_MODE:system}
       provider-http-allowed-hosts: ${OUTBOUND_PROVIDER_HTTP_ALLOWED_HOSTS:}
       provider-allowed-ports: ${OUTBOUND_PROVIDER_ALLOWED_PORTS:}
+      # Extra hosts allowlisted for the AQKS integration, e.g. the campus WebVPN proxy host
+      # when the origin is unreachable from this network.
+      aqks-allowed-hosts: ${OUTBOUND_AQKS_ALLOWED_HOSTS:}
       alert-webhook-allowed-hosts: ${OUTBOUND_ALERT_ALLOWED_HOSTS:}
       alert-webhook-http-allowed-hosts: ${OUTBOUND_ALERT_HTTP_ALLOWED_HOSTS:}
       connect-timeout-millis: 5000
