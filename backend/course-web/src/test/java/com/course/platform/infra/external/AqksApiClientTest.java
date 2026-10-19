@@ -171,6 +171,47 @@ class AqksApiClientTest {
     }
 
     @Test
+    void businessRejectionIsSurfacedWithItsCodeInsteadOfABareStatus() throws Exception {
+        // This is the shape that hid the wrong HTTP method for so long: a non-2xx status whose
+        // body explains the rejection. The explanation must reach the caller.
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        when(http.get(any(URI.class), anyMap(), any()))
+                .thenReturn(new SafeHttpResponse(404,
+                        "{\"Code\":-8002,\"Message\":\"no permission\"}", Map.of()));
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+
+        assertFalse(client.addStudyTime("777", 10, "session-value"),
+                "a rejection still fails the call");
+
+        Method method = AqksApiClient.class.getDeclaredMethod("requireSuccess", SafeHttpResponse.class);
+        method.setAccessible(true);
+        var thrown = assertThrows(java.lang.reflect.InvocationTargetException.class,
+                () -> method.invoke(client, new SafeHttpResponse(404,
+                        "{\"Code\":-8002,\"Message\":\"no permission\"}", Map.of())));
+        var cause = (com.course.platform.infra.http.UpstreamBusinessException) thrown.getCause();
+        assertEquals("-8002", cause.getBusinessCode());
+        assertEquals("no permission", cause.getBusinessMessage());
+        assertEquals(404, cause.getStatusCode());
+    }
+
+    @Test
+    void businessRejectionDropsAMessageThatCarriesACredential() throws Exception {
+        Method method = AqksApiClient.class.getDeclaredMethod("requireSuccess", SafeHttpResponse.class);
+        method.setAccessible(true);
+        var client = client(transport(PROXY_BASE, "transport-token"), mock(SafeHttpClient.class));
+
+        var thrown = assertThrows(java.lang.reflect.InvocationTargetException.class,
+                () -> method.invoke(client, new SafeHttpResponse(401,
+                        "{\"Code\":-1,\"Message\":\"bad password for 20257270\"}", Map.of())));
+        var cause = (com.course.platform.infra.http.UpstreamBusinessException) thrown.getCause();
+
+        assertNull(cause.getBusinessMessage(),
+                "a message naming a credential must never be recorded");
+        assertEquals("-1", cause.getBusinessCode());
+    }
+
+    @Test
     void addStudyTimeRejectsAnUnrecognizedSuccessfulResponse() {
         SafeHttpClient http = mock(SafeHttpClient.class);
         when(http.get(any(URI.class), anyMap(), any()))
