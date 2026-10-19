@@ -32,7 +32,7 @@ import static org.mockito.Mockito.when;
 class AqksApiClientTest {
 
     private static final String PROXY_BASE =
-            "https://https-aqks-csuft-edu-cn-443.webvpn.csuft.edu.cn";
+            "https://https-aqks-example-edu-cn-443.webvpn.example.edu.cn";
 
     private AqksTransportProperties transport(String baseUrl, String token) {
         var properties = new AqksTransportProperties();
@@ -60,7 +60,7 @@ class AqksApiClientTest {
 
     @Test
     void directDeploymentSendsOnlyTheApplicationSession() throws Exception {
-        var client = client(transport("https://aqks.csuft.edu.cn", ""), mock(SafeHttpClient.class));
+        var client = client(transport("https://aqks.example.edu.cn", ""), mock(SafeHttpClient.class));
 
         String cookie = invokeCookie(client, "session-value");
 

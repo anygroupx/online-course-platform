@@ -33,7 +33,7 @@ public class AqksApiClient {
     /**
      * AQKS平台基础URL
      */
-    private static final String BASE_URL = "https://aqks.csuft.edu.cn";
+    private static final String BASE_URL = "https://aqks.example.edu.cn";
     
     /**
      * API端点
@@ -70,7 +70,7 @@ public class AqksApiClient {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
             headers.setAccept(Collections.singletonList(MediaType.ALL));
-            headers.set("Host", "aqks.csuft.edu.cn");
+            headers.set("Host", "aqks.example.edu.cn");
             headers.set("Connection", "keep-alive");
             
             // Body为双层Base64编码的密码（JSON字符串格式，带引号）

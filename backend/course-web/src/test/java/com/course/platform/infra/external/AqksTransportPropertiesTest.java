@@ -19,17 +19,17 @@ class AqksTransportPropertiesTest {
         var properties = new AqksTransportProperties();
         properties.validate();
 
-        assertEquals("https://aqks.csuft.edu.cn", properties.getBaseUrl());
+        assertEquals("https://aqks.example.edu.cn", properties.getBaseUrl());
         assertFalse(properties.usesWebVpn(), "an unconfigured deployment must not claim WebVPN transport");
     }
 
     @Test
     void normalisesTrailingSlashesOnBaseUrl() {
         var properties = new AqksTransportProperties();
-        properties.setBaseUrl("https://https-aqks-csuft-edu-cn-443.webvpn.csuft.edu.cn///");
+        properties.setBaseUrl("https://https-aqks-example-edu-cn-443.webvpn.example.edu.cn///");
         properties.validate();
 
-        assertEquals("https://https-aqks-csuft-edu-cn-443.webvpn.csuft.edu.cn", properties.getBaseUrl());
+        assertEquals("https://https-aqks-example-edu-cn-443.webvpn.example.edu.cn", properties.getBaseUrl());
     }
 
     @Test
@@ -52,7 +52,7 @@ class AqksTransportPropertiesTest {
         assertThrows(IllegalStateException.class, blank::validate);
 
         var insecure = new AqksTransportProperties();
-        insecure.setBaseUrl("http://aqks.csuft.edu.cn");
+        insecure.setBaseUrl("http://aqks.example.edu.cn");
         assertThrows(IllegalStateException.class, insecure::validate,
                 "the origin must be reached over HTTPS");
     }

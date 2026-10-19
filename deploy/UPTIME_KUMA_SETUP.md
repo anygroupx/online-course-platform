@@ -6,7 +6,7 @@
 
 ## 添加课程平台监控
 
-在 Uptime Kuma (http://10.0.0.2:3001 或 https://status.csuft.codes) 中添加以下监控项：
+在 Uptime Kuma (http://10.0.0.2:3001 或 https://status.example.com) 中添加以下监控项：
 
 ### 1. 前端页面监控（公网访问）
 
@@ -83,7 +83,7 @@
 - 访问 Uptime Kuma → Status Pages
 - 创建新页面：`course-platform-status`
 - 添加上述监控项
-- 可以通过 `https://status.csuft.codes/status/course-platform` 访问（需配置VPS Nginx）
+- 可以通过 `https://status.example.com/status/course-platform` 访问（需配置VPS Nginx）
 
 ---
 

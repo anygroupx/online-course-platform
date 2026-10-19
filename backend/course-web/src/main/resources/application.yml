@@ -165,7 +165,7 @@ app:
   aqks:
     # Origin is only resolvable from inside the campus network. Outside it, point this at the
     # campus WebVPN proxy host and supply the transport token below.
-    base-url: ${AQKS_BASE_URL:https://aqks.csuft.edu.cn}
+    base-url: ${AQKS_BASE_URL:https://aqks.example.edu.cn}
     webvpn-token: ${AQKS_WEBVPN_TOKEN:}
     referer-path: ${AQKS_REFERER_PATH:/client_pc/exone.html}
   native-services:

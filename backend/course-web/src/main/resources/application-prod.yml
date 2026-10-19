@@ -45,7 +45,7 @@ cloudflare:
     # 生产默认启用且 Secret Key 必填，避免绕过登录/注册人机验证。
     enabled: ${TURNSTILE_ENABLED:true}
     secret-key: ${TURNSTILE_SECRET_KEY}
-    expected-hostname: ${TURNSTILE_EXPECTED_HOSTNAME:course.csuft.tech}
+    expected-hostname: ${TURNSTILE_EXPECTED_HOSTNAME:course.example.com}
     always-required: ${TURNSTILE_ALWAYS_REQUIRED:true}
     verify-url: https://challenges.cloudflare.com/turnstile/v0/siteverify
 

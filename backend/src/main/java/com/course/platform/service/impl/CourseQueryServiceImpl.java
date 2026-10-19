@@ -43,7 +43,7 @@ public class CourseQueryServiceImpl implements CourseQueryService {
     private final PlatformDockingService platformDockingService;
 
     // 实验室安全平台API地址
-    private static final String AQKS_API_URL = "https://aqks.csuft.edu.cn/api/MyUserInfo";
+    private static final String AQKS_API_URL = "https://aqks.example.edu.cn/api/MyUserInfo";
 
     @Override
     public CourseInfoResponse queryCourses(QueryCourseRequest request, Long userId) {
@@ -97,7 +97,7 @@ public class CourseQueryServiceImpl implements CourseQueryService {
      * 自营平台查课 - 调用实验室安全平台API
      * 
      * API规范：
-     * - POST https://aqks.csuft.edu.cn/api/MyUserInfo?UserName={学号}&isBackground=false
+     * - POST https://aqks.example.edu.cn/api/MyUserInfo?UserName={学号}&isBackground=false
      * - Body: 双层Base64编码的密码 "{学号}@{密码}"
      * - 返回用户信息包含课程学习信息
      */
@@ -120,7 +120,7 @@ public class CourseQueryServiceImpl implements CourseQueryService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("User-Agent", "Apifox/1.0.0 (https://apifox.com)");
             headers.setAccept(Collections.singletonList(MediaType.ALL));
-            headers.set("Host", "aqks.csuft.edu.cn");
+            headers.set("Host", "aqks.example.edu.cn");
             headers.set("Connection", "keep-alive");
             
             // 4. 发送请求 - Body为双层Base64编码的密码（JSON字符串格式，带引号）

@@ -11,8 +11,8 @@ import java.util.Set;
  * Named, least-privilege policies for every supported external integration.
  *
  * <p>The AQKS integration reaches the platform through the campus WebVPN reverse proxy
- * ({@code https-<host>-<port>.webvpn.csuft.edu.cn}) because the origin
- * {@code aqks.csuft.edu.cn} only resolves to a private campus address. The proxy host is
+ * ({@code https-<host>-<port>.webvpn.example.edu.cn}) because the origin
+ * {@code aqks.example.edu.cn} only resolves to a private campus address. The proxy host is
  * deployment-specific, so it is supplied through
  * {@link OutboundSecurityProperties#getAqksAllowedHosts()} instead of being hard-coded;
  * the allowlist stays a closed set and never widens to a wildcard.</p>
@@ -20,7 +20,7 @@ import java.util.Set;
 @Component
 public class OutboundPolicyRegistry {
     /** Origin host, kept allowlisted so a direct campus deployment keeps working unchanged. */
-    private static final Set<String> AQKS_ORIGIN_HOSTS = Set.of("aqks.csuft.edu.cn");
+    private static final Set<String> AQKS_ORIGIN_HOSTS = Set.of("aqks.example.edu.cn");
     private static final Set<String> TURNSTILE_HOSTS = Set.of("challenges.cloudflare.com");
 
     private final OutboundSecurityProperties properties;

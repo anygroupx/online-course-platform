@@ -4,7 +4,7 @@
 
 ## 2026-09-11 发布与启用记录
 
-- 发布标识：`native-ui-20260911-160544`；访问地址：[course.csuft.tech](https://course.csuft.tech)。只替换前后端容器，MySQL、Redis、Elasticsearch 及入口代理配置未改动。
+- 发布标识：`native-ui-20260911-160544`；访问地址：[course.example.com](https://course.example.com)。只替换前后端容器，MySQL、Redis、Elasticsearch 及入口代理配置未改动。
 - 后端使用已验收 JAR，SHA256 为 `df4950f29044a8bb714a6291bb7b00b13ddbfe2fcfabef788c40665014b107e9`；前端以相同验收源码注入生产 Turnstile 公开 Site Key 后构建。工作区未验收的外部流水接口改动未发布。
 - 完成备份、同版本 MySQL 离线结构演练及 13 份生产迁移：018–028、`029_native_service_price_precision.sql`、030。新增 22 张表，原 29 张表结构保持不变；已存在的 `029_localized_display_and_category_multiplier.sql` 未重跑。
 - `NATIVE_SERVICES_ENABLED=true`、`NATIVE_SERVICE_STATUS_REFRESH_ENABLED=true`；通知开关仍为 false，人脸采集允许来源仍为空，既有加密及认证密钥保持不变。

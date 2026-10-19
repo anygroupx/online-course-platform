@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @EnabledIfEnvironmentVariable(named = "DOH_LIVE_TEST", matches = "true")
 class TrustedDohLiveIntegrationTest {
 
-    private static final String PROBE_HOST = "aqks.csuft.edu.cn";
+    private static final String PROBE_HOST = "aqks.example.edu.cn";
 
     private DohEndpointProperties endpoint(String host, String... bootstrap) {
         DohEndpointProperties properties = new DohEndpointProperties();

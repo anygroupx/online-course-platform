@@ -94,7 +94,7 @@ public class CourseQueryServiceImpl implements CourseQueryService {
      * 自营平台查课 - 调用实验室安全平台API
      * 
      * API规范：
-     * - POST https://aqks.csuft.edu.cn/api/MyUserInfo?UserName={学号}&isBackground=false
+     * - POST https://aqks.example.edu.cn/api/MyUserInfo?UserName={学号}&isBackground=false
      * - Body: 双层Base64编码的密码 "{学号}@{密码}"
      * - 返回用户信息包含课程学习信息
      */

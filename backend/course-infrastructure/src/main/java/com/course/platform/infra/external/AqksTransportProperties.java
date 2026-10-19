@@ -10,10 +10,10 @@ import org.springframework.stereotype.Component;
  *
  * <p>The platform is reachable in two ways:</p>
  * <ul>
- *   <li><b>Direct</b> — {@code https://aqks.csuft.edu.cn}, only resolvable from inside the
+ *   <li><b>Direct</b> — {@code https://aqks.example.edu.cn}, only resolvable from inside the
  *       campus network.</li>
  *   <li><b>WebVPN</b> — the campus reverse proxy publishes the same origin under a
- *       derived host, {@code https-<host-with-dashes>-<port>.webvpn.csuft.edu.cn}. This is
+ *       derived host, {@code https-<host-with-dashes>-<port>.webvpn.example.edu.cn}. This is
  *       the only path from outside the campus network.</li>
  * </ul>
  *
@@ -28,7 +28,7 @@ import org.springframework.stereotype.Component;
 public class AqksTransportProperties {
 
     /** Base URL of the AQKS origin, without a trailing slash. */
-    private String baseUrl = "https://aqks.csuft.edu.cn";
+    private String baseUrl = "https://aqks.example.edu.cn";
 
     /**
      * WebVPN transport token. When blank the client talks to {@link #baseUrl} directly,
