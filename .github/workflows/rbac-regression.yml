@@ -116,9 +116,14 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: UI workflow regressions (shard ${{ matrix.shard }}/${{ strategy.job-total }})
         working-directory: frontend
+        # 用 env 传值而不是把 ${{ }} 写进 run：Semgrep 的 YAML 解析器无法解析
+        # 命令行里的表达式，会把该行记为 syntax error，--strict 下整个门禁失败。
         # job-total 由矩阵长度推导，增删 shard 只需改上面的数组，
         # 不会出现矩阵与模数不一致导致的静默漏跑。
-        run: node scripts/browser-shard.mjs ${{ matrix.shard }} ${{ strategy.job-total }}
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ strategy.job-total }}
+        run: node scripts/browser-shard.mjs "$SHARD_INDEX" "$SHARD_TOTAL"
       - name: Save UI artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
