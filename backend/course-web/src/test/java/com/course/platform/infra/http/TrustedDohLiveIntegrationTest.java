@@ -39,9 +39,10 @@ class TrustedDohLiveIntegrationTest {
     @Test
     void resolvesThroughEachConfiguredEndpoint() throws Exception {
         List<DohEndpointProperties> endpoints = List.of(
+                endpoint("dns.alidns.com", "223.5.5.5", "223.6.6.6"),
+                endpoint("doh.pub", "1.12.12.12", "120.53.53.53"),
                 endpoint("cloudflare-dns.com", "1.1.1.1", "1.0.0.1"),
-                endpoint("dns.google", "8.8.8.8", "8.8.4.4"),
-                endpoint("edge.1molchuan.top", "156.239.232.8", "103.199.103.204", "203.168.131.145"));
+                endpoint("dns.google", "8.8.8.8", "8.8.4.4"));
 
         TrustedDohDnsResolver resolver = new TrustedDohDnsResolver(endpoints);
         List<InetAddress> addresses = resolver.resolve(PROBE_HOST);
@@ -56,12 +57,20 @@ class TrustedDohLiveIntegrationTest {
     }
 
     @Test
-    void singleProviderEndpointResolvesIndependently() throws Exception {
-        TrustedDohDnsResolver resolver = new TrustedDohDnsResolver(
-                List.of(endpoint("edge.1molchuan.top", "156.239.232.8", "103.199.103.204")));
+    void eachEndpointAnswersIndependently() throws Exception {
+        // Each provider must work on its own, otherwise a single reachable endpoint is masking
+        // a dead peer and the "mutual fallback" is not real.
+        List<DohEndpointProperties> endpoints = List.of(
+                endpoint("dns.alidns.com", "223.5.5.5", "223.6.6.6"),
+                endpoint("doh.pub", "1.12.12.12", "120.53.53.53"),
+                endpoint("cloudflare-dns.com", "1.1.1.1", "1.0.0.1"),
+                endpoint("dns.google", "8.8.8.8", "8.8.4.4"));
 
-        List<InetAddress> addresses = resolver.resolve(PROBE_HOST);
-        assertFalse(addresses.isEmpty());
+        for (DohEndpointProperties only : endpoints) {
+            TrustedDohDnsResolver resolver = new TrustedDohDnsResolver(List.of(only));
+            List<InetAddress> addresses = resolver.resolve(PROBE_HOST);
+            assertFalse(addresses.isEmpty(), only.getHost() + " returned no address");
+        }
     }
 
     @Test

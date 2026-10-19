@@ -35,6 +35,15 @@ final class TrustedDohDnsResolver implements SsrfGuard.HostResolver {
     private static final String WIRE_MEDIA_TYPE = "application/dns-message";
     private static final int MAX_RESPONSE_BYTES = 65_536;
 
+    /**
+     * Resolving through a proxy adds a TLS handshake to a remote exit node before the query is
+     * even sent, so a budget tuned for direct queries aborts healthy lookups. These defaults
+     * leave room for a slow handshake while staying below the caller's own call timeout.
+     */
+    private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration DEFAULT_READ_TIMEOUT = Duration.ofSeconds(12);
+    private static final Duration DEFAULT_CALL_TIMEOUT = Duration.ofSeconds(15);
+
     private static final ExecutorService QUERY_EXECUTOR = new ThreadPoolExecutor(
             4, 4, 30, TimeUnit.SECONDS, new ArrayBlockingQueue<>(32), runnable -> {
                 Thread thread = new Thread(runnable, "trusted-dns-query");
@@ -69,14 +78,14 @@ final class TrustedDohDnsResolver implements SsrfGuard.HostResolver {
         // The allowlist is derived from configuration so a new provider never widens egress
         // beyond the hosts an operator explicitly declared.
         this.policy = new OutboundRequestPolicy("dns-over-https", Set.copyOf(hosts), Set.of(), Set.of(),
-                MAX_RESPONSE_BYTES, Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(8));
+                MAX_RESPONSE_BYTES, DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_CALL_TIMEOUT);
     }
 
     /** Test seam: a single endpoint backed by a caller-supplied transport. */
     TrustedDohDnsResolver(String host, String path, SafeHttpClient transport) {
         this.endpoints = List.of(new Endpoint(host, path, transport));
         this.policy = new OutboundRequestPolicy("dns-over-https", Set.of(host), Set.of(), Set.of(),
-                MAX_RESPONSE_BYTES, Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(8));
+                MAX_RESPONSE_BYTES, DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_CALL_TIMEOUT);
     }
 
     /** Test seam: two named endpoints backed by caller-supplied transports. */
@@ -86,7 +95,7 @@ final class TrustedDohDnsResolver implements SsrfGuard.HostResolver {
                 new Endpoint("dns.google", "dns-query", fallback));
         this.policy = new OutboundRequestPolicy("dns-over-https",
                 Set.of("cloudflare-dns.com", "dns.google"), Set.of(), Set.of(),
-                MAX_RESPONSE_BYTES, Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(8));
+                MAX_RESPONSE_BYTES, DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT, DEFAULT_CALL_TIMEOUT);
     }
 
     @Override
