@@ -22,9 +22,14 @@ export const OVERLAY_VIEWPORTS = [
 ];
 
 // 等待入场/离场过渡结束，避免在动画中途测量。
+// el-dialog 用 dialog-fade；ElMessageBox 用 fade-in-linear（动画挂在
+// 其包装层 .el-overlay-message-box 上），两者都要等完再测量。
 export async function settleDialog(page) {
   await page.waitForFunction(
-    () => !document.querySelector('.dialog-fade-enter-active, .dialog-fade-leave-active'),
+    () => !document.querySelector(
+      '.dialog-fade-enter-active, .dialog-fade-leave-active, '
+      + '.fade-in-linear-enter-active, .fade-in-linear-leave-active',
+    ),
   );
 }
 
@@ -99,4 +104,54 @@ export async function assertDialogActionReachable(dialog, viewport, actionName) 
   );
   assert.equal(await action.isEnabled(), true, `${label}: 主操作按钮必须可点击`);
   return { scrollable };
+}
+
+// 断言 ElMessageBox 的宽度受 EP 上限（--el-messagebox-width，默认 420px）约束，
+// 且完整落在视口内、不把文档撑出横向滚动。
+//
+// 背景：responsive.scss 曾用 calc(100vw - …) 裸视口约束整体替换 EP 的
+// max-width:var(--el-messagebox-width)（同特异度、后加载者胜），宽屏下弹窗
+// 被拉伸到接近满宽（1280 视口实测 1237px）。修复后应为
+// min(--el-messagebox-width, 视口约束)——只收缩不放大。
+//
+// messageBox：Playwright locator，指向 .el-message-box[role=dialog] 所在的
+//   .el-overlay-message-box 包装层（EP 2.11.5 中 role 挂在包装层，
+//   .el-message-box 是其内层节点，此处自动下探）。
+// viewport：{ name, width, height }，用于生成可读的失败信息。
+export async function assertMessageBoxViewport(messageBox, viewport) {
+  const label = viewport.name || `${viewport.width}x${viewport.height}`;
+  const box = messageBox.locator('.el-message-box').first();
+  assert.ok(
+    (await box.count()) > 0,
+    `${label}: 定位器下必须存在 .el-message-box 节点`,
+  );
+
+  // 1. 计算宽度必须 <= 420px + 容差。这一条同时表达「视口约束没有把
+  //    420px 上限挤掉」——缺陷版 calc(100vw - …) 在 1280 视口下是 1256px，
+  //    远超上限。用计算样式宽（布局宽）而非 boundingBox，避开过渡动画。
+  const computedWidth = await box.evaluate(
+    (el) => Number.parseFloat(getComputedStyle(el).width),
+  );
+  assert.ok(
+    computedWidth <= 420 + VIEWPORT_TOLERANCE,
+    `${label}: .el-message-box 计算宽度 ${computedWidth}px 必须不超过 `
+      + `420px + ${VIEWPORT_TOLERANCE}px 容差（EP --el-messagebox-width 上限被视口约束挤掉时即为此故障）`,
+  );
+
+  // 2. 弹窗必须完整落在视口内（左右边距 >= 0），文档不得出现横向滚动。
+  const rect = await rectOf(box);
+  assert.ok(
+    rect.x >= -VIEWPORT_TOLERANCE && rect.x + rect.width <= viewport.width + VIEWPORT_TOLERANCE,
+    `${label}: .el-message-box 必须落在视口内，实际 [x=${rect.x}, width=${rect.width}] `
+      + `（视口宽 ${viewport.width}）`,
+  );
+  const scrollWidth = await box.evaluate(
+    () => document.documentElement.scrollWidth,
+  );
+  assert.ok(
+    scrollWidth <= viewport.width + VIEWPORT_TOLERANCE,
+    `${label}: document.scrollWidth ${scrollWidth}px 不得超过视口宽 ${viewport.width}px（横向溢出）`,
+  );
+
+  return { computedWidth, rect, scrollWidth };
 }

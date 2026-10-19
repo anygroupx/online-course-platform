@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { createTestServer } from './fixtures/test-server.mjs';
-import { assertViewportOverlay, OVERLAY_VIEWPORTS, settleDialog } from './fixtures/viewport-overlay.mjs';
+import { assertMessageBoxViewport, assertViewportOverlay, OVERLAY_VIEWPORTS, settleDialog } from './fixtures/viewport-overlay.mjs';
 
 // 所有API均拦截到隔离夹具；浏览器不得访问外部服务或真实资金账户。
 const html=`<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="app"></div><script type="module">
-import {createApp,h} from 'vue';import {createRouter,createMemoryHistory,RouterView} from 'vue-router';import ElementPlus from 'element-plus';import 'element-plus/dist/index.css';import '/src/styles/variables.scss';import '/src/styles/global.css';
+import {createApp,h} from 'vue';import {createRouter,createMemoryHistory,RouterView} from 'vue-router';import ElementPlus from 'element-plus';import 'element-plus/dist/index.css';import '/src/styles/variables.scss';import '/src/styles/global.css';/* 弹窗视口/宽度回归断言依赖 responsive.scss 的生产规则；相对顺序同 main.js（EP 样式之后） */import '/src/styles/responsive.scss';
 import Wallets from '/src/views/CourseWallets.vue';import Admin from '/src/views/AdminCourseWallets.vue';import Courses from '/src/views/Courses.vue';import PriceList from '/src/views/PriceList.vue';import {applyAuthSession} from '/src/utils/authSession.js';
 const q=new URLSearchParams(location.search),role=q.get('role')||'USER';const permissions=role==='FINANCE'?['user:read','course-wallet:read:any','course-wallet:audit','course-wallet:release']:role==='PRICE_MANAGER'?['course-private-price:manage']:role==='ADMIN'?['user:read','course-private-price:manage','course-private-price:read','course-wallet:read:any','course-wallet:audit','course-wallet:release']:[];
 if(q.get('storageFail')==='1'){const original=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(key.startsWith('course-wallet-transfer:v1:'))throw new Error('simulated quota');return original.call(this,key,value);};}
@@ -17,7 +17,7 @@ const server=await createTestServer({logLevel:'error',plugins:[{name:'course-wal
 let browser;
 try {
   await server.listen();const base=`http://127.0.0.1:${server.httpServer.address().port}`;
-  browser=await chromium.launch({executablePath:process.env.BROWSER_PATH||(existsSync('/snap/bin/chromium')?'/snap/bin/chromium':undefined),headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+  browser=await chromium.launch({executablePath:process.env.BROWSER_PATH||(existsSync('/snap/bin/chromium')?'/snap/bin/chromium':undefined),headless:true,args:['--no-sandbox','--disable-dev-shm-usage',...(process.env.EXTRA_BROWSER_ARGS?process.env.EXTRA_BROWSER_ARGS.split(' '):[])]});
   const page=await browser.newPage({viewport:{width:1280,height:900}});page.setDefaultTimeout(20000);
   const errors=[],unexpected=[],writes=[];let general='500.00',wallet='200.00',failTransfer=false,loseTransferResponse=false,loseReleaseResponse=true,loseOrderResponse=true;const seenOrders=new Map(),seenTransfers=new Map(),seenReleases=new Map();
   page.on('pageerror',e=>errors.push(e.message));
@@ -83,7 +83,37 @@ try {
     await transfer.getByRole('button', { name: '取消', exact: true }).click();
     await transfer.waitFor({ state: 'hidden' });
   }
+  // MessageBox 宽度回归：确认资金划转 / 确认课程费用两个 ElMessageBox 必须受
+  // EP 420px 上限约束（responsive.scss 的视口约束只收缩不放大），且不溢出视口。
+  // 每个视口都重新打开弹窗测量，不在旧弹窗上复用几何。
+  wallet='100.00'; // 确认课程费用要求专户余额 >= 7.20，先恢复可购余额
+  for (const viewport of OVERLAY_VIEWPORTS) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto(base + '/__course_wallet');
+    await page.getByRole('button', { name: '转入预存' }).click();
+    await transfer.getByLabel('转入金额').fill('10');
+    await transfer.getByRole('button', { name: '确认转入' }).click();
+    const confirmBox = page.getByRole('dialog', { name: '确认资金划转' });
+    await confirmBox.getByText(/普通余额/).waitFor();
+    await settleDialog(page);
+    await assertMessageBoxViewport(confirmBox, viewport);
+    await confirmBox.getByRole('button', { name: '取消', exact: true }).click();
+    await confirmBox.waitFor({ state: 'hidden' });
+    // 确认课程费用：Courses 视图 <768px 时提交按钮文案为「提交」。
+    await page.goto(base + '/__course_wallet?view=/courses');
+    await page.locator('.platform-select').first().click();
+    await page.getByRole('option', { name: /课程X/ }).click();
+    await page.getByText('专属密价 ¥7.20/门', { exact: false }).waitFor();
+    await page.locator('textarea').first().fill('school student password 课程A');
+    await page.getByRole('button', { name: viewport.width < 768 ? '提交' : '立即提交', exact: true }).click();
+    const purchaseBox = page.getByRole('dialog', { name: '确认课程费用' });
+    await purchaseBox.getByText(/专属密价.*7\.20.*课程专户/).waitFor();
+    await settleDialog(page);
+    await assertMessageBoxViewport(purchaseBox, viewport);
+    await purchaseBox.getByRole('button', { name: '取消', exact: true }).click();
+    await purchaseBox.waitFor({ state: 'hidden' });
+  }
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(base + '/__course_wallet');
-  assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);console.log('PASS 课程专户浏览器：金额精度、双确认、失败余额保全、弹窗重开与整页重载幂等、存储失败阻止发送、未知结果改金额拒绝、财务审批审计、财务独立权限、协议版本、服务端下单快照、运营拒绝、移动端、弹窗视口几何');
+  assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);console.log('PASS 课程专户浏览器：金额精度、双确认、失败余额保全、弹窗重开与整页重载幂等、存储失败阻止发送、未知结果改金额拒绝、财务审批审计、财务独立权限、协议版本、服务端下单快照、运营拒绝、移动端、弹窗视口几何、MessageBox 宽度');
 } finally {await browser?.close();await server.close();}
