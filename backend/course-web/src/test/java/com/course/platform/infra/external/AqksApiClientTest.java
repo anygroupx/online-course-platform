@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.net.URI;
+import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -226,6 +227,56 @@ class AqksApiClientTest {
         assertNull(withoutStatus.getStatusCode());
         assertTrue(withStatus.getMessage().contains("404"));
         assertFalse(withStatus.getMessage().contains("http"), "the message must not embed a URL");
+    }
+
+    @Test
+    void loginSendsTheSha256HexDigestOfThePassword() throws Exception {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        var captured = new AtomicReference<String>();
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenAnswer(invocation -> {
+                    captured.set(invocation.getArgument(2));
+                    return new SafeHttpResponse(200,
+                            "{\"ID\":777,\"Token\":\"t-1\",\"UserName\":\"20250001\"}", Map.of());
+                });
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+        client.login("20250001", "secret-password");
+
+        // The browser client sends SHA256(password) as lowercase hex. Sending Base64 instead
+        // makes every credential look wrong, which is indistinguishable from a bad password.
+        assertEquals("\"" + sha256Hex("secret-password") + "\"", captured.get(),
+                "the password must be sent as a quoted SHA256 hex digest");
+    }
+
+    @Test
+    void loginDoesNotSendThePasswordInClearOrAsBase64() throws Exception {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        var captured = new AtomicReference<String>();
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenAnswer(invocation -> {
+                    captured.set(invocation.getArgument(2));
+                    return new SafeHttpResponse(200,
+                            "{\"ID\":777,\"Token\":\"t-1\",\"UserName\":\"20250001\"}", Map.of());
+                });
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+        client.login("20250001", "secret-password");
+
+        assertFalse(captured.get().contains("secret-password"), "the raw password must never be sent");
+        assertFalse(captured.get().contains(Base64.getEncoder().encodeToString("secret-password".getBytes())),
+                "Base64 is not accepted by the upstream");
+    }
+
+    private String sha256Hex(String value) throws Exception {
+        byte[] hash = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        StringBuilder hex = new StringBuilder();
+        for (byte b : hash) {
+            hex.append(Character.forDigit((b >> 4) & 0xF, 16));
+            hex.append(Character.forDigit(b & 0xF, 16));
+        }
+        return hex.toString();
     }
 
     private String extractCookieToken(String cookieHeader) {
