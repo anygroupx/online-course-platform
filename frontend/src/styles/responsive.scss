@@ -150,7 +150,12 @@ svg {
 .el-message-box {
   display: inline-flex;
   flex-direction: column;
-  max-inline-size: calc(100vw - var(--safe-area-left) - var(--safe-area-right) - 24px);
+  /* 只收缩不放大：必须保留 Element Plus 的 --el-messagebox-width（420px）上限，
+     否则 max-width 被整体替换后，宽屏下弹窗会被拉伸到接近满宽。 */
+  max-inline-size: min(
+    var(--el-messagebox-width, 420px),
+    calc(100vw - var(--safe-area-left) - var(--safe-area-right) - 24px)
+  );
   max-block-size: calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom) - 24px);
   text-align: start;
   vertical-align: middle;
