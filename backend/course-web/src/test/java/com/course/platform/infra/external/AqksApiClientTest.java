@@ -125,8 +125,8 @@ class AqksApiClientTest {
     @Test
     void addStudyTimeAcceptsAnEmptySuccessfulResponse() {
         SafeHttpClient http = mock(SafeHttpClient.class);
-        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
-                .thenReturn(new SafeHttpResponse(200, "", Map.of()));
+        when(http.get(any(URI.class), anyMap(), any()))
+                .thenReturn(new SafeHttpResponse(204, "", Map.of()));
 
         var client = client(transport(PROXY_BASE, "transport-token"), http);
 
@@ -134,9 +134,46 @@ class AqksApiClientTest {
     }
 
     @Test
+    void addStudyTimeUsesGetBecausePostIsRejectedAsForbidden() {
+        // The upstream answers POST on this endpoint with 404 + -8002 "no permission",
+        // which is a method mismatch masquerading as an auth failure. GET returns 204.
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        when(http.get(any(URI.class), anyMap(), any()))
+                .thenReturn(new SafeHttpResponse(204, "", Map.of()));
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+
+        assertTrue(client.addStudyTime("777", 10, "session-value"));
+        org.mockito.Mockito.verify(http).get(any(URI.class), anyMap(), any());
+        org.mockito.Mockito.verify(http, org.mockito.Mockito.never())
+                .postJson(any(URI.class), anyMap(), anyString(), any());
+    }
+
+    @Test
+    void loginKeepsTheServerCookieInsteadOfReconstructingIt() throws Exception {
+        // The body-derived cookie cannot be decrypted by the server, so follow-up calls
+        // fail as "not logged in". The issued Set-Cookie is the only usable value.
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        String issued = "01227C56EB5Edeadbeef";
+        String body = "{\"ID\":100175800,\"UserName\":\"20257270\",\"Token\":\"tok-1\","
+                + "\"StudyTimes\":\"458\",\"MinTimeMinute\":\"0\"}";
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenReturn(new SafeHttpResponse(200, body,
+                        Map.of("set-cookie", java.util.List.of(
+                                "LoginUserInfo_SYSAQ_Server=" + issued + ";expires=Wed, 21 Oct 2026 07:28:00 GMT;path=/"))));
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+        var result = client.login("20257270", "secret");
+
+        assertTrue(result.isSuccess());
+        assertEquals(issued, result.getServerCookie(),
+                "the issued session cookie must be used, not a re-encoded response body");
+    }
+
+    @Test
     void addStudyTimeRejectsAnUnrecognizedSuccessfulResponse() {
         SafeHttpClient http = mock(SafeHttpClient.class);
-        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+        when(http.get(any(URI.class), anyMap(), any()))
                 .thenReturn(new SafeHttpResponse(200, "accepted", Map.of()));
 
         var client = client(transport(PROXY_BASE, "transport-token"), http);

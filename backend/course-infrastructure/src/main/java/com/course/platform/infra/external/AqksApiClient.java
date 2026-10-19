@@ -44,6 +44,9 @@ public class AqksApiClient {
     private static final String API_STUDY_TIME_SET = "/api/LoginTimesSet";
     private static final String API_STUDY_TIME_GET = "/api/LoginTimesGet";
     private static final String API_MY_SCORES = "/api/MyScores";
+
+    /** Name of the per-student AQKS session cookie issued by the login response. */
+    private static final String COOKIE_SERVER_NAME = "LoginUserInfo_SYSAQ_Server=";
     
     private final SafeHttpClient safeHttpClient;
     private final OutboundPolicyRegistry policies;
@@ -92,7 +95,8 @@ public class AqksApiClient {
             // body is not a JSON object, i.e. when no business answer was actually returned.
             String responseBody = response.body();
             if (isJsonObject(responseBody)) {
-                AqksLoginResult parsed = parseLoginResponse(responseBody, username);
+                AqksLoginResult parsed = withIssuedCookie(
+                        parseLoginResponse(responseBody, username), response);
                 log.info("[AQKS登录] 响应状态: {}, success={}", response.statusCode(), parsed.isSuccess());
                 return parsed;
             }
@@ -175,7 +179,10 @@ public class AqksApiClient {
 
         try {
             HttpHeaders headers = buildCookieHeaders(cookie);
-            SafeHttpResponse response = safeHttpClient.postJson(url, singleHeaders(headers), String.valueOf(deltaSeconds), policies.aqks());
+            // This endpoint only accepts GET. A POST falls through to the framework's
+            // generic handler and comes back as 404 with -8002 "no permission", which
+            // looks like an auth failure but is really a method mismatch.
+            SafeHttpResponse response = safeHttpClient.get(url, singleHeaders(headers), policies.aqks());
             String body = requireSuccess(response);
             boolean success = isStudyTimeUpdateSuccessful(body);
             log.info("[AQKS刷时长] 响应状态: {}, success={}", response.statusCode(), success);
@@ -642,6 +649,75 @@ public class AqksApiClient {
             log.error("生成ServerCookie失败", e);
             return "";
         }
+    }
+
+    /**
+     * Returns the login result carrying the session cookie the upstream actually issued.
+     *
+     * <p>The server sets {@code LoginUserInfo_SYSAQ_Server} on the login response, and that
+     * value is the only one it will accept afterwards. {@link #generateServerCookie} used to
+     * stand in for it by URL-encoding the response body, which produces a different string
+     * that the server cannot decrypt — every follow-up call then failed as "not logged in".</p>
+     *
+     * <p>When no cookie is issued the reconstructed value is kept, so a direct in-campus
+     * deployment that does not depend on the session cookie keeps working as before.</p>
+     */
+    private AqksLoginResult withIssuedCookie(AqksLoginResult result, SafeHttpResponse response) {
+        if (result == null || !result.isSuccess()) {
+            return result;
+        }
+        String issued = extractServerCookie(response);
+        if (StrUtil.isBlank(issued)) {
+            return result;
+        }
+        return AqksLoginResult.builder()
+                .success(true)
+                .token(result.getToken())
+                .userId(result.getUserId())
+                .userName(result.getUserName())
+                .name(result.getName())
+                .departmentName(result.getDepartmentName())
+                .departmentId(result.getDepartmentId())
+                .specialtyName(result.getSpecialtyName())
+                .specialtyId(result.getSpecialtyId())
+                .grade(result.getGrade())
+                .classId(result.getClassId())
+                .studyTimes(result.getStudyTimes())
+                .minTimeMinute(result.getMinTimeMinute())
+                .serverCookie(issued)
+                .doubleCookie(result.getDoubleCookie())
+                .build();
+    }
+
+    /**
+     * Reads {@code LoginUserInfo_SYSAQ_Server} from the response Set-Cookie headers.
+     *
+     * @return the cookie value, or {@code null} when the upstream did not issue one
+     */
+    private String extractServerCookie(SafeHttpResponse response) {
+        if (response == null || response.headers() == null) {
+            return null;
+        }
+        for (Map.Entry<String, List<String>> entry : response.headers().entrySet()) {
+            if (entry.getKey() == null || !"set-cookie".equalsIgnoreCase(entry.getKey())) {
+                continue;
+            }
+            for (String raw : entry.getValue()) {
+                if (raw == null) continue;
+                String trimmed = raw.trim();
+                if (!trimmed.regionMatches(true, 0, COOKIE_SERVER_NAME, 0, COOKIE_SERVER_NAME.length())) {
+                    continue;
+                }
+                String value = trimmed.substring(COOKIE_SERVER_NAME.length());
+                int semicolon = value.indexOf(';');
+                if (semicolon >= 0) {
+                    value = value.substring(0, semicolon);
+                }
+                value = value.trim();
+                return StrUtil.isBlank(value) ? null : value;
+            }
+        }
+        return null;
     }
     
     /**
