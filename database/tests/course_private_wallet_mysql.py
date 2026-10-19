@@ -15,7 +15,7 @@ import time
 import uuid
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-BASELINE = "198537ca0e1924ef7be5747d51da4f8380aab85a"
+BASELINE = "40a2b2c86e8288f26b1077e76c49c94057dcd078"
 MIGRATION = ROOT / "database/migrations/038_course_private_pricing_wallet.sql"
 MARKER = "-- 课程密价与专用钱包（038）"
 

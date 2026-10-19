@@ -9,7 +9,7 @@ import providerless_mysql as runner
 def verify(root, sql):
     sql('CREATE DATABASE rbac_check;')
     baseline = subprocess.check_output(
-        ['git', 'show', 'e12e059:database/schema.sql'], cwd=root, text=True)
+        ['git', 'show', '9619ed3132a00b16a52da1c72dd25dc13d8459e9:database/schema.sql'], cwd=root, text=True)
     sql(baseline, 'rbac_check')
     migration = (root / 'database/migrations/036_rbac_domain_permissions.sql').read_text()
     sql(migration, 'rbac_check')

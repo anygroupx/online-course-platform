@@ -13,7 +13,7 @@ import time
 import uuid
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-BASELINE = "c66b19f71cf027b206029e9d3d63e2fd27816a60"
+BASELINE = "c55ca5f66d4973fbe0eee2cfe601243f847f4432"
 MIGRATION = ROOT / "database/migrations/039_course_private_operations.sql"
 MARKER = "-- 课程密价运营中心（039）"
 TABLES = ("course_private_plan", "course_private_plan_version", "course_private_contract_term",
