@@ -94,6 +94,10 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Full history so database regression scripts can replay baseline
+          # revisions; a shallow clone makes `git show <rev>:path` fail.
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
@@ -124,6 +128,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # rbac_mysql.py replays database/schema.sql from the e12e059 baseline
+          # commit, which a shallow clone does not contain.
+          fetch-depth: 0
       - name: Isolated MySQL migration and FK regressions
         # 每个脚本自行创建隔离容器；038 资金回归与039运营升级均为实际门禁。
         run: |
