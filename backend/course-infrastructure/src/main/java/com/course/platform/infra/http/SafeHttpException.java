@@ -18,19 +18,39 @@ public class SafeHttpException extends RuntimeException {
 
     private final Reason reason;
 
+    /** HTTP status of the rejected response, or {@code null} for transport-level failures. */
+    private final Integer statusCode;
+
     public SafeHttpException(Reason reason) {
-        super("External HTTP request failed: " + reason.name());
-        this.reason = reason;
+        this(reason, (Integer) null);
     }
 
     public SafeHttpException(Reason reason, Throwable cause) {
         // Upstream exceptions may embed credentials in URLs or response fragments.
         // Retain only the classified reason, never the unsafe cause.
-        super("External HTTP request failed: " + reason.name());
+        this(reason, (Integer) null);
+    }
+
+    /**
+     * Failure carrying the HTTP status that caused it.
+     *
+     * <p>The status is safe to record and to surface: it is neither a credential nor response
+     * content, and without it a rejected response is indistinguishable from a dead network.</p>
+     */
+    public SafeHttpException(Reason reason, Integer statusCode) {
+        super(statusCode == null
+                ? "External HTTP request failed: " + reason.name()
+                : "External HTTP request failed: " + reason.name() + " (HTTP " + statusCode + ")");
         this.reason = reason;
+        this.statusCode = statusCode;
     }
 
     public Reason getReason() {
         return reason;
+    }
+
+    /** HTTP status of the rejected response, or {@code null} when none was received. */
+    public Integer getStatusCode() {
+        return statusCode;
     }
 }
