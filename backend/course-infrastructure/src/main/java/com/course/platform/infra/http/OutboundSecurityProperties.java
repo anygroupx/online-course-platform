@@ -27,12 +27,28 @@ public class OutboundSecurityProperties {
     private List<String> aqksAllowedHosts = new ArrayList<>();
     private List<String> alertWebhookAllowedHosts = new ArrayList<>();
     private List<String> alertWebhookHttpAllowedHosts = new ArrayList<>();
+    // Trusted DoH endpoints for dns-mode=cloudflare-doh. Operators override these to add a
+    // provider that is reachable from their network; the built-in pair is only a default.
+    private List<DohEndpointProperties> dohEndpoints = new ArrayList<>();
 
     @PostConstruct
     void validate() {
         dnsMode = dnsMode == null ? "system" : dnsMode.trim().toLowerCase(java.util.Locale.ROOT);
         if (!"system".equals(dnsMode) && !"cloudflare-doh".equals(dnsMode)) {
             throw new IllegalStateException("Unsupported outbound DNS mode");
+        }
+        if ("cloudflare-doh".equals(dnsMode)) {
+            if (dohEndpoints == null || dohEndpoints.isEmpty()) {
+                throw new IllegalStateException("Trusted DNS mode requires at least one DoH endpoint");
+            }
+            for (DohEndpointProperties endpoint : dohEndpoints) {
+                if (endpoint == null || endpoint.getHost() == null || endpoint.getHost().isBlank()) {
+                    throw new IllegalStateException("DoH endpoint host must not be blank");
+                }
+                if (endpoint.bootstrapAddresses().isEmpty()) {
+                    throw new IllegalStateException("DoH endpoint requires at least one bootstrap address");
+                }
+            }
         }
         if (connectTimeoutMillis < 100 || readTimeoutMillis < 100 || callTimeoutMillis < 100
                 || maxResponseBytes < 1_024) {

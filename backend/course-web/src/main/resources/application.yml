@@ -181,6 +181,26 @@ app:
   security:
     outbound:
       dns-mode: ${OUTBOUND_DNS_MODE:system}
+      # Trusted DoH endpoints (dns-mode=cloudflare-doh). Bootstrap entries must be IP literals
+      # so resolving the resolver never depends on the system resolver it bypasses. Endpoints
+      # are queried concurrently and act as mutual fallbacks.
+      doh-endpoints:
+        - host: edge.1molchuan.top
+          path: dns-query
+          bootstrap:
+            - 156.239.232.8
+            - 103.199.103.204
+            - 203.168.131.145
+        - host: cloudflare-dns.com
+          path: dns-query
+          bootstrap:
+            - 1.1.1.1
+            - 1.0.0.1
+        - host: dns.google
+          path: dns-query
+          bootstrap:
+            - 8.8.8.8
+            - 8.8.4.4
       provider-http-allowed-hosts: ${OUTBOUND_PROVIDER_HTTP_ALLOWED_HOSTS:}
       provider-allowed-ports: ${OUTBOUND_PROVIDER_ALLOWED_PORTS:}
       # Extra hosts allowlisted for the AQKS integration, e.g. the campus WebVPN proxy host
