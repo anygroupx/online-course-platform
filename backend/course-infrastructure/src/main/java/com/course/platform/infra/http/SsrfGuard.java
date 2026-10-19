@@ -38,7 +38,7 @@ public class SsrfGuard {
     @Autowired
     public SsrfGuard(OutboundSecurityProperties properties) {
         this("cloudflare-doh".equals(properties.getDnsMode())
-                ? new CloudflareDnsResolver()
+                ? new TrustedDohDnsResolver(properties.getDohEndpoints())
                 : host -> Arrays.asList(InetAddress.getAllByName(host)));
     }
 
