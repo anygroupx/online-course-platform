@@ -3,6 +3,7 @@ package com.course.platform.infra.external;
 import com.course.platform.infra.http.OutboundPolicyRegistry;
 import com.course.platform.infra.http.OutboundSecurityProperties;
 import com.course.platform.infra.http.SafeHttpClient;
+import com.course.platform.infra.http.SafeHttpException;
 import com.course.platform.infra.http.SafeHttpResponse;
 import com.course.platform.infra.http.SsrfGuard;
 import org.junit.jupiter.api.Test;
@@ -152,6 +153,79 @@ class AqksApiClientTest {
         assertFalse(client.addStudyTime("777", 10, " "));
 
         org.mockito.Mockito.verifyNoInteractions(http);
+    }
+
+    @Test
+    void loginSurfacesTheUpstreamBusinessReasonOnANon2xxStatus() {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        // The upstream answers a wrong password with HTTP 404 plus a JSON body naming the real
+        // reason. Judging the status before the body is what hid the cause behind a generic
+        // "service unavailable".
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenReturn(new SafeHttpResponse(404,
+                        "{\"Data\":null,\"Code\":-2,\"Message\":\"添加登录用户（用户登录）失败，用户不存在或密码错误！\"}",
+                        Map.of()));
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+        var result = client.login("20250001", "secret-password");
+
+        assertFalse(result.isSuccess());
+        assertEquals("添加登录用户（用户登录）失败，用户不存在或密码错误！", result.getErrorMessage());
+    }
+
+    @Test
+    void loginSurfacesALockoutNotice() {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenReturn(new SafeHttpResponse(404,
+                        "{\"Data\":null,\"Code\":-99,\"Message\":\"当前客户端连续输入错误达到5次，登录操作已锁定，请于30分钟后再重新输入\"}",
+                        Map.of()));
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+        var result = client.login("20250001", "secret-password");
+
+        assertFalse(result.isSuccess());
+        assertTrue(result.getErrorMessage().contains("锁定"),
+                "a lockout must reach the operator instead of being flattened to a generic message");
+    }
+
+    @Test
+    void loginReportsTheHttpStatusWhenTheBodyIsNotABusinessAnswer() {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenReturn(new SafeHttpResponse(502, "<html>Bad Gateway</html>", Map.of()));
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+        var result = client.login("20250001", "secret-password");
+
+        assertFalse(result.isSuccess());
+        assertEquals("登录服务返回 HTTP 502", result.getErrorMessage(),
+                "an HTML error page must be reported as a status failure, not parsed as a business answer");
+    }
+
+    @Test
+    void loginNamesTheFailingLayerForATransportFailure() {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenThrow(new SafeHttpException(SafeHttpException.Reason.TIMEOUT));
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+        var result = client.login("20250001", "secret-password");
+
+        assertFalse(result.isSuccess());
+        assertEquals("登录服务响应超时", result.getErrorMessage(),
+                "each transport failure must name its own layer so the cause is identifiable");
+    }
+
+    @Test
+    void safeHttpExceptionCarriesTheStatusWithoutLeakingContent() {
+        var withStatus = new SafeHttpException(SafeHttpException.Reason.HTTP_ERROR, 404);
+        var withoutStatus = new SafeHttpException(SafeHttpException.Reason.TIMEOUT);
+
+        assertEquals(404, withStatus.getStatusCode());
+        assertNull(withoutStatus.getStatusCode());
+        assertTrue(withStatus.getMessage().contains("404"));
+        assertFalse(withStatus.getMessage().contains("http"), "the message must not embed a URL");
     }
 
     private String extractCookieToken(String cookieHeader) {
