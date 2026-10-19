@@ -10,6 +10,7 @@ import com.course.platform.infra.http.OutboundPolicyRegistry;
 import com.course.platform.infra.http.SafeHttpClient;
 import com.course.platform.infra.http.SafeHttpException;
 import com.course.platform.infra.http.SafeHttpResponse;
+import com.course.platform.infra.http.UpstreamBusinessException;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.HttpUrl;
 import org.springframework.http.*;
@@ -107,7 +108,7 @@ public class AqksApiClient {
             return parseLoginResponse(responseBody, username);
 
         } catch (SafeHttpException e) {
-            log.error("[AQKS登录] 登录失败: reason={}, status={}", e.getReason(), e.getStatusCode());
+            log.error("[AQKS登录] 登录失败: {}", describeFailure(e));
             return AqksLoginResult.builder()
                     .success(false)
                     .errorMessage(describeTransportFailure(e))
@@ -189,7 +190,7 @@ public class AqksApiClient {
             return success;
 
         } catch (SafeHttpException e) {
-            log.error("[AQKS刷时长] 失败: reason={}, status={}", e.getReason(), e.getStatusCode());
+            log.error("[AQKS刷时长] 失败: {}", describeFailure(e));
             return false;
         } catch (Exception e) {
             log.error("[AQKS刷时长] 失败: {}", e.getClass().getSimpleName());
@@ -747,13 +748,66 @@ public class AqksApiClient {
         return builder.build().uri();
     }
 
+    /**
+     * Renders a rejection for the log, appending the upstream business code and message when
+     * the failure carried them.
+     *
+     * <p>Both extra fields are already narrowed by {@link UpstreamBusinessException}: it keeps
+     * only a short single-line message and drops any value that looks like a credential, so
+     * this never widens what {@link SafeHttpException} was built to withhold.</p>
+     */
+    private String describeFailure(SafeHttpException e) {
+        StringBuilder text = new StringBuilder()
+                .append("reason=").append(e.getReason())
+                .append(", status=").append(e.getStatusCode());
+        if (e instanceof UpstreamBusinessException business) {
+            text.append(", code=").append(business.getBusinessCode());
+            String message = business.getBusinessMessage();
+            if (StrUtil.isNotBlank(message)) {
+                text.append(", message=").append(message);
+            }
+        }
+        return text.toString();
+    }
+
     private String requireSuccess(SafeHttpResponse response) {
         if (!response.isSuccessful()) {
             // Carry the status: without it a rejected response is indistinguishable in the
-            // logs from a dead network.
-            throw new SafeHttpException(SafeHttpException.Reason.HTTP_ERROR, response.statusCode());
+            // logs from a dead network. Also carry the upstream business code and message,
+            // narrowed to those two fields: the AQKS upstream reports failures like a wrong
+            // HTTP method or an expired session as the same bare non-2xx status, so without
+            // them the two are indistinguishable in the logs.
+            UpstreamBusinessException detailed = describeBusinessRejection(response);
+            throw detailed != null
+                    ? detailed
+                    : new SafeHttpException(SafeHttpException.Reason.HTTP_ERROR, response.statusCode());
         }
         return response.body();
+    }
+
+    /**
+     * Extracts the upstream's business code and message from a rejected response.
+     *
+     * @return the exception carrying them, or {@code null} when the body is not a JSON object
+     *         or carries neither field
+     */
+    private UpstreamBusinessException describeBusinessRejection(SafeHttpResponse response) {
+        String body = response.body();
+        if (StrUtil.isBlank(body) || !isJsonObject(body)) {
+            return null;
+        }
+        try {
+            JSONObject json = JSONUtil.parseObj(body);
+            String code = json.containsKey("Code") ? json.getStr("Code") : null;
+            String message = json.getStr("Message");
+            if (StrUtil.isBlank(code) && StrUtil.isBlank(message)) {
+                return null;
+            }
+            return new UpstreamBusinessException(response.statusCode(), code, message);
+        } catch (Exception e) {
+            // A body that parsed as JSON but not as an object is not a business rejection.
+            return null;
+        }
     }
 
     private java.util.Map<String, String> singleHeaders(HttpHeaders headers) {
