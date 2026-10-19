@@ -67,8 +67,10 @@ if [ "$SKIP_MIGRATION_CHECK" = 0 ]; then
       echo "$OUT" >&2
       die "迁移状态检查失败；确认后可用 --skip-migration-check 跳过"
     fi
-    PENDING="$(sed -n 's/.*待应用 \([0-9]\+\).*/\1/p' <<<"$OUT" | tail -1)"
-    DRIFT="$(sed -n 's/.*校验漂移 \([0-9]\+\).*/\1/p' <<<"$OUT" | tail -1)"
+    # 取「合计」行里的两个计数，避免依赖中文分隔符匹配
+    SUMMARY="$(printf '%s\n' "$OUT" | grep -E '合计' | tail -1)"
+    PENDING="$(printf '%s' "$SUMMARY" | grep -oE '[0-9]+' | sed -n '2p')"
+    DRIFT="$(printf '%s' "$SUMMARY" | grep -oE '[0-9]+' | sed -n '3p')"
     echo "  迁移: 待应用 ${PENDING:-?}，校验漂移 ${DRIFT:-?}"
     if [ "${PENDING:-0}" != "0" ]; then
       echo "$OUT" | grep -E 'PENDING|合计' || true
