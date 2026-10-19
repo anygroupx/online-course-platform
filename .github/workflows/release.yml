@@ -1,0 +1,137 @@
+name: Release
+
+# 手动触发，不做「合并即上线」。
+#
+# 为什么不自动：数据库迁移需要人工确认（生产没有迁移账本时尤其如此），
+# 且重建 app 容器有十几秒的中断窗口。把这两件事交给自动流程，
+# 等于把「什么时候可以接受中断」的决定权交给一次 push。
+#
+# 这个 workflow 只做三件事：校验输入、通过 SSH 在生产执行 scripts/deploy-release.sh、
+# 把执行输出留在 Actions 日志里可追溯。真正的发布逻辑在仓库脚本里，
+# 所以本地也能跑同一套流程。
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: '发布名称（字母数字和 . _ -），用于镜像 tag 与发布目录'
+        required: true
+        type: string
+      ref:
+        description: '要发布的 git 引用'
+        required: false
+        default: 'origin/dev'
+        type: string
+      dry_run:
+        description: '干跑：只检查不修改'
+        required: false
+        default: false
+        type: boolean
+      confirm:
+        description: '输入 DEPLOY 确认要发布到生产'
+        required: true
+        type: string
+
+# 同一时间只允许一个发布，排队而不是并行
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Validate inputs
+        env:
+          RELEASE: ${{ inputs.release }}
+          CONFIRM: ${{ inputs.confirm }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$RELEASE" | grep -qE '^[A-Za-z0-9._-]+$'; then
+            echo "release name may only contain letters, digits, dot, underscore and hyphen" >&2
+            exit 1
+          fi
+          if [ "$DRY_RUN" != "true" ] && [ "$CONFIRM" != "DEPLOY" ]; then
+            echo "confirm must be exactly DEPLOY to release to production" >&2
+            exit 1
+          fi
+          echo "release=$RELEASE dry_run=$DRY_RUN"
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          SSH_HOST: ${{ secrets.PROD_HOST }}
+          SSH_USER: ${{ secrets.PROD_USER }}
+          SSH_PORT: ${{ secrets.PROD_PORT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_KEY:-}" ] || [ -z "${SSH_HOST:-}" ]; then
+            echo "PROD_SSH_KEY and PROD_HOST secrets are required" >&2
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/prod_key
+          chmod 600 ~/.ssh/prod_key
+          PORT="${SSH_PORT:-22}"
+          {
+            echo "Host production"
+            echo "  HostName $SSH_HOST"
+            echo "  User ${SSH_USER:-root}"
+            echo "  Port $PORT"
+            echo "  IdentityFile ~/.ssh/prod_key"
+            echo "  StrictHostKeyChecking accept-new"
+            echo "  ConnectTimeout 20"
+          } > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+          ssh production 'echo "connected as $(whoami) on $(hostname)"'
+
+      - name: Run release
+        env:
+          RELEASE: ${{ inputs.release }}
+          REF: ${{ inputs.ref }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          # 全部通过环境变量传入并加引号：inputs 是外部输入，绝不能直接拼进命令
+          DRY_ARG=""
+          if [ "$DRY_RUN" = "true" ]; then DRY_ARG="--dry-run"; fi
+          ssh production 'cd /root/online-course-platform && git fetch -q origin && bash scripts/deploy-release.sh "$@"' \
+            _ --release "$RELEASE" --ref "$REF" $DRY_ARG 2>&1 | tee release.log
+
+      - name: Summarize
+        if: always()
+        env:
+          RELEASE: ${{ inputs.release }}
+          REF: ${{ inputs.ref }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "## Release $RELEASE"
+            echo
+            echo "- ref: \`$REF\`"
+            echo "- dry run: $DRY_RUN"
+            echo "- result: $JOB_STATUS"
+            echo
+            echo "<details><summary>log tail</summary>"
+            echo
+            echo '```'
+            tail -40 release.log 2>/dev/null || echo 'no log captured'
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload log
+        if: always()
+        # 固定到 v4.6.2 的 commit SHA：可变 tag 可被上游重指，构成供应链风险
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-log-${{ inputs.release }}
+          path: release.log
+          retention-days: 30
+          if-no-files-found: ignore
