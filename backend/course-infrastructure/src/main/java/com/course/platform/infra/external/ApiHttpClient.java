@@ -75,7 +75,7 @@ public class ApiHttpClient {
             throw new SafeHttpException(SafeHttpException.Reason.INVALID_RESPONSE);
         }
         if (!response.isSuccessful()) {
-            throw new SafeHttpException(SafeHttpException.Reason.HTTP_ERROR);
+            throw new SafeHttpException(SafeHttpException.Reason.HTTP_ERROR, response.statusCode());
         }
         return response.body();
     }

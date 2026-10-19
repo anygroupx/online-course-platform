@@ -185,12 +185,19 @@ app:
       # so resolving the resolver never depends on the system resolver it bypasses. Endpoints
       # are queried concurrently and act as mutual fallbacks.
       doh-endpoints:
-        - host: edge.1molchuan.top
+        # Mainland providers are listed first: they answer directly (tens of milliseconds)
+        # whereas overseas endpoints are reached through the proxy tunnel and pay a remote TLS
+        # handshake per query. All endpoints are still queried concurrently as mutual fallbacks.
+        - host: dns.alidns.com
           path: dns-query
           bootstrap:
-            - 156.239.232.8
-            - 103.199.103.204
-            - 203.168.131.145
+            - 223.5.5.5
+            - 223.6.6.6
+        - host: doh.pub
+          path: dns-query
+          bootstrap:
+            - 1.12.12.12
+            - 120.53.53.53
         - host: cloudflare-dns.com
           path: dns-query
           bootstrap:

@@ -16,10 +16,11 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -68,8 +69,9 @@ public class AqksApiClient {
         log.debug("[AQKS] 请求处理");
         
         try {
-            // 只对密码进行双层Base64编码
-            String encodedPassword = doubleBase64Encode(password);
+            // The browser client sends SHA256(password) as a hex string, and the upstream
+            // compares that digest. Base64 was never accepted; see encodePassword below.
+            String encodedPassword = encodePassword(password);
             
             // 构建请求头
             HttpHeaders headers = new HttpHeaders();
@@ -80,14 +82,32 @@ public class AqksApiClient {
             // Transport credential for the campus WebVPN proxy; blank on a direct deployment.
             headers.set("Cookie", buildCookieValue(null));
             
-            // Body为双层Base64编码的密码（JSON字符串格式，带引号）
+            // Body is the JSON-encoded digest string, i.e. a quoted hex value.
             SafeHttpResponse response = safeHttpClient.postJson(url, singleHeaders(headers),
                     "\"" + encodedPassword + "\"", policies.aqks());
-            String responseBody = requireSuccess(response);
+
+            // The upstream reports business rejections (unknown user, wrong password, lockout)
+            // with a non-2xx status while still returning a JSON body that carries the real
+            // reason, so the body decides the outcome. The status is only consulted when the
+            // body is not a JSON object, i.e. when no business answer was actually returned.
+            String responseBody = response.body();
+            if (isJsonObject(responseBody)) {
+                AqksLoginResult parsed = parseLoginResponse(responseBody, username);
+                log.info("[AQKS登录] 响应状态: {}, success={}", response.statusCode(), parsed.isSuccess());
+                return parsed;
+            }
+            if (!response.isSuccessful()) {
+                throw new SafeHttpException(SafeHttpException.Reason.HTTP_ERROR, response.statusCode());
+            }
             log.info("[AQKS登录] 响应状态: {}", response.statusCode());
-            
             return parseLoginResponse(responseBody, username);
-            
+
+        } catch (SafeHttpException e) {
+            log.error("[AQKS登录] 登录失败: reason={}, status={}", e.getReason(), e.getStatusCode());
+            return AqksLoginResult.builder()
+                    .success(false)
+                    .errorMessage(describeTransportFailure(e))
+                    .build();
         } catch (Exception e) {
             log.error("[AQKS登录] 登录失败: {}", e.getClass().getSimpleName());
             return AqksLoginResult.builder()
@@ -95,6 +115,43 @@ public class AqksApiClient {
                     .errorMessage("登录服务暂不可用")
                     .build();
         }
+    }
+
+    /**
+     * Whether the body is a JSON object, i.e. a business answer rather than a gateway page.
+     *
+     * <p>An HTML error page must not be handed to the JSON parser: doing so turns a clear
+     * transport failure into a misleading "unknown format" answer.</p>
+     */
+    private boolean isJsonObject(String body) {
+        if (StrUtil.isBlank(body)) {
+            return false;
+        }
+        String trimmed = body.trim();
+        return trimmed.startsWith("{") && trimmed.endsWith("}");
+    }
+
+    /**
+     * Turns a classified transport failure into an operator-actionable message.
+     *
+     * <p>Callers surface this string to users, so it must name the failing layer without
+     * leaking the target URL, credentials or response content. A single generic message for
+     * every cause is what made this integration opaque in the first place.</p>
+     */
+    private String describeTransportFailure(SafeHttpException e) {
+        return switch (e.getReason()) {
+            case TIMEOUT -> "登录服务响应超时";
+            case DNS_FAILURE -> "无法解析登录服务地址";
+            case TLS_FAILURE -> "登录服务 TLS 握手失败";
+            case NETWORK_FAILURE -> "无法连接登录服务";
+            case BLOCKED_DESTINATION, PRIVATE_ADDRESS -> "登录服务地址被出站策略拦截";
+            case REDIRECT_BLOCKED -> "登录服务返回了不允许的重定向";
+            case RESPONSE_TOO_LARGE -> "登录服务响应体超出限制";
+            case PROVIDER_NOT_ACTIVE -> "登录服务未启用";
+            case HTTP_ERROR, INVALID_RESPONSE -> e.getStatusCode() == null
+                    ? "登录服务返回异常响应"
+                    : "登录服务返回 HTTP " + e.getStatusCode();
+        };
     }
 
     /**
@@ -124,6 +181,9 @@ public class AqksApiClient {
             log.info("[AQKS刷时长] 响应状态: {}, success={}", response.statusCode(), success);
             return success;
 
+        } catch (SafeHttpException e) {
+            log.error("[AQKS刷时长] 失败: reason={}, status={}", e.getReason(), e.getStatusCode());
+            return false;
         } catch (Exception e) {
             log.error("[AQKS刷时长] 失败: {}", e.getClass().getSimpleName());
             return false;
@@ -464,15 +524,27 @@ public class AqksApiClient {
     // ==================== 私有方法 ====================
     
     /**
-     * 双层Base64编码
-     * 规则：
-     * 1. 第一次编码：将原始字符串编码为Base64
-     * 2. 第二次编码：将第一次编码结果再次编码为Base64
+     * Encodes the password exactly as the browser client does.
+     *
+     * <p>The upstream compares against {@code SHA256(password)} rendered as a lowercase hex
+     * string (the frontend's {@code compileStr()}); it does not accept Base64. Encoding it any
+     * other way makes every credential look wrong, which is indistinguishable from a genuinely
+     * bad password and hides the real cause.</p>
      */
-    private String doubleBase64Encode(String raw) {
-        String once = Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
-        String twice = Base64.getEncoder().encodeToString(once.getBytes(StandardCharsets.UTF_8));
-        return twice;
+    private String encodePassword(String raw) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(raw.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                hex.append(Character.forDigit((b >> 4) & 0xF, 16));
+                hex.append(Character.forDigit(b & 0xF, 16));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // SHA-256 is mandated by the JLS; reaching here means a broken runtime.
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
     }
     
     /**
@@ -488,17 +560,9 @@ public class AqksApiClient {
 
         try {
             JSONObject json = JSONUtil.parseObj(responseBody);
-            
-            // 检查是否有错误码 (Code=-9999 表示失败)
-            if (json.containsKey("Code") && json.getInt("Code", 0) == -9999) {
-                String errorMsg = json.getStr("Message", "账号或密码错误");
-                return AqksLoginResult.builder()
-                        .success(false)
-                        .errorMessage(errorMsg)
-                        .build();
-            }
-            
-            // 检查是否登录成功 - 返回包含Token字段表示成功
+
+            // Check success first: a response carrying a Token is a logged-in user regardless of
+            // any Code field the upstream may also include.
             if (json.containsKey("Token") && json.getStr("Token") != null) {
                 // 生成Cookie
                 String serverCookie = generateServerCookie(json);
@@ -522,7 +586,19 @@ public class AqksApiClient {
                         .doubleCookie(doubleCookie)
                         .build();
             }
-            
+
+            // Any non-zero Code is a business rejection, not just -9999. The upstream reports
+            // wrong credentials as -2 and lockout as -99, and it puts the operator-readable
+            // reason in Message; treating only -9999 as a rejection made every other failure
+            // surface as "unknown format".
+            if (json.containsKey("Code") && json.getInt("Code", 0) != 0) {
+                String errorMsg = json.getStr("Message", "账号或密码错误");
+                return AqksLoginResult.builder()
+                        .success(false)
+                        .errorMessage(errorMsg)
+                        .build();
+            }
+
             return AqksLoginResult.builder()
                     .success(false)
                     .errorMessage("登录返回未知格式")
@@ -597,7 +673,9 @@ public class AqksApiClient {
 
     private String requireSuccess(SafeHttpResponse response) {
         if (!response.isSuccessful()) {
-            throw new SafeHttpException(SafeHttpException.Reason.INVALID_RESPONSE);
+            // Carry the status: without it a rejected response is indistinguishable in the
+            // logs from a dead network.
+            throw new SafeHttpException(SafeHttpException.Reason.HTTP_ERROR, response.statusCode());
         }
         return response.body();
     }

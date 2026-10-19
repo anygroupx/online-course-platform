@@ -3,12 +3,14 @@ package com.course.platform.infra.external;
 import com.course.platform.infra.http.OutboundPolicyRegistry;
 import com.course.platform.infra.http.OutboundSecurityProperties;
 import com.course.platform.infra.http.SafeHttpClient;
+import com.course.platform.infra.http.SafeHttpException;
 import com.course.platform.infra.http.SafeHttpResponse;
 import com.course.platform.infra.http.SsrfGuard;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.net.URI;
+import java.util.Base64;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -152,6 +154,129 @@ class AqksApiClientTest {
         assertFalse(client.addStudyTime("777", 10, " "));
 
         org.mockito.Mockito.verifyNoInteractions(http);
+    }
+
+    @Test
+    void loginSurfacesTheUpstreamBusinessReasonOnANon2xxStatus() {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        // The upstream answers a wrong password with HTTP 404 plus a JSON body naming the real
+        // reason. Judging the status before the body is what hid the cause behind a generic
+        // "service unavailable".
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenReturn(new SafeHttpResponse(404,
+                        "{\"Data\":null,\"Code\":-2,\"Message\":\"添加登录用户（用户登录）失败，用户不存在或密码错误！\"}",
+                        Map.of()));
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+        var result = client.login("20250001", "secret-password");
+
+        assertFalse(result.isSuccess());
+        assertEquals("添加登录用户（用户登录）失败，用户不存在或密码错误！", result.getErrorMessage());
+    }
+
+    @Test
+    void loginSurfacesALockoutNotice() {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenReturn(new SafeHttpResponse(404,
+                        "{\"Data\":null,\"Code\":-99,\"Message\":\"当前客户端连续输入错误达到5次，登录操作已锁定，请于30分钟后再重新输入\"}",
+                        Map.of()));
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+        var result = client.login("20250001", "secret-password");
+
+        assertFalse(result.isSuccess());
+        assertTrue(result.getErrorMessage().contains("锁定"),
+                "a lockout must reach the operator instead of being flattened to a generic message");
+    }
+
+    @Test
+    void loginReportsTheHttpStatusWhenTheBodyIsNotABusinessAnswer() {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenReturn(new SafeHttpResponse(502, "<html>Bad Gateway</html>", Map.of()));
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+        var result = client.login("20250001", "secret-password");
+
+        assertFalse(result.isSuccess());
+        assertEquals("登录服务返回 HTTP 502", result.getErrorMessage(),
+                "an HTML error page must be reported as a status failure, not parsed as a business answer");
+    }
+
+    @Test
+    void loginNamesTheFailingLayerForATransportFailure() {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenThrow(new SafeHttpException(SafeHttpException.Reason.TIMEOUT));
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+        var result = client.login("20250001", "secret-password");
+
+        assertFalse(result.isSuccess());
+        assertEquals("登录服务响应超时", result.getErrorMessage(),
+                "each transport failure must name its own layer so the cause is identifiable");
+    }
+
+    @Test
+    void safeHttpExceptionCarriesTheStatusWithoutLeakingContent() {
+        var withStatus = new SafeHttpException(SafeHttpException.Reason.HTTP_ERROR, 404);
+        var withoutStatus = new SafeHttpException(SafeHttpException.Reason.TIMEOUT);
+
+        assertEquals(404, withStatus.getStatusCode());
+        assertNull(withoutStatus.getStatusCode());
+        assertTrue(withStatus.getMessage().contains("404"));
+        assertFalse(withStatus.getMessage().contains("http"), "the message must not embed a URL");
+    }
+
+    @Test
+    void loginSendsTheSha256HexDigestOfThePassword() throws Exception {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        var captured = new AtomicReference<String>();
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenAnswer(invocation -> {
+                    captured.set(invocation.getArgument(2));
+                    return new SafeHttpResponse(200,
+                            "{\"ID\":777,\"Token\":\"t-1\",\"UserName\":\"20250001\"}", Map.of());
+                });
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+        client.login("20250001", "secret-password");
+
+        // The browser client sends SHA256(password) as lowercase hex. Sending Base64 instead
+        // makes every credential look wrong, which is indistinguishable from a bad password.
+        assertEquals("\"" + sha256Hex("secret-password") + "\"", captured.get(),
+                "the password must be sent as a quoted SHA256 hex digest");
+    }
+
+    @Test
+    void loginDoesNotSendThePasswordInClearOrAsBase64() throws Exception {
+        SafeHttpClient http = mock(SafeHttpClient.class);
+        var captured = new AtomicReference<String>();
+        when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
+                .thenAnswer(invocation -> {
+                    captured.set(invocation.getArgument(2));
+                    return new SafeHttpResponse(200,
+                            "{\"ID\":777,\"Token\":\"t-1\",\"UserName\":\"20250001\"}", Map.of());
+                });
+
+        var client = client(transport(PROXY_BASE, "transport-token"), http);
+        client.login("20250001", "secret-password");
+
+        assertFalse(captured.get().contains("secret-password"), "the raw password must never be sent");
+        assertFalse(captured.get().contains(Base64.getEncoder().encodeToString("secret-password".getBytes())),
+                "Base64 is not accepted by the upstream");
+    }
+
+    private String sha256Hex(String value) throws Exception {
+        byte[] hash = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        StringBuilder hex = new StringBuilder();
+        for (byte b : hash) {
+            hex.append(Character.forDigit((b >> 4) & 0xF, 16));
+            hex.append(Character.forDigit(b & 0xF, 16));
+        }
+        return hex.toString();
     }
 
     private String extractCookieToken(String cookieHeader) {
