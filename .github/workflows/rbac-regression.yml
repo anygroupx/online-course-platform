@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+# 同一分支连续推送时取消上一次仍在跑的流水线，避免两套 8-job 并行占用 runner
+# 并让过期结果覆盖最新结论。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # 前端单元测试与生产构建约 15 秒，不再为一个构建付整条 Java+Chromium 安装链的成本。
   frontend:
@@ -108,9 +114,11 @@ jobs:
       - name: Install Chromium
         working-directory: frontend
         run: npx playwright install --with-deps chromium
-      - name: UI workflow regressions (shard ${{ matrix.shard }}/4)
+      - name: UI workflow regressions (shard ${{ matrix.shard }}/${{ strategy.job-total }})
         working-directory: frontend
-        run: node scripts/browser-shard.mjs ${{ matrix.shard }} 4
+        # job-total 由矩阵长度推导，增删 shard 只需改上面的数组，
+        # 不会出现矩阵与模数不一致导致的静默漏跑。
+        run: node scripts/browser-shard.mjs ${{ matrix.shard }} ${{ strategy.job-total }}
       - name: Save UI artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
