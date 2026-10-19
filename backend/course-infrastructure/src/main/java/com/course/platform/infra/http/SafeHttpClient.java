@@ -70,6 +70,20 @@ public class SafeHttpClient {
         return call(destination, request.build(), policy);
     }
 
+    /**
+     * POSTs an arbitrary byte payload and returns the raw response bytes. Required for
+     * non-UTF-8 payloads such as RFC 8484 DNS wire messages, which {@link #postJson} would
+     * corrupt by decoding as text.
+     */
+    public SafeHttpBinaryResponse postBinary(URI uri, Map<String, String> headers, byte[] body,
+                                             String contentType, OutboundRequestPolicy policy) {
+        ValidatedDestination destination = ssrfGuard.validate(uri, policy);
+        Request.Builder builder = requestBuilder(destination, headers)
+                .method("POST", RequestBody.create(body == null ? new byte[0] : body,
+                        MediaType.parse(contentType == null ? "application/octet-stream" : contentType)));
+        return callBinary(destination, builder.build(), policy);
+    }
+
     public ValidatedDestination validate(URI uri, OutboundRequestPolicy policy) {
         return ssrfGuard.validate(uri, policy);
     }
@@ -109,6 +123,30 @@ public class SafeHttpClient {
             }
             String body = readBounded(response.body(), policy.maxResponseBytes());
             return new SafeHttpResponse(response.code(), body, response.headers().toMultimap());
+        } catch (SafeHttpException ex) {
+            throw ex;
+        } catch (InterruptedIOException ex) {
+            log.warn("Outbound request timed out: integration={}", policy.name());
+            throw new SafeHttpException(SafeHttpException.Reason.TIMEOUT, ex);
+        } catch (javax.net.ssl.SSLException ex) {
+            throw new SafeHttpException(SafeHttpException.Reason.TLS_FAILURE, ex);
+        } catch (IOException ex) {
+            log.warn("Outbound request failed: integration={}, reason={}", policy.name(), ex.getClass().getSimpleName());
+            throw new SafeHttpException(SafeHttpException.Reason.NETWORK_FAILURE, ex);
+        }
+    }
+
+    private SafeHttpBinaryResponse callBinary(ValidatedDestination destination, Request request,
+                                              OutboundRequestPolicy policy) {
+        OkHttpClient client = client(destination, policy);
+        Call call = client.newCall(request);
+        try (Response response = call.execute()) {
+            if (response.code() >= 300 && response.code() < 400) {
+                log.warn("Blocked outbound redirect: integration={}, status={}", policy.name(), response.code());
+                throw new SafeHttpException(SafeHttpException.Reason.REDIRECT_BLOCKED);
+            }
+            byte[] body = readBoundedBytes(response.body(), policy.maxResponseBytes());
+            return new SafeHttpBinaryResponse(response.code(), body, response.headers().toMultimap());
         } catch (SafeHttpException ex) {
             throw ex;
         } catch (InterruptedIOException ex) {
@@ -177,6 +215,24 @@ public class SafeHttpClient {
                 out.write(buffer, 0, read);
             }
             return out.toString(StandardCharsets.UTF_8);
+        }
+    }
+
+    private byte[] readBoundedBytes(ResponseBody body, int maximumBytes) throws IOException {
+        if (body == null) return new byte[0];
+        long declared = body.contentLength();
+        if (declared > maximumBytes) throw new SafeHttpException(SafeHttpException.Reason.RESPONSE_TOO_LARGE);
+        try (BufferedSource source = body.source(); ByteArrayOutputStream out = new ByteArrayOutputStream(Math.min(maximumBytes, 8192))) {
+            byte[] buffer = new byte[8192];
+            long total = 0;
+            while (true) {
+                int read = source.inputStream().read(buffer);
+                if (read < 0) break;
+                total += read;
+                if (total > maximumBytes) throw new SafeHttpException(SafeHttpException.Reason.RESPONSE_TOO_LARGE);
+                out.write(buffer, 0, read);
+            }
+            return out.toByteArray();
         }
     }
 
