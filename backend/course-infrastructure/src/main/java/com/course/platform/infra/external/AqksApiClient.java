@@ -16,10 +16,11 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -68,8 +69,9 @@ public class AqksApiClient {
         log.debug("[AQKS] 请求处理");
         
         try {
-            // 只对密码进行双层Base64编码
-            String encodedPassword = doubleBase64Encode(password);
+            // The browser client sends SHA256(password) as a hex string, and the upstream
+            // compares that digest. Base64 was never accepted; see encodePassword below.
+            String encodedPassword = encodePassword(password);
             
             // 构建请求头
             HttpHeaders headers = new HttpHeaders();
@@ -80,7 +82,7 @@ public class AqksApiClient {
             // Transport credential for the campus WebVPN proxy; blank on a direct deployment.
             headers.set("Cookie", buildCookieValue(null));
             
-            // Body为双层Base64编码的密码（JSON字符串格式，带引号）
+            // Body is the JSON-encoded digest string, i.e. a quoted hex value.
             SafeHttpResponse response = safeHttpClient.postJson(url, singleHeaders(headers),
                     "\"" + encodedPassword + "\"", policies.aqks());
 
@@ -522,15 +524,27 @@ public class AqksApiClient {
     // ==================== 私有方法 ====================
     
     /**
-     * 双层Base64编码
-     * 规则：
-     * 1. 第一次编码：将原始字符串编码为Base64
-     * 2. 第二次编码：将第一次编码结果再次编码为Base64
+     * Encodes the password exactly as the browser client does.
+     *
+     * <p>The upstream compares against {@code SHA256(password)} rendered as a lowercase hex
+     * string (the frontend's {@code compileStr()}); it does not accept Base64. Encoding it any
+     * other way makes every credential look wrong, which is indistinguishable from a genuinely
+     * bad password and hides the real cause.</p>
      */
-    private String doubleBase64Encode(String raw) {
-        String once = Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
-        String twice = Base64.getEncoder().encodeToString(once.getBytes(StandardCharsets.UTF_8));
-        return twice;
+    private String encodePassword(String raw) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(raw.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                hex.append(Character.forDigit((b >> 4) & 0xF, 16));
+                hex.append(Character.forDigit(b & 0xF, 16));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // SHA-256 is mandated by the JLS; reaching here means a broken runtime.
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
     }
     
     /**
