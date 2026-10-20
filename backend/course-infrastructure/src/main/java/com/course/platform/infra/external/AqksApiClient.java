@@ -114,7 +114,7 @@ public class AqksApiClient {
                     .errorMessage(describeTransportFailure(e))
                     .build();
         } catch (Exception e) {
-            log.error("[AQKS登录] 登录失败: {}", e.getClass().getSimpleName());
+            log.error("[AQKS登录] 登录失败: {}", e);
             return AqksLoginResult.builder()
                     .success(false)
                     .errorMessage("登录服务暂不可用")
@@ -193,7 +193,7 @@ public class AqksApiClient {
             log.error("[AQKS刷时长] 失败: {}", describeFailure(e));
             return false;
         } catch (Exception e) {
-            log.error("[AQKS刷时长] 失败: {}", e.getClass().getSimpleName());
+            log.error("[AQKS刷时长] 失败: {}", e);
             return false;
         }
     }
@@ -218,7 +218,7 @@ public class AqksApiClient {
             }
             return -1;
         } catch (Exception e) {
-            log.error("[AQKS读时长] 登录验证失败: {}", e.getClass().getSimpleName());
+            log.error("[AQKS读时长] 登录验证失败: {}", e);
             return -1;
         }
     }
@@ -275,7 +275,7 @@ public class AqksApiClient {
             return -1;
             
         } catch (Exception e) {
-            log.error("[AQKS读时长] 失败: {}", e.getClass().getSimpleName());
+            log.error("[AQKS读时长] 失败: {}", e);
             return -1;
         }
     }
@@ -326,7 +326,7 @@ public class AqksApiClient {
             log.info("[AQKS考试列表] 获取到 {} 门考试", examList.size());
             
         } catch (Exception e) {
-            log.error("[AQKS考试列表] 失败: {}", e.getClass().getSimpleName());
+            log.error("[AQKS考试列表] 失败: {}", e);
         }
         
         return examList;
@@ -374,7 +374,7 @@ public class AqksApiClient {
                     .build();
             
         } catch (Exception e) {
-            log.error("[AQKS考试详情] 失败: {}", e.getClass().getSimpleName());
+            log.error("[AQKS考试详情] 失败: {}", e);
             return null;
         }
     }
@@ -444,7 +444,7 @@ public class AqksApiClient {
                     .build();
             
         } catch (Exception e) {
-            log.error("[AQKS完整考试详情] 失败: {}", e.getClass().getSimpleName());
+            log.error("[AQKS完整考试详情] 失败: {}", e);
             return null;
         }
     }
@@ -509,7 +509,7 @@ public class AqksApiClient {
             return examWithTestId;  // 如果完整详情获取失败，返回有TestID的版本
             
         } catch (Exception e) {
-            log.error("[AQKS检查考试状态] 失败: {}", e.getClass().getSimpleName());
+            log.error("[AQKS检查考试状态] 失败: {}", e);
             return null;
         }
     }
@@ -613,7 +613,7 @@ public class AqksApiClient {
                     .build();
             
         } catch (Exception e) {
-            log.error("[AQKS登录] 解析响应失败: {}", e.getClass().getSimpleName());
+            log.error("[AQKS登录] 解析响应失败: {}", e);
             return AqksLoginResult.builder()
                     .success(false)
                     .errorMessage("解析登录响应失败")
