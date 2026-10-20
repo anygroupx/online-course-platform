@@ -69,7 +69,7 @@ public class LoginProtectionService {
             return new LoginProtectionDecision(true,
                     failures >= properties.getChallengeThreshold(), failures, recentSuccess, 0);
         } catch (DataAccessException | IllegalStateException ex) {
-            log.error("Login protection unavailable: {}", ex.getClass().getSimpleName());
+            log.error("Login protection unavailable: {}", ex);
             throw new BusinessException(ResultCode.RATE_LIMIT_UNAVAILABLE);
         }
     }
@@ -83,7 +83,7 @@ public class LoginProtectionService {
                     "/auth/login", "POST", "登录凭据验证失败",
                     "accountFailures=" + account + ",ipFailures=" + ip);
         } catch (DataAccessException | IllegalStateException ex) {
-            log.error("Cannot persist login failure counter: {}", ex.getClass().getSimpleName());
+            log.error("Cannot persist login failure counter: {}", ex);
             throw new BusinessException(ResultCode.RATE_LIMIT_UNAVAILABLE);
         }
     }
@@ -96,7 +96,7 @@ public class LoginProtectionService {
         } catch (DataAccessException ex) {
             // The request already passed the pre-auth fail-closed check. Do not orphan a newly
             // issued session solely because post-success bookkeeping became unavailable.
-            log.error("Cannot persist login success marker: {}", ex.getClass().getSimpleName());
+            log.error("Cannot persist login success marker: {}", ex);
         }
     }
 

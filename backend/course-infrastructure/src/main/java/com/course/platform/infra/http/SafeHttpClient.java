@@ -131,7 +131,7 @@ public class SafeHttpClient {
         } catch (javax.net.ssl.SSLException ex) {
             throw new SafeHttpException(SafeHttpException.Reason.TLS_FAILURE, ex);
         } catch (IOException ex) {
-            log.warn("Outbound request failed: integration={}, reason={}", policy.name(), ex.getClass().getSimpleName());
+            log.warn("Outbound request failed: integration={}, reason={}", policy.name(), ex);
             throw new SafeHttpException(SafeHttpException.Reason.NETWORK_FAILURE, ex);
         }
     }
@@ -155,7 +155,7 @@ public class SafeHttpClient {
         } catch (javax.net.ssl.SSLException ex) {
             throw new SafeHttpException(SafeHttpException.Reason.TLS_FAILURE, ex);
         } catch (IOException ex) {
-            log.warn("Outbound request failed: integration={}, reason={}", policy.name(), ex.getClass().getSimpleName());
+            log.warn("Outbound request failed: integration={}, reason={}", policy.name(), ex);
             throw new SafeHttpException(SafeHttpException.Reason.NETWORK_FAILURE, ex);
         }
     }

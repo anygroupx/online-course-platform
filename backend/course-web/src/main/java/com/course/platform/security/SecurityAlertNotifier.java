@@ -68,7 +68,7 @@ public class SecurityAlertNotifier {
             log.warn("安全告警 Webhook 被阻止或发送失败: reason={}",
                     ex instanceof SafeHttpException safe ? safe.getReason() : ex.getClass().getSimpleName());
         } catch (Exception ex) {
-            log.warn("安全告警 Webhook 序列化失败: reason={}", ex.getClass().getSimpleName());
+            log.warn("安全告警 Webhook 序列化失败: reason={}", ex);
         }
     }
 }

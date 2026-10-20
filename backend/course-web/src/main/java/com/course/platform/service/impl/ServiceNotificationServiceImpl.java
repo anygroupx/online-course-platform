@@ -292,7 +292,7 @@ public class ServiceNotificationServiceImpl implements ServiceNotificationServic
             try {
                 observe(id);
             } catch (RuntimeException e) {
-                log.warn("实习通知观察未完成：category={}", e.getClass().getSimpleName());
+                log.warn("实习通知观察未完成：category={}", e);
             }
         }
         for (String id : deliveries.readyBatch()) {
@@ -306,7 +306,7 @@ public class ServiceNotificationServiceImpl implements ServiceNotificationServic
                                 .eq(ServiceNotificationDelivery::getId, id)
                                 .eq(ServiceNotificationDelivery::getState, "READY")
                                 .set(ServiceNotificationDelivery::getUpdateTime, now()));
-                log.warn("实习通知派发未完成：category={}", e.getClass().getSimpleName());
+                log.warn("实习通知派发未完成：category={}", e);
             }
         }
     }

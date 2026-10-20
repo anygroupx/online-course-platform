@@ -61,6 +61,6 @@ public class CoursePrivateOperationsWorker {
             var next=terms.selectByRenewalSource(term.getId());if(renewal!=null&&(next==null||!"UPGRADE_FUNDS".equals(next.getQualificationKind())))renewal.renewAutomatic(term.getId());
             break;}
             catch(org.springframework.dao.TransientDataAccessException transientFailure){if(attempt==2)log.warn("周期对账并发冲突已达重试上限：termId={}",term.getId());else try{Thread.sleep(10L<<(attempt));}catch(InterruptedException interrupted){Thread.currentThread().interrupt();return;}}
-            catch(RuntimeException invalid){log.warn("周期对账需核查，保留原事实：termId={}, 原因={}",term.getId(),invalid.getClass().getSimpleName());break;}}
+            catch(RuntimeException invalid){log.warn("周期对账需核查，保留原事实：termId={}",term.getId(),invalid);break;}}
     }
 }

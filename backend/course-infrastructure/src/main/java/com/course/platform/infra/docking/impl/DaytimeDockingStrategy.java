@@ -329,7 +329,7 @@ public class DaytimeDockingStrategy implements PlatformDockingStrategy {
                 // 单账号失败（超时/上游错误/响应异常）必须隔离，不能让整批同步失败。
                 // 不打印异常详情：上游报文与解析异常可能夹带账号、密码等凭据。
                 log.warn("{}批量查单: 账号查询失败，已跳过。providerId={}, errorType={}",
-                        getProviderType(), apiProvider.getId(), e.getClass().getSimpleName());
+                        getProviderType(), apiProvider.getId(), e);
             }
         }
 
