@@ -64,7 +64,7 @@ public class RedisRateLimitService implements RateLimitService {
                     ? RateLimitDecision.allowed(number(result.get(1)))
                     : RateLimitDecision.denied(number(result.get(2)));
         } catch (DataAccessException | IllegalStateException ex) {
-            log.error("Redis rate limiter unavailable: {}", ex.getClass().getSimpleName());
+            log.error("Redis rate limiter unavailable: {}", ex);
             return unavailable(ex.getClass().getSimpleName());
         }
     }
@@ -78,7 +78,7 @@ public class RedisRateLimitService implements RateLimitService {
             if (properties.isFailClosed()) {
                 throw new BusinessException(ResultCode.RATE_LIMIT_UNAVAILABLE);
             }
-            log.error("Redis rate-limit reset failed: {}", ex.getClass().getSimpleName());
+            log.error("Redis rate-limit reset failed: {}", ex);
         }
     }
 

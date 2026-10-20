@@ -69,7 +69,7 @@ public class CourseQueryServiceImpl implements CourseQueryService {
                 // 保留安全分类和同一个 errorId，交给全局处理器返回 502。
                 throw e;
             } catch (Exception e) {
-                log.warn("第三方查课失败: reason={}", e.getClass().getSimpleName());
+                log.warn("第三方查课失败: reason={}", e);
                 throw new BusinessException("第三方查课服务暂不可用");
             }
         } else if (platform.getIsSelfOperated() != null && platform.getIsSelfOperated() == 1) {

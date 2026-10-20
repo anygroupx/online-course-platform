@@ -114,7 +114,7 @@ public class AqksDockingStrategy implements PlatformDockingStrategy {
                 courses.add(examCourse);
             }
         } catch (Exception e) {
-            log.warn("[AQKS查课] 获取考试信息失败: exceptionType={}", e.getClass().getSimpleName());
+            log.warn("[AQKS查课] 获取考试信息失败: exceptionType={}", e);
         }
         
         log.info("[AQKS查课] 成功: 进度={}", progress);
@@ -194,7 +194,7 @@ public class AqksDockingStrategy implements PlatformDockingStrategy {
                     orderStatus = SystemVariableCache.getStatusValue("order_status", "processing");
                 }
             } catch (Exception e) {
-                log.warn("[AQKS查进度] 获取考试状态失败: exceptionType={}", e.getClass().getSimpleName());
+                log.warn("[AQKS查进度] 获取考试状态失败: exceptionType={}", e);
             }
         }
         
