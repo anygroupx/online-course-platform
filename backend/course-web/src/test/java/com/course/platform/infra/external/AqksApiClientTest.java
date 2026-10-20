@@ -155,7 +155,7 @@ class AqksApiClientTest {
         // fail as "not logged in". The issued Set-Cookie is the only usable value.
         SafeHttpClient http = mock(SafeHttpClient.class);
         String issued = "01227C56EB5Edeadbeef";
-        String body = "{\"ID\":100175800,\"UserName\":\"20257270\",\"Token\":\"tok-1\","
+        String body = "{\"ID\":100175800,\"UserName\":\"STUDENT_ID\",\"Token\":\"tok-1\","
                 + "\"StudyTimes\":\"458\",\"MinTimeMinute\":\"0\"}";
         when(http.postJson(any(URI.class), anyMap(), anyString(), any()))
                 .thenReturn(new SafeHttpResponse(200, body,
@@ -163,7 +163,7 @@ class AqksApiClientTest {
                                 "LoginUserInfo_SYSAQ_Server=" + issued + ";expires=Wed, 21 Oct 2026 07:28:00 GMT;path=/"))));
 
         var client = client(transport(PROXY_BASE, "transport-token"), http);
-        var result = client.login("20257270", "secret");
+        var result = client.login("STUDENT_ID", "secret");
 
         assertTrue(result.isSuccess());
         assertEquals(issued, result.getServerCookie(),
@@ -203,7 +203,7 @@ class AqksApiClientTest {
 
         var thrown = assertThrows(java.lang.reflect.InvocationTargetException.class,
                 () -> method.invoke(client, new SafeHttpResponse(401,
-                        "{\"Code\":-1,\"Message\":\"bad password for 20257270\"}", Map.of())));
+                        "{\"Code\":-1,\"Message\":\"bad password for STUDENT_ID\"}", Map.of())));
         var cause = (com.course.platform.infra.http.UpstreamBusinessException) thrown.getCause();
 
         assertNull(cause.getBusinessMessage(),
