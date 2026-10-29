@@ -1,0 +1,114 @@
+name: Vite 8 PR21 isolated audit
+on:
+  push:
+    branches:
+      - audit/vite8-pr21-20261029
+
+permissions:
+  contents: read
+
+jobs:
+  original-strict:
+    name: Current PR - strict npm ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check strict peer resolution without overrides
+        working-directory: frontend
+        run: |
+          set +e
+          npm ci --no-audit --no-fund > /tmp/ci-install.log 2>&1
+          code=$?
+          set -e
+          tail -n 65 /tmp/ci-install.log
+          if [ "$code" -eq 0 ]; then
+            echo "RESULT: strict npm ci succeeded"
+          elif grep -q ERESOLVE /tmp/ci-install.log; then
+            echo "RESULT: strict npm ci failed with ERESOLVE peer conflict (confirmed)"
+          else
+            echo "RESULT: installation failed for an unexpected reason, exit=$code"
+            exit "$code"
+          fi
+
+  original-legacy:
+    name: Current PR - legacy peer install and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install as current Dockerfile does
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps --no-audit --no-fund
+      - name: Build with original plugin-vue 5
+        working-directory: frontend
+        run: npm run build
+
+  fixed:
+    name: Vue plugin 6.0.10 / Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20.19.0', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Apply ephemeral package fix (do not commit)
+        working-directory: frontend
+        run: |
+          npm pkg set "devDependencies.@vitejs/plugin-vue=6.0.10"
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Install with strict peers
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Show resolved dependencies
+        working-directory: frontend
+        run: npm ls vite @vitejs/plugin-vue
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
+      - name: Built output checks
+        working-directory: frontend
+        run: |
+          test -s dist/index.html
+          find dist/assets -type f -name '*.js' | grep -q .
+          find dist/assets -type f -name '*.css' | grep -q .
+          echo "RESULT: HTML, JS and CSS output present"
+      - name: Preview server and SPA route smoke
+        working-directory: frontend
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 &
+          pid=$!
+          trap "kill $pid || true" EXIT
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4173/ -o /tmp/vite-home.html; then break; fi
+            sleep 1
+          done
+          grep -q '<div id="app"></div>' /tmp/vite-home.html
+          curl -fsS http://127.0.0.1:4173/dashboard | grep -q '<div id="app"></div>'
+          asset=$(find dist/assets -type f -name '*.js' | head -n 1)
+          curl -fsS "http://127.0.0.1:4173/${asset#dist/}" >/dev/null
+          echo "RESULT: Preview root, history route, and JS asset reachable"
+      - name: Dev server smoke
+        working-directory: frontend
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 15174 &
+          pid=$!
+          trap "kill $pid || true" EXIT
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:15174/ -o /tmp/vite-dev-home.html; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:15174/@vite/client >/dev/null
+          curl -fsS http://127.0.0.1:15174/src/main.js >/dev/null
+          echo "RESULT: Dev root, Vite HMR client, and main module reachable"
